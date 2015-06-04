@@ -119,11 +119,8 @@ DEFINE_TEST(Layer2Test, context) {
   const int out_w = layer_1::in_w - layer_1::f1 - f2 + 2,
             out_h = layer_1::in_h - layer_1::f1 - f2 + 2,
             size_per_filter = out_w * out_h;
-  // const size_t pixel_count = layer_1::f1 * layer_1::f1;
   const size_t in_size = layer_1::f1 * layer_1::f1 * layer_1::n1;
   std::cout << "out size:" << out_w << "x" << out_h << std::endl;
-
-  const int OVERRIDE_SIZE = 27;
 
   // buffers: in_source, W, B , out_target
   /* clang-format off */
@@ -134,8 +131,7 @@ DEFINE_TEST(Layer2Test, context) {
   auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, sizeof(cl_float) * sizeof(B), nullptr);
   _context->write_buffer(gpu_buf_B, 0, sizeof(cl_float) * sizeof(B), (void *)B, true);
 
-  // auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * n2, nullptr);
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * OVERRIDE_SIZE, nullptr);
+  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * n2, nullptr);
   /* clang-format on */
 
   std::stringstream kernel_compile_opts;
@@ -155,40 +151,23 @@ DEFINE_TEST(Layer2Test, context) {
   size_t local_work_size[2] = {8, 8};
   cl_event finish_token = kernel->execute(2, global_work_size, local_work_size);
 
-  /*
   std::unique_ptr<float[]> cpu_buf(new float[size_per_filter * n2]);
   _context->read_buffer(gpu_buf_out, 0, sizeof(cl_float) * size_per_filter * n2,
                         (void *)cpu_buf.get(), true, &finish_token, 1);
 
-  // expected result buffer
-  // float res[27];
-  // layer_2::input(res);
-
+  // compare results
   for (int i = 0; i < size_per_filter; i++) {
     size_t base_idx = i * n2;
-    std::cout << i << ": [";
     for (size_t filter_id = 0; filter_id < n2; filter_id++) {
-      // float expected = res[base_idx + filter_id];
+      float expected = output[base_idx + filter_id];
       float result = cpu_buf[base_idx + filter_id];  // straight from gpu
-      // assert_equals(expected, result);
-      std::cout << result << ", ";
+      // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
+      // << std::endl;
+      assert_equals(expected, result);
     }
-    std::cout << "]" << std::endl;
   }
-  */
 
   /*
-  // debug input
-  for (size_t y = 0; y < layer_1::f1; y++) {
-    for (size_t x = 0; x < layer_1::f1; x++) {
-      size_t idx = (y * layer_1::f1 + x) * layer_1::f1;
-      std::cout << (y+1) << ":" << (x+1) << " = ['" << input[idx + 0] << "', '"
-                << input[idx + 1] << "', '" << input[idx + 2] << "']"
-                << std::endl;
-    }
-  }
-  */
-
   size_t exp_to_read = OVERRIDE_SIZE;
   float cpu_buf[OVERRIDE_SIZE];
   for (size_t i = 0; i < OVERRIDE_SIZE; i++) cpu_buf[i] = -999;
@@ -199,6 +178,7 @@ DEFINE_TEST(Layer2Test, context) {
     std::cout << cpu_buf[i] << ", ";
     if ((i + 1) % 3 == 0) std::cout << std::endl;
   }
+  */
 
   return true;
 }
@@ -223,7 +203,7 @@ int main(int argc, char **argv) {
   //
   //
 
-  // ADD_TEST(ExtractLumaTest);
+  ADD_TEST(ExtractLumaTest);
   ADD_TEST(Layer1Test);
   ADD_TEST(Layer2Test);
 

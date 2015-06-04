@@ -42,6 +42,7 @@ void main(__read_only __global float* source,
 			vals_by_filter[filter_id] = 0.0f;
 		}
 
+		// apply weights
 		for (size_t dy = 0; dy < f1; dy++) {
 			for (size_t dx = 0; dx < f1; dx++) {
 				// for every pixel in patch:
@@ -52,15 +53,16 @@ void main(__read_only __global float* source,
 				int base_W_idx = ((dy * size_res.x) + dx) * N1_FILTER_COUNT;
 				for (size_t filter_id = 0; filter_id < N1_FILTER_COUNT; filter_id++) {
 					float W_value = W[base_W_idx + filter_id];
-					float B_value = B[filter_id]; // TODO add B later !
-					vals_by_filter[filter_id] += W_value * pixel_value + B_value;
+					vals_by_filter[filter_id] += W_value * pixel_value;
 				}
 			}
 		}
 
 		// write cached results to target buffer
 		for (size_t filter_id = 0; filter_id < N1_FILTER_COUNT; filter_id++) {
-			target[base_idx + filter_id] = sigmoid(vals_by_filter[filter_id]);
+			float B_value = B[filter_id];
+			float result = vals_by_filter[filter_id] + B_value;
+			target[base_idx + filter_id] = sigmoid(result);
 		}
 
 	}
