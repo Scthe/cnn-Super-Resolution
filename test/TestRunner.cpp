@@ -41,7 +41,7 @@ DEFINE_TEST(ExtractLumaTest, context) {
                         true, &finish_token, 1);
 
   for (int i = 0; i < data.w * data.h; i++) {
-    // std::cout << (i + 1) << ": " << cpu_buf[i] << "\t" << results[i]
+    // std::cout << (i + 1) << ": " << cpu_buf[i] << "\t" << layer_1::input[i]
     // << std::endl;
     assert_equals(layer_1::input[i], cpu_buf[i]);
   }
@@ -56,6 +56,12 @@ DEFINE_TEST(Layer1Test, context) {
   const int out_w = in_w - f1 + 1, out_h = in_h - f1 + 1,
             size_per_filter = out_w * out_h;
   const size_t pixel_count = in_w * in_h;
+
+  float input_mean = mean(input, pixel_count);
+  for (size_t i = 0; i < pixel_count; i++) {
+    input[i] -= input_mean;
+    // std::cout << input[i] << std::endl;
+  }
 
   // buffers: in_source, W, B , out_target
   /* clang-format off */
@@ -90,16 +96,13 @@ DEFINE_TEST(Layer1Test, context) {
   _context->read_buffer(gpu_buf_out, 0, sizeof(cl_float) * size_per_filter * n1,
                         (void *)cpu_buf.get(), true, &finish_token, 1);
 
-  // expected result buffer
-  float res[27];
-  layer_2::create_input(res);
-
   for (int i = 0; i < size_per_filter; i++) {
     size_t base_idx = i * n1;
     for (size_t filter_id = 0; filter_id < n1; filter_id++) {
-      // std::cout << cpu_buf[base_idx + filter_id] << ", ";
-      float expected = res[base_idx + filter_id];
+      float expected = layer_2::input[base_idx + filter_id];
       float result = cpu_buf[base_idx + filter_id];  // straight from gpu
+      // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
+      // << std::endl;
       assert_equals(expected, result);
     }
   }
@@ -124,10 +127,8 @@ DEFINE_TEST(Layer2Test, context) {
 
   // buffers: in_source, W, B , out_target
   /* clang-format off */
-  float input_cpu[27];
-  create_input(input_cpu);
   auto gpu_buf_in = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * in_size, nullptr);
-  _context->write_buffer(gpu_buf_in, 0, sizeof(cl_float) * in_size, (void *)input_cpu, true);
+  _context->write_buffer(gpu_buf_in, 0, sizeof(cl_float) * in_size, (void *)input, true);
   auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * sizeof(W), nullptr);
   _context->write_buffer(gpu_buf_W, 0, sizeof(cl_float) * sizeof(W), (void *)W, true);
   auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, sizeof(cl_float) * sizeof(B), nullptr);
@@ -176,6 +177,18 @@ DEFINE_TEST(Layer2Test, context) {
   }
   */
 
+  /*
+  // debug input
+  for (size_t y = 0; y < layer_1::f1; y++) {
+    for (size_t x = 0; x < layer_1::f1; x++) {
+      size_t idx = (y * layer_1::f1 + x) * layer_1::f1;
+      std::cout << (y+1) << ":" << (x+1) << " = ['" << input[idx + 0] << "', '"
+                << input[idx + 1] << "', '" << input[idx + 2] << "']"
+                << std::endl;
+    }
+  }
+  */
+
   size_t exp_to_read = OVERRIDE_SIZE;
   float cpu_buf[OVERRIDE_SIZE];
   for (size_t i = 0; i < OVERRIDE_SIZE; i++) cpu_buf[i] = -999;
@@ -205,9 +218,19 @@ int main(int argc, char **argv) {
   std::vector<TestCase *> cases;
   std::vector<int> results;
 
+  //
+  //
+  //
+  //
+
   // ADD_TEST(ExtractLumaTest);
-  // ADD_TEST(Layer1Test);
+  ADD_TEST(Layer1Test);
   ADD_TEST(Layer2Test);
+
+  //
+  //
+  //
+  //
 
   opencl::Context context(argc, argv);
   context.init();

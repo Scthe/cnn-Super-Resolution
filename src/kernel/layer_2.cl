@@ -48,22 +48,20 @@ void main(__read_only __global float* source,
 					int2 point_pos = pos + delta - padding;
 					int point_idx = (point_pos.y * f1 + point_pos.x) * f1;
 
-					// target[point_idx] = point_pos.x;
-					// target[point_idx+1] = point_pos.y;
-					// target[point_idx+2] = -999.0f;
-
 					for (size_t i_n1 = 0; i_n1 < n1; i_n1++) {
 						// for every feature map in source:
 						float point_value = source[point_idx + i_n1];
-						// int base_W_idx = (((dy * f1) + dx) * f1) * N2_FILTER_COUNT;
 						int base_W_idx = ((dy * f1) + dx) * f1;
 						base_W_idx = (base_W_idx+i_n1) * N2_FILTER_COUNT;
 
 						for (size_t filter_id = 0; filter_id < N2_FILTER_COUNT; filter_id++) {
 							float W_value = W[base_W_idx + filter_id];
-							float B_value = B[filter_id];
+							// float B_value = B[filter_id]; // TODO add B later !
+
 							// vals_by_filter[filter_id] += W_value * point_value + B_value;
-							vals_by_filter[filter_id] += W_value;
+							vals_by_filter[filter_id] += W_value * point_value;
+							// vals_by_filter[filter_id] += point_value;
+							// vals_by_filter[filter_id] += W_value;
 						}
 						// tests for W value:
 						// target[point_idx+i_n1] = base_W_idx;

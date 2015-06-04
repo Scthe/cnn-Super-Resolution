@@ -34,6 +34,15 @@
 ///
 float sigmoid(float x) { return 1 / (1 + std::exp(-x)); }
 
+float mean(float *arr, size_t count) {
+  // TODO move to gpu
+  float acc = 0;
+  for (size_t i = 0; i < count; i++) {
+    acc += arr[i];
+  }
+  return acc / count;
+}
+
 ///
 /// main test class to inherit from
 ///
@@ -85,16 +94,16 @@ const int in_w = 5, in_h = 5;
 
 /**
  * this is output of the luma extract process that will be feed to first layer
- * TODO normalize by 255
  */
-float input[25] = {0.0f,     255.0f,   207.073f, 217.543f, 111.446f,  //
-                   43.246f,  178.755f, 105.315f, 225.93f,  200.578f,  //
-                   109.577f, 76.245f,  149.685f, 29.07f,   180.345f,  //
-                   170.892f, 190.035f, 217.543f, 190.035f, 76.278f,   //
-                   205.58f,  149.852f, 218.917f, 151.138f, 179.001f};
+float input[25] = {0.0f,     1.0f,     0.81205f, 0.85311f, 0.43704f,
+                   0.16959f, 0.701f,   0.413f,   0.886f,   0.78658f,
+                   0.42971f, 0.299f,   0.587f,   0.114f,   0.70724f,
+                   0.67016f, 0.74524f, 0.85311f, 0.74524f, 0.29913f,
+                   0.8062f,  0.58765f, 0.8585f,  0.5927f,  0.70196f};
 
 /**
  * weights for first layer
+ * (each column for different filter)
  */
 float W[27] = {1.0f, 0.0f, 0.0f,   // 0,0
                0.0f, 1.0f, 0.0f,   // 1,0
@@ -110,20 +119,6 @@ float W[27] = {1.0f, 0.0f, 0.0f,   // 0,0
  * biases for first layer
  */
 float B[3] = {0.1f, 0.2f, 0.3f};
-
-/**
- * NOTE: this does not add the bias nor applies max 'squashing' !
- * (Though this form allows for easier debugging)
- */
-float output_raw[27] = {645.090f, 479.806f, 178.755f,   // 0,0
-                        683.173f, 761.443f, 105.315f,   // 1,0
-                        874.479f, 552.506f, 225.93f,    // 2,0
-                        613.241f, 628.052f, 76.245f,    // 0,1
-                        934.440f, 428.173f, 149.685f,   // 1,1
-                        628.784f, 745.995f, 29.07f,     // 2,1
-                        873.794f, 614.532f, 190.035f,   // 0,2
-                        623.848f, 748.672f, 217.543f,   // 1,2
-                        917.983f, 474.029f, 190.035f};  // 2,2
 }
 
 namespace layer_2 {
@@ -137,6 +132,16 @@ const size_t n2 = 2;
  * spatial size
  */
 const size_t f2 = 3;
+
+float input[27] = {0.603f, 0.781f, 0.943f,   // 0,0
+                   0.638f, 0.915f, 0.925f,   // 0,1
+                   0.789f, 0.826f, 0.952f,   // 0,2
+                   0.573f, 0.865f, 0.917f,   // 1,0
+                   0.825f, 0.745f, 0.936f,   // 1,1
+                   0.588f, 0.910f, 0.901f,   // 1,2
+                   0.788f, 0.858f, 0.945f,   // 2,0
+                   0.583f, 0.911f, 0.950f,   // 2,1
+                   0.816f, 0.777f, 0.945f};  // 2,2
 
 /* clang-format off */
 /**
@@ -185,23 +190,6 @@ float W[54] = {  // cube's 1st row, cell 0,0
  * biases for second layer (n2 dimensional)
  */
 float B[2] = {0.1f, 0.2f};
-
-/**
- * Create input values. (See note to layer_1::output_raw)
- * @param arr array to fill, of size: (layer_1::f1)^2 * layer_1::n1
- */
-void create_input(float *arr) {
-  int n1 = layer_1::n1;
-  size_t f1 = layer_1::f1;
-
-  for (size_t i = 0; i < f1 * f1; i++) {
-    size_t base_idx = i * n1;
-    for (int filter_id = 0; filter_id < n1; filter_id++) {
-      arr[base_idx + filter_id] = sigmoid(
-          layer_1::output_raw[base_idx + filter_id] + layer_1::B[filter_id]);
-    }
-  }
-}
 }
 
 #endif /* __TEST_CONST_H   */

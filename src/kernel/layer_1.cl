@@ -27,7 +27,6 @@ void main(__read_only __global float* source,
 	const int2 br = size_source - padding; // bottom right corner
 	int2 pos = {get_global_id(0), get_global_id(1)};
 
-
 	if(pos.x >= padding.x && pos.x <= br.x &&
 		 pos.y >= padding.y && pos.y <= br.y){
 
@@ -43,7 +42,7 @@ void main(__read_only __global float* source,
 			vals_by_filter[filter_id] = 0.0f;
 		}
 
-		for (size_t dy = 0; dy < f1; dy++) { // TODO double check loop order for cache locality
+		for (size_t dy = 0; dy < f1; dy++) {
 			for (size_t dx = 0; dx < f1; dx++) {
 				// for every pixel in patch:
 				int2 delta = {dx, dy};
@@ -53,7 +52,7 @@ void main(__read_only __global float* source,
 				int base_W_idx = ((dy * size_res.x) + dx) * N1_FILTER_COUNT;
 				for (size_t filter_id = 0; filter_id < N1_FILTER_COUNT; filter_id++) {
 					float W_value = W[base_W_idx + filter_id];
-					float B_value = B[filter_id];
+					float B_value = B[filter_id]; // TODO add B later !
 					vals_by_filter[filter_id] += W_value * pixel_value + B_value;
 				}
 			}
