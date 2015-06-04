@@ -70,24 +70,21 @@ void main(__read_only __global float* source,
 			for (size_t filter_id = 0; filter_id < N2_FILTER_COUNT; filter_id++) {
 				float B_value = B[filter_id];
 				float result = vals_by_filter[filter_id] + B_value;
-				target[base_idx + filter_id] = result;
-				// target[base_idx + filter_id] = sigmoid(result); // TODO use sigmoid
+				// target[base_idx + filter_id] = result;
+				target[base_idx + filter_id] = sigmoid(result);
 			}
-			target[base_idx + 2] = 0;
-			target[base_idx + 3] = 0;
-
-
-			///
-			/// TESTS:
-			///
-			// for (size_t filter_id = 0; filter_id < N2_FILTER_COUNT; filter_id++) {
-				// target[base_idx+filter_id] = filter_id;
-			// }
-			// target[0] = pos_res.x;
-			// target[1] = pos_res.y;
-			// target[3] = size_res.x;
-			// target[4] = size_res.y;
-			// target[5] = base_idx;
 
 	}
 }
+
+///
+/// TESTS:
+///
+// for (size_t filter_id = 0; filter_id < N2_FILTER_COUNT; filter_id++) {
+	// target[base_idx+filter_id] = filter_id;
+// }
+// target[0] = pos_res.x;
+// target[1] = pos_res.y;
+// target[3] = size_res.x;
+// target[4] = size_res.y;
+// target[5] = base_idx;

@@ -163,7 +163,7 @@ DEFINE_TEST(Layer2Test, context) {
       float result = cpu_buf[base_idx + filter_id];  // straight from gpu
       // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
       // << std::endl;
-      assert_equals(expected, result);
+      assert_equals(sigmoid(expected), result);
     }
   }
 
