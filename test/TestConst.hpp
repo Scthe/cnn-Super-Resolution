@@ -6,8 +6,8 @@
 ///
 
 #include "TestException.hpp"
-#include <cmath>  // etd::exp
-#include <cstdio> // snprintf
+#include <cmath>   // etd::exp
+#include <cstdio>  // snprintf
 
 ///
 /// macros
@@ -70,7 +70,6 @@ namespace layer_1 {
 
 /**
  * filter count
- * change n1 in N1_FILTER_COUNT too
  */
 const size_t n1 = 3;
 
@@ -130,10 +129,68 @@ float output_raw[27] = {645.090f, 479.806f, 178.755f,   // 0,0
 namespace layer_2 {
 
 /**
+ * filter count
+ */
+const size_t n2 = 2;
+
+/**
+ * spatial size
+ */
+const size_t f2 = 3;
+
+/* clang-format off */
+/**
+ * weights for second layer ((f2*f2*n1)*n2 dimensional)
+ * in other words each of n2 filters have a f2*f2*n1 cube of weights
+ */
+float W[54] = {  // cube's 1st row, cell 0,0
+    1.000f, 2.000f,
+    1.001f, 2.001f,
+    1.002f, 2.002f,
+    // 0,1
+    1.010f, 2.010f,
+    1.011f, 2.011f,
+    1.012f, 2.012f,
+    // 0,2
+    1.020f, 2.020f,
+    1.021f, 2.021f,
+    1.022f, 2.022f,
+    // cube's 2nd row, cell 1,0
+    1.100f, 2.100f,
+    1.101f, 2.101f,
+    1.102f, 2.102f,
+    // 1,1
+    1.110f, 2.110f,
+    1.111f, 2.111f,
+    1.112f, 2.112f,
+    // 1,2
+    1.120f, 2.120f,
+    1.121f, 2.121f,
+    1.122f, 2.122f,
+    // cube's 3rd row, cell 2,0
+    1.200f, 2.200f,
+    1.201f, 2.201f,
+    1.202f, 2.202f,
+    // 2,1
+    1.210f, 2.210f,
+    1.211f, 2.211f,
+    1.212f, 2.212f,
+    // 2,2
+    1.220f, 2.220f,
+    1.221f, 2.221f,
+    1.222f, 2.222f};
+/* clang-format on */
+
+/**
+ * biases for second layer (n2 dimensional)
+ */
+float B[2] = {0.1f, 0.2f};
+
+/**
  * Create input values. (See note to layer_1::output_raw)
  * @param arr array to fill, of size: (layer_1::f1)^2 * layer_1::n1
  */
-void input(float *arr) {
+void create_input(float *arr) {
   int n1 = layer_1::n1;
   size_t f1 = layer_1::f1;
 
