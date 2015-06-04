@@ -99,7 +99,7 @@ DEFINE_TEST(Layer1Test, context) {
   for (int i = 0; i < size_per_filter; i++) {
     size_t base_idx = i * n1;
     for (size_t filter_id = 0; filter_id < n1; filter_id++) {
-      float expected = layer_2::input[base_idx + filter_id];
+      float expected = layer_2::data_set_1::input[base_idx + filter_id];
       float result = cpu_buf[base_idx + filter_id];  // straight from gpu
       // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
       // << std::endl;
@@ -111,10 +111,8 @@ DEFINE_TEST(Layer1Test, context) {
 }
 END_TEST
 
-// TODO create test defs for layer 2 with f2=1 and f2=3
-
 DEFINE_TEST(Layer2Test, context) {
-  using namespace layer_2;
+  using namespace layer_2::data_set_1;
 
   const int out_w = layer_1::in_w - layer_1::f1 - f2 + 2,
             out_h = layer_1::in_h - layer_1::f1 - f2 + 2,
@@ -145,7 +143,7 @@ DEFINE_TEST(Layer2Test, context) {
   kernel->push_arg(gpu_buf_B);
   kernel->push_arg(sizeof(cl_uint), (void *)&layer_1::f1);
   kernel->push_arg(sizeof(cl_uint), (void *)&layer_1::n1);
-  kernel->push_arg(sizeof(cl_uint), (void *)&layer_2::f2);
+  kernel->push_arg(sizeof(cl_uint), (void *)&f2);
 
   size_t global_work_size[2] = {16, 16};
   size_t local_work_size[2] = {8, 8};

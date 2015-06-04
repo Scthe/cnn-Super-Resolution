@@ -123,6 +123,8 @@ float B[3] = {0.1f, 0.2f, 0.3f};
 
 namespace layer_2 {
 
+namespace data_set_1 {
+
 /**
  * filter count
  */
@@ -192,6 +194,7 @@ float W[54] = {  // cube's 1st row, cell 0,0
  * biases for second layer (n2 dimensional)
  */
 float B[2] = {0.1f, 0.2f};
+}  // end of data_set_1
 }
 
 #endif /* __TEST_CONST_H   */
