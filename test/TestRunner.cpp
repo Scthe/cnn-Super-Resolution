@@ -31,7 +31,7 @@ DEFINE_TEST(ExtractLumaTest, context) {
   _context->write_image(gpu_image, data, true);
 
   size_t data_total = sizeof(cl_float) * data.w * data.h;
-  auto gpu_buf = _context->allocate(CL_MEM_WRITE_ONLY, data_total, nullptr);
+  auto gpu_buf = _context->allocate(CL_MEM_WRITE_ONLY, data_total);
 
   auto kernel = _context->create_kernel("src/kernel/extract_luma.cl");
   kernel->push_arg(gpu_image);
@@ -84,16 +84,15 @@ DEFINE_TEST(Layer1Test, context) {
 
   // buffers: in_source, W, B , out_target
   /* clang-format off */
-  auto gpu_buf_in = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * pixel_count, nullptr);
-  _context->write_buffer(gpu_buf_in, 0, sizeof(cl_float) * pixel_count, (void *)&data->input[0], true);
-  size_t a = sizeof(cl_float) * data->weights.size(); // TODO simplify memory write/access & add zeros()
-  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, a, nullptr);
-  _context->write_buffer(gpu_buf_W, 0, a, (void *)&data->weights[0], true);
-  size_t b = sizeof(cl_float) * data->bias.size();
-  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, b, nullptr);
-  _context->write_buffer(gpu_buf_B, 0, b, (void *)&data->bias[0], true);
+  auto gpu_buf_in = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * pixel_count);
+  _context->write_buffer(gpu_buf_in, (void *)&data->input[0], true);
+  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data->weights.size());
+  _context->write_buffer(gpu_buf_W, (void *)&data->weights[0], true);
+  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, sizeof(cl_float) * data->bias.size());
+  _context->write_buffer(gpu_buf_B, (void *)&data->bias[0], true);
 
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * data->n1, nullptr);
+  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * data->n1);
+ _context->zeros_float(gpu_buf_out, true);
  //* clang-format on */
 
   std::stringstream kernel_compile_opts;
@@ -153,16 +152,16 @@ DEFINE_TEST(Layer2Test, context) {
 
   // buffers: in_source, W, B , out_target
   /* clang-format off */
-  auto gpu_buf_in = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * in_size, nullptr);
+  auto gpu_buf_in = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * in_size);
   _context->write_buffer(gpu_buf_in, 0, sizeof(cl_float) * in_size, (void *)&layer_2->input[0], true);
   size_t a = sizeof(cl_float) * layer_2->weights.size();
-  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, a, nullptr);
+  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, a);
   _context->write_buffer(gpu_buf_W, 0, a, (void *)&layer_2->weights[0], true);
   size_t b = sizeof(cl_float) * layer_2->bias.size();
-  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, b, nullptr);
+  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, b);
   _context->write_buffer(gpu_buf_B, 0, b, (void *)&layer_2->bias[0], true);
 
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * layer_2->n2, nullptr);
+  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * layer_2->n2);
   /* clang-format on */
 
   std::stringstream kernel_compile_opts;
@@ -195,7 +194,7 @@ DEFINE_TEST(Layer2Test, context) {
       // expected = sigmoid(expected);
       float result = cpu_buf[base_idx + filter_id];  // straight from gpu
       // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
-                // << std::endl;
+      // << std::endl;
       assert_equals(expected, result);
     }
   }

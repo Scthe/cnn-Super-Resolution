@@ -48,6 +48,7 @@ struct MemoryHandler{
   void release();
 
   cl_mem handle;
+  size_t size = 0;
 
   private:
     bool released;
@@ -77,10 +78,9 @@ public:
    *
    * @param  flags    opencl flags
    * @param  size     bytest to allocate. Use f.e. sizeof(cl_char) * COUNT
-   * @param  host_ptr
    * @return          handler used by context
    */
-  MemoryHandler* allocate(cl_mem_flags, size_t, void *);
+  MemoryHandler* allocate(cl_mem_flags, size_t);
 
   /**
    * Create kernel from file
@@ -108,23 +108,81 @@ public:
   cl_event read_buffer(MemoryHandler*, size_t offset, size_t size, void *dst,
                        bool block, cl_event* es=nullptr, int event_count=0);
 
-   /**
-    * Copy data from host memory to opencl device
-    *
-    * @param  gpu_buffer               destination buffer
-    * @param  offset                   buffer offset
-    * @param  size                     how much to read
-    * @param  src                      source buffer
-    * @param  block                    blocking/nonblocking operation switch
-    * @param  events_to_wait_for       [OPT]wait for other operations to finish
-    * @param  events_to_wait_for_count [OPT]
-    * @return                          opencl event object
-    */
+  /**
+   * Read buffer from opencl device and copy it to host memory
+   *
+   * @param  gpu_buffer               source buffer
+   * @param  dst                      destination buffer
+   * @param  block                    blocking/nonblocking operation switch
+   * @param  events_to_wait_for       [OPT]wait for other operations to finish
+   * @param  events_to_wait_for_count [OPT]
+   * @return                          opencl event object
+   */
+  cl_event read_buffer(MemoryHandler*, void *dst, bool block,
+                       cl_event* es=nullptr, int event_count=0);
+
+ /**
+  * Copy data from host memory to opencl device
+  *
+  * @param  gpu_buffer               destination buffer
+  * @param  offset                   buffer offset
+  * @param  size                     how much to read
+  * @param  src                      source buffer
+  * @param  block                    blocking/nonblocking operation switch
+  * @param  events_to_wait_for       [OPT]wait for other operations to finish
+  * @param  events_to_wait_for_count [OPT]
+  * @return                          opencl event object
+  */
   cl_event write_buffer(MemoryHandler*, size_t offset, size_t size, void *src,
                       bool block, cl_event* es=nullptr, int event_count=0);
 
+  /**
+   * Copy data from host memory to opencl device
+   *
+   * @param  gpu_buffer               destination buffer
+   * @param  src                      source buffer
+   * @param  block                    blocking/nonblocking operation switch
+   * @param  events_to_wait_for       [OPT]wait for other operations to finish
+   * @param  events_to_wait_for_count [OPT]
+   * @return                          opencl event object
+   */
+  cl_event write_buffer(MemoryHandler*, void *src, bool block,
+                        cl_event* es=nullptr, int event_count=0);
+
+  /**
+   * Fill with zero values
+   *
+   * @param  gpu_buffer               destination buffer
+   * @param  block                    blocking/nonblocking operation switch
+   * @param  events_to_wait_for       [OPT]wait for other operations to finish
+   * @param  events_to_wait_for_count [OPT]
+   * @return                          opencl event object
+   */
+  cl_event zeros_float(MemoryHandler*, bool block,
+                        cl_event* es=nullptr, int event_count=0);
+
+
+  /**
+   * Allocate image
+   *
+   * @param  flags        opencl flags
+   * @param  w            width
+   * @param  h            height
+   * @param  image_format
+   * @return              handler used by context
+   */
   MemoryHandler* create_image(cl_mem_flags, size_t, size_t, const cl_image_format*);
 
+  /**
+   * Write image data to buffer
+   *
+   * @param  gpu_image                memory handler to write to
+   * @param  data                     dara to write
+   * @param  block                    blocking/nonblocking operation switch
+   * @param  events_to_wait_for       [OPT]wait for other operations to finish
+   * @param  events_to_wait_for_count [OPT]
+   * @return                          opencl event object
+   */
   cl_event write_image(MemoryHandler*, utils::ImageData&,
                         bool block, cl_event* es=nullptr, int event_count=0);
 
