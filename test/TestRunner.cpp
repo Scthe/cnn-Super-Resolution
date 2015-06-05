@@ -190,10 +190,10 @@ DEFINE_TEST(Layer2Test, context) {
     size_t base_idx = i * layer_2->n2;
     for (size_t filter_id = 0; filter_id < layer_2->n2; filter_id++) {
       float expected = layer_2->output[base_idx + filter_id];
-      // expected = sigmoid(expected);
+      expected = sigmoid(expected);
       float result = cpu_buf[base_idx + filter_id];  // straight from gpu
       // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
-                // << std::endl;
+                  //  << std::endl;
       assert_equals(expected, result);
     }
   }

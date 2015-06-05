@@ -66,8 +66,7 @@ void main(__read_only __global float* source,
 			for (size_t filter_id = 0; filter_id < N2_FILTER_COUNT; filter_id++) {
 				float B_value = B[filter_id];
 				float result = vals_by_filter[filter_id] + B_value;
-				target[base_idx + filter_id] = result; // TODO use sigmoid
-				// target[base_idx + filter_id] = sigmoid(result);
+				target[base_idx + filter_id] = sigmoid(result);
 			}
 	}
 }

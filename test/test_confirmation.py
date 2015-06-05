@@ -100,6 +100,8 @@ class Layer2:
     for i in range(out_dim[0]*out_dim[1]):
         x = i % f1  # +1 ?
         y = i // f1 # +1 ?
+        # x = i % f1   +1
+        # y = i // f1  +1
         pos = x, y
         padding = f2//2, f2//2
         vals_by_filter = [0.0] * n2
@@ -113,7 +115,7 @@ class Layer2:
               point_idx = (point_pos[1] * f1 + point_pos[0]) * f1
               for i_n1 in range(n1):
                   point_value = _in[point_idx + i_n1]
-                  base_W_idx = ((((dy * f1) + dx) * f1)+i_n1) * n2 # -1 ?
+                  base_W_idx = ((((dy * f1) + dx) * f1)+i_n1) * n2
                   # print(">  {}--{}:{} = {}".format(point_idx + i_n1, y, x, point_value))
                   for filter_id in range(n2):
                       vals_by_filter[filter_id] += weights[base_W_idx+filter_id] * point_value
@@ -135,7 +137,3 @@ if __name__ == '__main__':
     layer2_in = l1(cfg['layer_1'])
     l2(cfg['layer_1'], cfg['layer_2']['data_set_1'])
     l2(cfg['layer_1'], cfg['layer_2']['data_set_2'])
-
-    # a = [0.0,     255.0,   207.073, 217.543, 111.446,43.246,  178.755, 105.315, 225.93,  200.578,109.577, 76.245,  149.685, 29.07,   180.345,170.892, 190.035, 217.543, 190.035, 76.278, 205.58,  149.852, 218.917, 151.138, 179.001]
-    # a1 = [x / 255.0 for x in a]
-    # print( ','.join(["{:.5}f".format(x) for x in a1]))

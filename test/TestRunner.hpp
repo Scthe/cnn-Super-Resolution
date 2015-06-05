@@ -52,13 +52,19 @@ struct TestCase {
 
  protected:
   void assert_equals(float expected, float result) {
+    #define ABS(x) x = (x) > 0 ? (x) : (-(x))
+    float margin = expected * 0.01f;
+    ABS(margin);
+    margin = margin < 0.01f ? 0.01f : margin;
     float err = expected - result;
-    err = err > 0 ? err : -err;
-    if (err > 0.1) {
+    ABS(err);
+
+    if (err > margin) {
       snprintf(msg_buffer, sizeof(msg_buffer),  //
                "Expected %f to be %f", result, expected);
       throw TestException<float>(expected, result, msg_buffer);
     }
+    #undef ABS
   }
 
   void assert_true(bool v, const char *msg) {
