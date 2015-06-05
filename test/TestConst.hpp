@@ -1,6 +1,8 @@
 #ifndef __TEST_CONST_H
 #define __TEST_CONST_H
 
+// TODO rename to TestRunner.hpp
+
 ///
 /// This file contains various definitions to make tests more concise
 ///
@@ -61,7 +63,7 @@ struct TestCase {
     }
   }
 
-  void assert(bool v, const char *msg) {
+  void assert_true(bool v, const char *msg) {
     if (!v) {
       throw TestException<float>(msg);
     }
@@ -123,6 +125,9 @@ float B[3] = {0.1f, 0.2f, 0.3f};
 
 namespace layer_2 {
 
+///
+/// data for first test
+///
 namespace data_set_1 {
 
 /**

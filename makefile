@@ -3,7 +3,7 @@
 # $< - first of dependencies
 
 CC = clang++
-VPATH = src/opencl src test
+VPATH = src/opencl src test libs/cpp
 IDIR = libs/include
 ODIR = obj
 BINDIR = bin
@@ -25,10 +25,10 @@ LFLAGS = -std=c++11 \
 	-l "stdc++" \
 	-I$(IDIR)
 
-_OBJ = Main_cl.o Context.o UtilsOpenCL.o Kernel.o
+_OBJ = Main_cl.o Context.o UtilsOpenCL.o Kernel.o gason.o TestDataProvider.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ)) # append ODIR to each entry
 
-_TEST_OBJ = TestRunner.o Context.o UtilsOpenCL.o Kernel.o
+_TEST_OBJ = TestRunner.o Context.o UtilsOpenCL.o Kernel.o gason.o TestDataProvider.o
 TEST_OBJ = $(patsubst %,$(ODIR)/%,$(_TEST_OBJ))
 
 
