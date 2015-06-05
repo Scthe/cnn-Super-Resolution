@@ -145,28 +145,28 @@ Layer1Data *data = nullptr;
 END_TEST
 
 DEFINE_TEST(Layer2Test, context) {
-  using namespace layer_2::data_set_1;
-
-  const int out_w = layer_1::in_w - layer_1::f1 - f2 + 2,
-            out_h = layer_1::in_h - layer_1::f1 - f2 + 2,
+  const int out_w = layer_1->input_w - layer_1->f1 - layer_2->f2 + 2,
+            out_h = layer_1->input_h - layer_1->f1 - layer_2->f2 + 2,
             size_per_filter = out_w * out_h;
-  const size_t in_size = layer_1::f1 * layer_1::f1 * layer_1::n1;
+  const size_t in_size = layer_1->f1 * layer_1->f1 * layer_1->n1;
   std::cout << "out size:" << out_w << "x" << out_h << std::endl;
 
   // buffers: in_source, W, B , out_target
   /* clang-format off */
   auto gpu_buf_in = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * in_size, nullptr);
-  _context->write_buffer(gpu_buf_in, 0, sizeof(cl_float) * in_size, (void *)input, true);
-  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * sizeof(W), nullptr);
-  _context->write_buffer(gpu_buf_W, 0, sizeof(cl_float) * sizeof(W), (void *)W, true);
-  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, sizeof(cl_float) * sizeof(B), nullptr);
-  _context->write_buffer(gpu_buf_B, 0, sizeof(cl_float) * sizeof(B), (void *)B, true);
+  _context->write_buffer(gpu_buf_in, 0, sizeof(cl_float) * in_size, (void *)&layer_2->input[0], true);
+  size_t a = sizeof(cl_float) * layer_2->weights.size();
+  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, a, nullptr);
+  _context->write_buffer(gpu_buf_W, 0, a, (void *)&layer_2->weights[0], true);
+  size_t b = sizeof(cl_float) * layer_2->bias.size();
+  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, b, nullptr);
+  _context->write_buffer(gpu_buf_B, 0, b, (void *)&layer_2->bias[0], true);
 
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * n2, nullptr);
+  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * layer_2->n2, nullptr);
   /* clang-format on */
 
   std::stringstream kernel_compile_opts;
-  kernel_compile_opts << "-D N2_FILTER_COUNT=" << n2;
+  kernel_compile_opts << "-D N2_FILTER_COUNT=" << layer_2->n2;
   auto kernel = _context->create_kernel("src/kernel/layer_2.cl",
                                         kernel_compile_opts.str().c_str());
 
@@ -174,23 +174,24 @@ DEFINE_TEST(Layer2Test, context) {
   kernel->push_arg(gpu_buf_out);
   kernel->push_arg(gpu_buf_W);
   kernel->push_arg(gpu_buf_B);
-  kernel->push_arg(sizeof(cl_uint), (void *)&layer_1::f1);
-  kernel->push_arg(sizeof(cl_uint), (void *)&layer_1::n1);
-  kernel->push_arg(sizeof(cl_uint), (void *)&f2);
+  kernel->push_arg(sizeof(cl_uint), (void *)&layer_1->f1);
+  kernel->push_arg(sizeof(cl_uint), (void *)&layer_1->n1);
+  kernel->push_arg(sizeof(cl_uint), (void *)&layer_2->f2);
 
   size_t global_work_size[2] = {16, 16};
   size_t local_work_size[2] = {8, 8};
   cl_event finish_token = kernel->execute(2, global_work_size, local_work_size);
 
-  std::unique_ptr<float[]> cpu_buf(new float[size_per_filter * n2]);
-  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_float) * size_per_filter * n2,
+  std::unique_ptr<float[]> cpu_buf(new float[size_per_filter * layer_2->n2]);
+  _context->read_buffer(gpu_buf_out, 0,
+                        sizeof(cl_float) * size_per_filter * layer_2->n2,
                         (void *)cpu_buf.get(), true, &finish_token, 1);
 
   // compare results
   for (int i = 0; i < size_per_filter; i++) {
-    size_t base_idx = i * n2;
-    for (size_t filter_id = 0; filter_id < n2; filter_id++) {
-      float expected = output[base_idx + filter_id];
+    size_t base_idx = i * layer_2->n2;
+    for (size_t filter_id = 0; filter_id < layer_2->n2; filter_id++) {
+      float expected = layer_2->output[base_idx + filter_id];
       float result = cpu_buf[base_idx + filter_id];  // straight from gpu
       // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
       // << std::endl;
@@ -213,6 +214,15 @@ DEFINE_TEST(Layer2Test, context) {
 
   return true;
 }
+
+void init(Layer1Data *layer_1, Layer2Data *layer_2) {
+  this->layer_1 = layer_1;
+  this->layer_2 = layer_2;
+}
+
+private:
+Layer1Data *layer_1 = nullptr;
+Layer2Data *layer_2 = nullptr;
 END_TEST
 
 ///
@@ -246,6 +256,7 @@ int main(int argc, char **argv) {
   ADD_TEST(ExtractLumaTest, &data_provider.layer1_data.input);
   ADD_TEST(Layer1Test, &data_provider.layer1_data,
            &data_provider.layer2_data.input);
+  ADD_TEST(Layer2Test, &data_provider.layer1_data, &data_provider.layer2_data);
   // ADD_TEST(Layer2Test);
 
   //
