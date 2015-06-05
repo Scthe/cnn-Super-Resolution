@@ -99,8 +99,47 @@
             1.221, 2.221,
             1.222, 2.222],
 
-        "bias_comment": "biases for 2nd layer",
-        "bias": [0.1, 0.2, 0.3]
+        "bias_comment": "biases for 2nd layer (n2 dimensional)",
+        "bias": [0.1, 0.2]
+    },
+
+    "data_set_2": {
+      "n2_comment": "filter count for 2nd layer",
+      "n2": 3,
+
+      "f2_comment": "spatial size",
+      "f2": 1,
+
+      "input": [
+        0.406, 0.419, 0.598,
+        0.442, 0.685, 0.528,
+        0.627, 0.489, 0.642,
+        0.376, 0.563, 0.499,
+        0.680, 0.371, 0.571,
+        0.390, 0.672, 0.453,
+        0.626, 0.550, 0.609,
+        0.386, 0.674, 0.634,
+        0.666, 0.413, 0.609],
+
+      "output": [
+        1.948, 2.634, 2.150,
+        2.446, 2.832, 2.648,
+        2.354, 3.234, 2.556,
+        2.107, 2.519, 2.308,
+        2.099, 3.079, 2.301,
+        2.292, 2.564, 2.494,
+        2.442, 3.227, 2.643,
+        2.475, 2.922, 2.677,
+        2.208, 3.170, 2.409],
+
+      "weights_comment": "weights for second layer ((f2*f2*n1)*n2 dimensional) in other words each of n2 filters have a f2*f2*n1 cube of weights (each column for different filter, each row for different pixel in range 0 - f2*f2*n1, so each paragraph is cell, 9 cells total)",
+      "weights": [
+        1.000, 2.000, 1.001,
+        2.001, 1.002, 2.002,
+        1.010, 2.010, 1.011],
+
+      "bias_comment": "biases for 2nd layer (n2 dimensional)",
+      "bias": [0.1, 0.2, 0.3]
     }
 
   }

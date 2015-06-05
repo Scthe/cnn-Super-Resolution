@@ -29,7 +29,8 @@ class TestDataProvider {
 
  public:
   Layer1Data layer1_data;
-  Layer2Data layer2_data;
+  Layer2Data layer2_data_set1;
+  Layer2Data layer2_data_set2;
 
  private:
   bool read_layer_1_data(const JsonValue&, Layer1Data&);

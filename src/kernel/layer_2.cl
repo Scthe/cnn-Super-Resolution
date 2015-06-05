@@ -57,11 +57,7 @@ void main(__read_only __global float* source,
 						for (size_t filter_id = 0; filter_id < N2_FILTER_COUNT; filter_id++) {
 							float W_value = W[base_W_idx + filter_id];
 							vals_by_filter[filter_id] += W_value * point_value;
-							// vals_by_filter[filter_id] += point_value; // part of tests
-							// vals_by_filter[filter_id] += W_value; // part of tests
 						}
-						// target[point_idx+i_n1] = base_W_idx;  // part of W-value tests
-						// target[point_idx+i_n1] = W[base_W_idx + 1];  // part of W-value tests
 					}
 				}
 			}
@@ -73,7 +69,6 @@ void main(__read_only __global float* source,
 				target[base_idx + filter_id] = result; // TODO use sigmoid
 				// target[base_idx + filter_id] = sigmoid(result);
 			}
-
 	}
 }
 

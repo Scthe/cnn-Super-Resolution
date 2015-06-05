@@ -193,23 +193,10 @@ DEFINE_TEST(Layer2Test, context) {
       // expected = sigmoid(expected);
       float result = cpu_buf[base_idx + filter_id];  // straight from gpu
       // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
-      // << std::endl;
+                // << std::endl;
       assert_equals(expected, result);
     }
   }
-
-  /*
-  size_t exp_to_read = OVERRIDE_SIZE;
-  float cpu_buf[OVERRIDE_SIZE];
-  for (size_t i = 0; i < OVERRIDE_SIZE; i++) cpu_buf[i] = -999;
-  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_float) * exp_to_read,
-                        (void *)cpu_buf, true, &finish_token, 1);
-  std::cout << std::endl;
-  for (size_t i = 0; i < OVERRIDE_SIZE; i++) {
-    std::cout << cpu_buf[i] << ", ";
-    if ((i + 1) % 3 == 0) std::cout << std::endl;
-  }
-  */
 
   return true;
 }
@@ -254,8 +241,11 @@ int main(int argc, char **argv) {
 
   ADD_TEST(ExtractLumaTest, &data_provider.layer1_data.input);
   ADD_TEST(Layer1Test, &data_provider.layer1_data,
-           &data_provider.layer2_data.input);
-  ADD_TEST(Layer2Test, &data_provider.layer1_data, &data_provider.layer2_data);
+           &data_provider.layer2_data_set1.input);
+  ADD_TEST(Layer2Test, &data_provider.layer1_data,
+           &data_provider.layer2_data_set1);
+  ADD_TEST(Layer2Test, &data_provider.layer1_data,
+           &data_provider.layer2_data_set2);
 
   //
   //

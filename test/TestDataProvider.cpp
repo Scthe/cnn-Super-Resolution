@@ -66,7 +66,10 @@ bool TestDataProvider::read(char const* const file) {
         for (auto node : object->value) {
           if (strcmp(node->key, "data_set_1") == 0 &&
               node->value.getTag() == JSON_OBJECT) {
-            read_status &= read_layer_2_data(node->value, layer2_data);
+            read_status &= read_layer_2_data(node->value, layer2_data_set1);
+          } else if (strcmp(node->key, "data_set_2") == 0 &&
+                     node->value.getTag() == JSON_OBJECT) {
+            read_status &= read_layer_2_data(node->value, layer2_data_set2);
           }
         }
       }
