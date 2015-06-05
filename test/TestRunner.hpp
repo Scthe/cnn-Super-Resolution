@@ -1,8 +1,6 @@
 #ifndef __TEST_CONST_H
 #define __TEST_CONST_H
 
-// TODO rename to TestRunner.hpp
-
 ///
 /// This file contains various definitions to make tests more concise
 ///

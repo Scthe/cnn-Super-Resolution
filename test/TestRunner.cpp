@@ -4,7 +4,7 @@
 
 #include "../src/opencl/Context.hpp"
 #include "../src/opencl/UtilsOpenCL.hpp"
-#include "TestConst.hpp"
+#include "TestRunner.hpp"
 #include "TestDataProvider.hpp"
 
 using namespace test::data;
