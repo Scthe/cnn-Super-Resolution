@@ -41,7 +41,7 @@
 
     "data_set_1": {
       "n2_comment": "filter count for 2nd layer",
-      "n2": 3,
+      "n2": 2,
 
       "f2_comment": "spatial size",
       "f2": 3,
