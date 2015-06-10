@@ -96,16 +96,17 @@ DEFINE_TEST(Layer1Test, context) {
  //* clang-format on */
 
   std::stringstream kernel_compile_opts;
-  kernel_compile_opts << "-D N1_FILTER_COUNT=" << data->n1;
-  auto kernel = _context->create_kernel("src/kernel/layer_1.cl",
-                                        kernel_compile_opts.str().c_str());
-
+  kernel_compile_opts << "-D CURRENT_FILTER_COUNT=" << data->n1;
+  auto kernel = _context->create_kernel("src/kernel/layer_uber_kernel.cl",
+                                      kernel_compile_opts.str().c_str());
+  size_t f_prev_spatial_size = 1, n_prev_filter_cnt = 1;
   kernel->push_arg(gpu_buf_in);
   kernel->push_arg(gpu_buf_out);
   kernel->push_arg(gpu_buf_W);
   kernel->push_arg(gpu_buf_B);
+  kernel->push_arg(sizeof(cl_uint), (void *)&f_prev_spatial_size);
+  kernel->push_arg(sizeof(cl_uint), (void *)&n_prev_filter_cnt);
   kernel->push_arg(sizeof(cl_uint), (void *)&data->f1);
-  // TODO int or uint ?
   kernel->push_arg(sizeof(cl_uint), (void *)&data->input_w);
   kernel->push_arg(sizeof(cl_uint), (void *)&data->input_h);
 
@@ -144,9 +145,11 @@ Layer1Data *data = nullptr;
 END_TEST
 
 DEFINE_TEST(Layer2Test, context) {
-  const int out_w = layer_1->input_w - layer_1->f1 - layer_2->f2 + 2,
-            out_h = layer_1->input_h - layer_1->f1 - layer_2->f2 + 2,
-            size_per_filter = out_w * out_h;
+  const size_t src_w = layer_1->input_w - layer_1->f1 + 1,
+               src_h = layer_1->input_h - layer_1->f1 + 1,
+               out_w = src_w - layer_2->f2 + 1,
+               out_h = src_h - layer_2->f2 + 1,
+               size_per_filter = out_w * out_h;
   const size_t in_size = layer_1->f1 * layer_1->f1 * layer_1->n1;
   std::cout << "out size:" << out_w << "x" << out_h << std::endl;
 
@@ -164,10 +167,9 @@ DEFINE_TEST(Layer2Test, context) {
   /* clang-format on */
 
   std::stringstream kernel_compile_opts;
-  kernel_compile_opts << "-D N2_FILTER_COUNT=" << layer_2->n2;
-  auto kernel = _context->create_kernel("src/kernel/layer_2.cl",
+  kernel_compile_opts << "-D CURRENT_FILTER_COUNT=" << layer_2->n2;
+  auto kernel = _context->create_kernel("src/kernel/layer_uber_kernel.cl",
                                         kernel_compile_opts.str().c_str());
-
   kernel->push_arg(gpu_buf_in);
   kernel->push_arg(gpu_buf_out);
   kernel->push_arg(gpu_buf_W);
@@ -175,6 +177,8 @@ DEFINE_TEST(Layer2Test, context) {
   kernel->push_arg(sizeof(cl_uint), (void *)&layer_1->f1);
   kernel->push_arg(sizeof(cl_uint), (void *)&layer_1->n1);
   kernel->push_arg(sizeof(cl_uint), (void *)&layer_2->f2);
+  kernel->push_arg(sizeof(cl_uint), (void *)&src_w);
+  kernel->push_arg(sizeof(cl_uint), (void *)&src_h);
 
   size_t global_work_size[2] = {16, 16};
   size_t local_work_size[2] = {8, 8};
@@ -186,14 +190,14 @@ DEFINE_TEST(Layer2Test, context) {
                         (void *)cpu_buf.get(), true, &finish_token, 1);
 
   // compare results
-  for (int i = 0; i < size_per_filter; i++) {
+  for (size_t i = 0; i < size_per_filter; i++) {
     size_t base_idx = i * layer_2->n2;
     for (size_t filter_id = 0; filter_id < layer_2->n2; filter_id++) {
       float expected = layer_2->output[base_idx + filter_id];
       expected = sigmoid(expected);
       float result = cpu_buf[base_idx + filter_id];  // straight from gpu
       // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
-                  //  << std::endl;
+      // << std::endl;
       assert_equals(expected, result);
     }
   }
@@ -236,7 +240,7 @@ int main(int argc, char **argv) {
 
   //
   //
-  //
+  // TODO pure data driven?
   //
 
   ADD_TEST(ExtractLumaTest, &data_provider.layer1_data.input);
