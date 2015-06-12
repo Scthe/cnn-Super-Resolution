@@ -1,6 +1,8 @@
 #include <iostream>
 #include <memory>  // for std:unique_ptr
 #include <vector>
+#include <random>  // for std::mt19937
+#include <chrono>  // for random seed
 
 #include "../src/opencl/Context.hpp"
 #include "../src/opencl/UtilsOpenCL.hpp"
@@ -139,7 +141,7 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   for (size_t i = 0; i < out_count; i++) {
     float expected = data->output[i];
     float result = cpu_buf[i];  // straight from gpu
-    // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
+    // std::cout << (i + 1) << "  expected: " << expected << "\tgot: " << result
     // << std::endl;
     assert_equals(expected, result);
   }
@@ -151,6 +153,63 @@ void init(LayerData *data) { this->data = data; }
 
 private:
 LayerData *data = nullptr;
+END_TEST
+
+///
+/// SumSquaredTest
+///
+DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
+  const size_t test_data_len = 10000;  // pixel count
+  const size_t global_work_size[1] = {16384};
+  const size_t local_work_size[1] = {512}; // local work size - need to set the size of scrap buffer
+
+  unsigned seed1 = std::chrono::system_clock::now().time_since_epoch().count();
+  std::mt19937 generator(seed1);
+  std::vector<unsigned char> cpu_org_img(test_data_len);
+  std::vector<float> cpu_algo_res(test_data_len);
+  double expected = 0.0;
+  for (size_t i = 0; i < test_data_len; i++) {
+    cpu_org_img[i] = (unsigned char)(generator() & 0x15);
+    cpu_algo_res[i] = (generator() % 2560) / 10.0f;
+    double d = cpu_org_img[i] - cpu_algo_res[i];
+    expected += d * d;
+  }
+
+  /* clang-format off */
+  auto gpu_buf_org_img = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_uchar) * test_data_len);
+  _context->write_buffer(gpu_buf_org_img, (void *)&cpu_org_img[0], true);
+  auto gpu_buf_algo_res = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * test_data_len);
+  _context->write_buffer(gpu_buf_algo_res, (void *)&cpu_algo_res[0], true);
+
+  const unsigned __int64 out_init_val = 0;
+  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_ulong));
+  _context->write_buffer(gpu_buf_out, (void *)&out_init_val, true);
+  /* clang-format on */
+
+  // kernel+args
+  auto kernel = _context->create_kernel("src/kernel/sum_squared.cl");
+  kernel->push_arg(gpu_buf_org_img);
+  kernel->push_arg(gpu_buf_algo_res);
+  kernel->push_arg(sizeof(cl_float) * local_work_size[0], nullptr);  // scrath
+  kernel->push_arg(gpu_buf_out);
+  kernel->push_arg(sizeof(cl_uint), (void *)&test_data_len);
+
+  // run
+  cl_event finish_token = kernel->execute(1, global_work_size, local_work_size);
+
+  // read (values may not be exactly the same since float->long data loss,
+  // but should be close enough)
+  unsigned __int64 read_val;
+  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_ulong), (void *)&read_val,
+                        true, &finish_token, 1);
+  std::cout << "expected: " << expected << "\tgot: " << read_val << std::endl;
+  assert_equals(expected, read_val);
+
+  return true;
+}
+
+void init() {}
+
 END_TEST
 
 ///
@@ -185,6 +244,7 @@ int main(int argc, char **argv) {
   ADD_TEST(LayerTest, &data_provider.layer2_data_set1);
   ADD_TEST(LayerTest, &data_provider.layer2_data_set2);
   ADD_TEST(LayerTest, &data_provider.layer3_data);
+  ADD_TEST(SumSquaredTest);
 
   //
   //
