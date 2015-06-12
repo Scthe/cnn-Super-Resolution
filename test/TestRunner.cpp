@@ -10,7 +10,7 @@
 using namespace test::data;
 
 ///
-/// Test definitions
+/// ExtractLumaTest
 ///
 DEFINE_TEST(ExtractLumaTest, context) {
   opencl::utils::ImageData data;
@@ -67,173 +67,25 @@ const std::vector<float> *layer_1_input = nullptr;
 END_TEST
 
 ///
-/// Layer 1 test
+/// LayerTest
 ///
-
-DEFINE_TEST(Layer1Test, context) {
-  const int out_w = data->input_w - data->f1 + 1,
-            out_h = data->input_h - data->f1 + 1,
-            size_per_filter = out_w * out_h;
-  const size_t pixel_count = data->input_w * data->input_h;
-
-  this->assert_true(data->input.size() >= pixel_count,
-                    "Vector of 1st layer's input values should be at least as "
-                    "big as test image");
-
-  float input_mean = mean(&data->input[0], pixel_count);
-  for (size_t i = 0; i < pixel_count; i++) {
-    data->input[i] -= input_mean;
-    // std::cout << data->input[i] << std::endl;
-  }
-
-  // buffers: in_source, W, B , out_target
-  /* clang-format off */
-  auto gpu_buf_in = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * pixel_count);
-  _context->write_buffer(gpu_buf_in, (void *)&data->input[0], true);
-  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data->weights.size());
-  _context->write_buffer(gpu_buf_W, (void *)&data->weights[0], true);
-  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, sizeof(cl_float) * data->bias.size());
-  _context->write_buffer(gpu_buf_B, (void *)&data->bias[0], true);
-
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * data->n1);
- _context->zeros_float(gpu_buf_out, true);
- //* clang-format on */
-
-  std::stringstream kernel_compile_opts;
-  kernel_compile_opts << "-D CURRENT_FILTER_COUNT=" << data->n1;
-  auto kernel = _context->create_kernel("src/kernel/layer_uber_kernel.cl",
-                                      kernel_compile_opts.str().c_str());
-  size_t f_prev_spatial_size = 1, n_prev_filter_cnt = 1;
-  kernel->push_arg(gpu_buf_in);
-  kernel->push_arg(gpu_buf_out);
-  kernel->push_arg(gpu_buf_W);
-  kernel->push_arg(gpu_buf_B);
-  kernel->push_arg(sizeof(cl_uint), (void *)&f_prev_spatial_size);
-  kernel->push_arg(sizeof(cl_uint), (void *)&n_prev_filter_cnt);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data->f1);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data->input_w);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data->input_h);
-
-  size_t global_work_size[2] = {16, 16};
-  size_t local_work_size[2] = {8, 8};
-  cl_event finish_token = kernel->execute(2, global_work_size, local_work_size);
-
-  std::unique_ptr<float[]> cpu_buf(new float[size_per_filter * data->n1]);
-  _context->read_buffer(gpu_buf_out, 0,
-                        sizeof(cl_float) * size_per_filter * data->n1,
-                        (void *)cpu_buf.get(), true, &finish_token, 1);
-
-  for (int i = 0; i < size_per_filter; i++) {
-    size_t base_idx = i * data->n1;
-    for (size_t filter_id = 0; filter_id < data->n1; filter_id++) {
-      float expected = (*layer_2_input)[base_idx + filter_id];
-      float result = cpu_buf[base_idx + filter_id];  // straight from gpu
-      // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
-      // << std::endl;
-      assert_equals(expected, result);
-    }
-  }
-
-  return true;
-}
-
-void init(Layer1Data *data, const std::vector<float> *layer_2_input) {
-  this->layer_2_input = layer_2_input;
-  this->data = data;
-}
-
-private:
-const std::vector<float> *layer_2_input = nullptr;
-Layer1Data *data = nullptr;
-
-END_TEST
-
-///
-/// Layer 2 test
-///
-
-DEFINE_TEST(Layer2Test, context) {
-  const size_t src_w = layer_1->input_w - layer_1->f1 + 1,
-               src_h = layer_1->input_h - layer_1->f1 + 1,
-               out_w = src_w - layer_2->f2 + 1,
-               out_h = src_h - layer_2->f2 + 1,
-               size_per_filter = out_w * out_h;
-  const size_t in_size = layer_1->f1 * layer_1->f1 * layer_1->n1;
-  std::cout << "out size:" << out_w << "x" << out_h << std::endl;
-
-  // buffers: in_source, W, B , out_target
-  /* clang-format off */
-  auto gpu_buf_in = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * in_size);
-  _context->write_buffer(gpu_buf_in, (void *)&layer_2->input[0], true);
-  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * layer_2->weights.size());
-  _context->write_buffer(gpu_buf_W, (void *)&layer_2->weights[0], true);
-  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, sizeof(cl_float) * layer_2->bias.size());
-  _context->write_buffer(gpu_buf_B, (void *)&layer_2->bias[0], true);
-
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * size_per_filter * layer_2->n2);
-  _context->zeros_float(gpu_buf_out, true);
-  /* clang-format on */
-
-  std::stringstream kernel_compile_opts;
-  kernel_compile_opts << "-D CURRENT_FILTER_COUNT=" << layer_2->n2;
-  auto kernel = _context->create_kernel("src/kernel/layer_uber_kernel.cl",
-                                        kernel_compile_opts.str().c_str());
-  kernel->push_arg(gpu_buf_in);
-  kernel->push_arg(gpu_buf_out);
-  kernel->push_arg(gpu_buf_W);
-  kernel->push_arg(gpu_buf_B);
-  kernel->push_arg(sizeof(cl_uint), (void *)&layer_1->f1);
-  kernel->push_arg(sizeof(cl_uint), (void *)&layer_1->n1);
-  kernel->push_arg(sizeof(cl_uint), (void *)&layer_2->f2);
-  kernel->push_arg(sizeof(cl_uint), (void *)&src_w);
-  kernel->push_arg(sizeof(cl_uint), (void *)&src_h);
-
-  size_t global_work_size[2] = {16, 16};
-  size_t local_work_size[2] = {8, 8};
-  cl_event finish_token = kernel->execute(2, global_work_size, local_work_size);
-
-  std::unique_ptr<float[]> cpu_buf(new float[size_per_filter * layer_2->n2]);
-  _context->read_buffer(gpu_buf_out, 0,
-                        sizeof(cl_float) * size_per_filter * layer_2->n2,
-                        (void *)cpu_buf.get(), true, &finish_token, 1);
-
-  // compare results
-  for (size_t i = 0; i < size_per_filter; i++) {
-    size_t base_idx = i * layer_2->n2;
-    for (size_t filter_id = 0; filter_id < layer_2->n2; filter_id++) {
-      float expected = layer_2->output[base_idx + filter_id];
-      expected = sigmoid(expected);
-      float result = cpu_buf[base_idx + filter_id];  // straight from gpu
-      // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
-      // << std::endl;
-      assert_equals(expected, result);
-    }
-  }
-
-  return true;
-}
-
-void init(Layer1Data *layer_1, Layer2Data *layer_2) {
-  this->layer_1 = layer_1;
-  this->layer_2 = layer_2;
-}
-
-private:
-Layer1Data *layer_1 = nullptr;
-Layer2Data *layer_2 = nullptr;
-END_TEST
-
-///
-/// Layer 3 test
-///
-
-DEFINE_TEST(Layer3Test, context) {
+DEFINE_TEST(LayerTest, context) {
   const size_t out_w = data->input_w - data->f_spatial_size + 1,
                out_h = data->input_h - data->f_spatial_size + 1,
-               out_count = out_w * out_h;
-  const size_t input_size =
-      data->input_w * data->input_h * data->n_prev_filter_cnt;
+               out_count = out_w * out_h * data->current_filter_count,
+               input_size =
+                   data->input_w * data->input_h * data->n_prev_filter_cnt;
+  this->assert_true(
+      data->input.size() >= input_size,
+      "Declared input_w*input_h*n_prev_filter_cnt is bigger then input array");
   std::cout << "out size:" << out_w << "x" << out_h << std::endl;
+
+  if (data->preproces_mean) {
+    float input_mean = mean(&data->input[0], data->input_w * data->input_h);
+    for (size_t i = 0; i < data->input_w * data->input_h; i++) {
+      data->input[i] -= input_mean;
+    }
+  }
 
   // buffers: in_source, W, B , out_target
   /* clang-format off */
@@ -248,23 +100,37 @@ DEFINE_TEST(Layer3Test, context) {
   _context->zeros_float(gpu_buf_out, true);
   /* clang-format on */
 
+  // create kernel
+  std::stringstream kernel_compile_opts;
+  if (data->result_multiply) {
+    kernel_compile_opts << "-D RESULT_MULTIPLY=" << data->result_multiply;
+    std::cout << "RESULT_MULTIPLY=" << data->result_multiply << " (last layer)"
+              << std::endl;
+  } else {
+    kernel_compile_opts << "-D CURRENT_FILTER_COUNT="
+                        << data->current_filter_count;
+    std::cout << "CURRENT_FILTER_COUNT=" << data->current_filter_count
+              << " (layers 1,2)" << std::endl;
+  }
   auto kernel = _context->create_kernel("src/kernel/layer_uber_kernel.cl",
-                                        "-D RESULT_MULTIPLY=255");
+                                        kernel_compile_opts.str().c_str());
+
+  // args
   kernel->push_arg(gpu_buf_in);
   kernel->push_arg(gpu_buf_out);
   kernel->push_arg(gpu_buf_W);
   kernel->push_arg(gpu_buf_B);
-  kernel->push_arg(sizeof(cl_uint),
-                   (void *)&data->n_prev_filter_cnt);  // does not matter ATM
   kernel->push_arg(sizeof(cl_uint), (void *)&data->n_prev_filter_cnt);
   kernel->push_arg(sizeof(cl_uint), (void *)&data->f_spatial_size);
   kernel->push_arg(sizeof(cl_uint), (void *)&data->input_w);
   kernel->push_arg(sizeof(cl_uint), (void *)&data->input_h);
 
+  // run
   size_t global_work_size[2] = {16, 16};
   size_t local_work_size[2] = {8, 8};
   cl_event finish_token = kernel->execute(2, global_work_size, local_work_size);
 
+  // read results
   std::unique_ptr<float[]> cpu_buf(new float[out_count]);
   _context->read_buffer(gpu_buf_out, 0, sizeof(cl_float) * out_count,
                         (void *)cpu_buf.get(), true, &finish_token, 1);
@@ -274,7 +140,7 @@ DEFINE_TEST(Layer3Test, context) {
     float expected = data->output[i];
     float result = cpu_buf[i];  // straight from gpu
     // std::cout << (i + 1) << "  exp: " << expected << "\tgot:" << result
-              // << std::endl;
+    // << std::endl;
     assert_equals(expected, result);
   }
 
@@ -312,17 +178,13 @@ int main(int argc, char **argv) {
 
   //
   //
-  // TODO pure data driven?
   //
 
   ADD_TEST(ExtractLumaTest, &data_provider.layer1_data.input);
-  ADD_TEST(Layer1Test, &data_provider.layer1_data,
-           &data_provider.layer2_data_set1.input);
-  ADD_TEST(Layer2Test, &data_provider.layer1_data,
-           &data_provider.layer2_data_set1);
-  ADD_TEST(Layer2Test, &data_provider.layer1_data,
-           &data_provider.layer2_data_set2);
-  ADD_TEST(Layer3Test, &data_provider.layer3_data);
+  ADD_TEST(LayerTest, &data_provider.layer1_data);
+  ADD_TEST(LayerTest, &data_provider.layer2_data_set1);
+  ADD_TEST(LayerTest, &data_provider.layer2_data_set2);
+  ADD_TEST(LayerTest, &data_provider.layer3_data);
 
   //
   //
@@ -335,7 +197,7 @@ int main(int argc, char **argv) {
   int failures = 0;
   for (auto i = begin(cases); i != end(cases); ++i) {
     auto test = *i;
-    auto test_name = test->name();
+    auto test_name = test->name();  // TODO declare filed 'name' in json
     bool passed = false;
 
     std::cout << std::endl
@@ -346,11 +208,9 @@ int main(int argc, char **argv) {
       passed = (*test)(&context);
 
     } catch (const std::exception &ex) {
-      std::cout << test_name << ":" << std::endl
-                << ex.what() << std::endl;
+      std::cout << ex.what() << std::endl;
     } catch (...) {
-      std::cout << test_name << ":" << std::endl
-                << "Undefined exception" << std::endl;
+      std::cout << "Undefined exception" << std::endl;
     }
     results.push_back(passed ? 1 : 0);
   }

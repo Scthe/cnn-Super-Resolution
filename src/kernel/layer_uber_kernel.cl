@@ -31,10 +31,6 @@ float sigmoid(float x){
 *                                * 1st layer: n1
 *                                * 2nd layer: n2
 *                                * 3rd layer: 1
-* @param f_prev_spatial_size  mainly used as offset multiplier when indexing (it's f value for previous layer)
-*                               * 1st layer: 1 <- we have only one set of values per (x,y)
-*                               * 2nd layer: f1
-*                               * 3rd layer: f2
 * @param n_prev_filter_cnt    1/n1/n2
 * @param f_spatial_size       current: f1/f2/f3
 * @param src_w                source width
@@ -43,9 +39,8 @@ float sigmoid(float x){
 __kernel
 void main(__read_only __global float* source,
           __global float* target,
-					__read_only __global float* W,
-					__read_only __global float* B,
-          uint f_prev_spatial_size, // TODO remove
+          __read_only __global float* W,
+          __read_only __global float* B,
           uint n_prev_filter_cnt,
           uint f_spatial_size,
           uint src_w, uint src_h){
@@ -87,6 +82,7 @@ void main(__read_only __global float* source,
         for (size_t dx = 0; dx < f_spatial_size; dx++) {
           int2 delta = {dx, dy};
           int2 point_pos = pos + delta;
+          // int base_point_idx  = ((point_pos.y * src_w) + point_pos.x) * src_h;
           int base_point_idx  = ((point_pos.y * src_w) + point_pos.x) * n_prev_filter_cnt; // TODO * src_h or * n_prev_filter_cnt?
           int base_W_idx = ((dy * f_spatial_size) + dx) * third_dimension_factor_weigth;
 

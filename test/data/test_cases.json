@@ -1,11 +1,9 @@
 {
   "layer_1": {
-
-    "n1_comment": "filter count for 1st layer",
-    "n1": 3,
-
-    "f1_comment": "spatial size",
-    "f1": 3,
+    "n_prev_filter_cnt": 1,
+    "current_filter_count": 3,
+    "f_spatial_size": 3,
+    "preproces_mean": 1,
 
     "input_w": 5,
     "input_h": 5,
@@ -16,7 +14,17 @@
       0.67016, 0.74524, 0.85311, 0.74524, 0.29913,
       0.8062,  0.58765, 0.8585,  0.5927,  0.70196],
 
-    "weights_comment": "weights for 1st layer. (each column for different filter, each row for different pixel in range 0 - f1^2, so each paragraph is 1 row of pixels in f1=3)",
+    "output": [
+      0.406, 0.419, 0.598,
+      0.442, 0.685, 0.528,
+      0.627, 0.489, 0.642,
+      0.376, 0.563, 0.499,
+      0.680, 0.371, 0.571,
+      0.390, 0.672, 0.453,
+      0.626, 0.550, 0.609,
+      0.386, 0.674, 0.634,
+      0.666, 0.413, 0.609],
+
     "weights": [
       1.0, 0.0, 0.0,
       0.0, 1.0, 0.0,
@@ -31,7 +39,6 @@
       1.0, 0.0, 0.0
     ],
 
-    "bias_comment": "biases for 1st layer",
     "bias": [0.1, 0.2, 0.3]
   },
 
@@ -40,12 +47,12 @@
   "layer_2": {
 
     "data_set_1": {
-      "n2_comment": "filter count for 2nd layer",
-      "n2": 2,
+      "n_prev_filter_cnt": 3,
+      "current_filter_count": 2,
+      "f_spatial_size": 3,
 
-      "f2_comment": "spatial size",
-      "f2": 3,
-
+      "input_w": 3,
+      "input_h": 3,
       "input": [
         0.406, 0.419, 0.598,
         0.442, 0.685, 0.528,
@@ -57,10 +64,9 @@
         0.386, 0.674, 0.634,
         0.666, 0.413, 0.609],
 
-        "output": [0.169, -0.731],
+      "output": [0.542, 0.325],
 
-        "weights_comment": "weights for second layer ((f2*f2*n1)*n2 dimensional) in other words each of n2 filters have a f2*f2*n1 cube of weights (each column for different filter, each row for different pixel in range 0 - f2*f2*n1, so each paragraph is cell, 9 cells total)",
-        "weights": [
+      "weights": [
           -0.369,  0.025,
            0.213,  0.058,
            0.410, -0.068,
@@ -99,17 +105,16 @@
           -0.001,	-0.761,
           -0.021,	 0.501],
 
-        "bias_comment": "biases for 2nd layer (n2 dimensional)",
-        "bias": [0.1, 0.2]
+      "bias": [0.1, 0.2]
     },
 
     "data_set_2": {
-      "n2_comment": "filter count for 2nd layer",
-      "n2": 3,
+      "n_prev_filter_cnt": 3,
+      "current_filter_count": 3,
+      "f_spatial_size": 1,
 
-      "f2_comment": "spatial size",
-      "f2": 1,
-
+      "input_w": 3,
+      "input_h": 3,
       "input": [
         0.406, 0.419, 0.598,
         0.442, 0.685, 0.528,
@@ -122,23 +127,21 @@
         0.666, 0.413, 0.609],
 
       "output": [
-        0.369, 0.025, 0.229,
-        0.213, 0.058, 0.378,
-        0.410, -0.068, 0.178,
-        0.236, 0.071, 0.343,
-        0.429, -0.104, 0.114,
-        0.161, 0.087, 0.409,
-        0.361, -0.055, 0.220,
-        0.273, 0.071, 0.364,
-        0.431, -0.095, 0.132],
+        0.59, 0.51, 0.56,
+        0.55, 0.51, 0.59,
+        0.60, 0.48, 0.54,
+        0.56, 0.52, 0.58,
+        0.61, 0.47, 0.53,
+        0.54, 0.52, 0.60,
+        0.59, 0.49, 0.55,
+        0.57, 0.52, 0.59,
+        0.61, 0.48, 0.53],
 
-      "weights_comment": "weights for second layer ((f2*f2*n1)*n2 dimensional) in other words each of n2 filters have a f2*f2*n1 cube of weights (each column for different filter, each row for different pixel in range 0 - f2*f2*n1, so each paragraph is cell, 9 cells total)",
       "weights": [
          0.20, -0.45, -0.35,
         -0.45,  0.16,  0.54,
          0.63, -0.10, -0.26],
 
-      "bias_comment": "biases for 2nd layer (n2 dimensional)",
       "bias": [0.1, 0.2, 0.3]
     }
 
@@ -147,13 +150,11 @@
 
 
   "layer_3": {
+    "n_prev_filter_cnt": 3,
+    "current_filter_count": 1,
+    "f_spatial_size": 3,
+    "result_multiply": 255,
 
-    "n2": 3,
-
-    "f3_comment": "spatial size",
-    "f3": 3,
-
-    "input_comment": "result from layer 3: input_w*input_h*n2. Each column for different filter(from 1 to n2). Each of the paragraphs represets row of input",
     "input_w": 5,
     "input_h": 4,
     "input": [
@@ -185,7 +186,6 @@
        24.8, 32.6, 33.6,
        16.0, 38.5, 20.6],
 
-    "weights_comment": "weights for 3rd layer. Each column for different filter(from 1 to n2). Total: n2*f3*f3",
     "weights": [
        0.294,  0.025,  0.058,
        0.068,  0.007, -0.243,
@@ -199,7 +199,6 @@
       -0.033,  0.116,  0.038,
        0.002, -0.116,  0.002],
 
-    "bias_comment": "bias for 3rd layer",
     "bias": [0.1]
   }
 
