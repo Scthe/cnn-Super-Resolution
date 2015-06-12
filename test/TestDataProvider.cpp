@@ -93,19 +93,13 @@ bool TestDataProvider::read(char const* const file) {
 
       if (strcmp(object->key, "layer_1") == 0) {
         read_status &= read_layer_data(object->value, layer1_data);
+      } else if (strcmp(object->key, "layer_2_data_set_1") == 0) {
+        read_status &= read_layer_data(object->value, layer2_data_set1);
+      } else if (strcmp(object->key, "layer_2_data_set_2") == 0) {
+        read_status &= read_layer_data(object->value, layer2_data_set2);
       } else if (strcmp(object->key, "layer_3") == 0) {
         read_status &= read_layer_data(object->value, layer3_data);
-      }  else if (strcmp(object->key, "layer_2") == 0) {
-         for (auto node : object->value) {
-           if (strcmp(node->key, "data_set_1") == 0 &&
-               node->value.getTag() == JSON_OBJECT) {
-             read_status &= read_layer_data(node->value, layer2_data_set1);
-           } else if (strcmp(node->key, "data_set_2") == 0 &&
-                      node->value.getTag() == JSON_OBJECT) {
-             read_status &= read_layer_data(node->value, layer2_data_set2);
-           }
-         }
-       }
+      }
       //
     }
   }
@@ -113,10 +107,10 @@ bool TestDataProvider::read(char const* const file) {
   return read_status;
 }
 
+
 #define READ_INT(PROP_NAME)                                                    \
   if (strcmp(node->key, #PROP_NAME) == 0 &&                                    \
       node->value.getTag() == JSON_NUMBER) {                                   \
-    /* TODO ASSERT(node.getTag() == JSON_NUMBER);*/                            \
     data.PROP_NAME = (unsigned int)node->value.toNumber();                     \
     std::cout << "INT: " << node->key << " = " << data.PROP_NAME << std::endl; \
     read_##PROP_NAME = true;                                                   \
@@ -135,12 +129,21 @@ bool TestDataProvider::read(char const* const file) {
     read_##PROP_NAME = true;                           \
   }
 
+#define READ_STR(PROP_NAME)                                                    \
+  if (strcmp(node->key, #PROP_NAME) == 0 &&                                    \
+      node->value.getTag() == JSON_STRING) {                                   \
+    data.PROP_NAME = node->value.toString();                                   \
+    std::cout << "STR: " << node->key << " = '" << data.PROP_NAME << "'" << std::endl; \
+    read_##PROP_NAME = true;                                                   \
+  }
+
 bool TestDataProvider::read_layer_data(const JsonValue& object,
                                        LayerData& data) {
   // ASSERT(object.getTag() == JSON_TAG_OBJECT);
 
   /* clang-format off */
-  bool read_n_prev_filter_cnt = false,
+  bool read_name = false,
+       read_n_prev_filter_cnt = false,
        read_current_filter_count = false,
        read_f_spatial_size = false,
        read_input_w = false, read_input_h = false,
@@ -155,6 +158,7 @@ bool TestDataProvider::read_layer_data(const JsonValue& object,
 
   for (auto node : object) {
     // std::cout << i->key << std::endl;
+    READ_STR(name)
     READ_INT(n_prev_filter_cnt)
     READ_INT(f_spatial_size)
     READ_INT(current_filter_count)
@@ -168,7 +172,6 @@ bool TestDataProvider::read_layer_data(const JsonValue& object,
     READ_INT(preproces_mean)
   }
 
-// TODO throw to not allow to run test with not valid data definitions
 #define ASSERT_READ(PROP_NAME)                                            \
   if (!read_##PROP_NAME) {                                                \
     std::cout << "Expected to read: '" << #PROP_NAME << "'" << std::endl; \

@@ -3,11 +3,13 @@
 
 #include "json/gason.h"
 #include <vector>
+#include <string>
 
 namespace test {
 namespace data {
 
 struct LayerData {
+  std::string name;
   size_t n_prev_filter_cnt,
          current_filter_count,
          f_spatial_size,

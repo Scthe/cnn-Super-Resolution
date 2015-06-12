@@ -12,7 +12,7 @@ using namespace test::data;
 ///
 /// ExtractLumaTest
 ///
-DEFINE_TEST(ExtractLumaTest, context) {
+DEFINE_TEST_STR(ExtractLumaTest, "Extract luma test", context) {
   opencl::utils::ImageData data;
   load_image("test/data/color_grid.png", data);
   // std::cout << "img: " << data.w << "x" << data.h << "x" << data.bpp
@@ -69,7 +69,7 @@ END_TEST
 ///
 /// LayerTest
 ///
-DEFINE_TEST(LayerTest, context) {
+DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   const size_t out_w = data->input_w - data->f_spatial_size + 1,
                out_h = data->input_h - data->f_spatial_size + 1,
                out_count = out_w * out_h * data->current_filter_count,
@@ -196,8 +196,8 @@ int main(int argc, char **argv) {
 
   int failures = 0;
   for (auto i = begin(cases); i != end(cases); ++i) {
-    auto test = *i;
-    auto test_name = test->name();  // TODO declare filed 'name' in json
+    TestCase *test = *i;
+    auto test_name = test->name();
     bool passed = false;
 
     std::cout << std::endl

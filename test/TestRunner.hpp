@@ -19,11 +19,12 @@
 #define CONCATENATE(x, y) CONCATENATE_DETAIL(x, y)
 
 /** test definitions */
-#define DEFINE_TEST(x, ctx_var)                  \
-  struct x : TestCase {                          \
-    const char *const NAME = STRINGIFY(x);       \
-    const char *name() override { return NAME; } \
-  bool operator()(opencl::Context * const _##ctx_var) override
+#define DEFINE_TEST(X, DESC, CTX_VAR)              \
+  struct X : TestCase {                            \
+    const char *name() override { return DESC; }   \
+  bool operator()(opencl::Context * const _##CTX_VAR) override
+
+#define DEFINE_TEST_STR(X, STR, CTX_VAR) DEFINE_TEST(X, STR, CTX_VAR)
 
 #define END_TEST \
   }              \
@@ -52,7 +53,7 @@ struct TestCase {
 
  protected:
   void assert_equals(float expected, float result) {
-    #define ABS(x) x = (x) > 0 ? (x) : (-(x))
+#define ABS(x) x = (x) > 0 ? (x) : (-(x))
     float margin = expected * 0.01f;
     ABS(margin);
     margin = margin < 0.01f ? 0.01f : margin;
@@ -64,7 +65,7 @@ struct TestCase {
                "Expected %f to be %f", result, expected);
       throw TestException<float>(expected, result, msg_buffer);
     }
-    #undef ABS
+#undef ABS
   }
 
   void assert_true(bool v, const char *msg) {
