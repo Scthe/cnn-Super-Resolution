@@ -45,7 +45,7 @@ void main(__read_only __global float* source,
           __global float* target,
 					__read_only __global float* W,
 					__read_only __global float* B,
-          uint f_prev_spatial_size,
+          uint f_prev_spatial_size, // TODO remove
           uint n_prev_filter_cnt,
           uint f_spatial_size,
           uint src_w, uint src_h){
@@ -70,8 +70,6 @@ void main(__read_only __global float* source,
   // when working with source with at least 3 dimensions we have
   // to multiply by src_h for indexing purposes.
   // It's just 1 when working with 2D source.
-  // const int third_dimension_factor = (n_prev_filter_cnt > 1)? n_prev_filter_cnt : 1;
-  const int third_dimension_factor = (n_prev_filter_cnt > 1)? src_h : 1;
   const int third_dimension_factor_weigth = (n_prev_filter_cnt > 1)? f_spatial_size : 1;
 
   // value range check
@@ -89,7 +87,7 @@ void main(__read_only __global float* source,
         for (size_t dx = 0; dx < f_spatial_size; dx++) {
           int2 delta = {dx, dy};
           int2 point_pos = pos + delta;
-          int base_point_idx  = ((point_pos.y * src_w) + point_pos.x) * third_dimension_factor;
+          int base_point_idx  = ((point_pos.y * src_w) + point_pos.x) * n_prev_filter_cnt; // TODO * src_h or * n_prev_filter_cnt?
           int base_W_idx = ((dy * f_spatial_size) + dx) * third_dimension_factor_weigth;
 
           for (size_t i_n = 0; i_n < n_prev_filter_cnt; i_n++) {
@@ -113,13 +111,13 @@ void main(__read_only __global float* source,
       for (size_t filter_id = 0; filter_id < CURRENT_FILTER_COUNT; filter_id++) {
         float B_value = B[filter_id];
         float result = vals_by_filter[filter_id] + B_value;
+
 #ifndef RESULT_MULTIPLY
-        target[out_idx + filter_id] = sigmoid(result); // TODO sigmoid
-        // target[out_idx + filter_id] = result;
-        // target[out_idx + filter_id] = out_size.x;
+        target[out_idx + filter_id] = sigmoid(result);
 #else
         target[out_idx + filter_id] = result * RESULT_MULTIPLY;
 #endif // RESULT_MULTIPLY
+
       }
 
   }

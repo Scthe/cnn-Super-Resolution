@@ -62,6 +62,8 @@ bool TestDataProvider::read(char const* const file) {
 
       if (strcmp(object->key, "layer_1") == 0) {
         read_status &= read_layer_1_data(object->value, layer1_data);
+      } else if (strcmp(object->key, "layer_3") == 0) {
+        read_status &= read_layer_3_data(object->value, layer3_data);
       } else if (strcmp(object->key, "layer_2") == 0) {
         for (auto node : object->value) {
           if (strcmp(node->key, "data_set_1") == 0 &&
@@ -80,23 +82,26 @@ bool TestDataProvider::read(char const* const file) {
   return read_status;
 }
 
-#define READ_INT(NAME)                                                        \
+#define READ_INT2(NAME, PROP_NAME)                                            \
   if (strcmp(node->key, #NAME) == 0 && node->value.getTag() == JSON_NUMBER) { \
     /* TODO ASSERT(node.getTag() == JSON_NUMBER);*/                           \
-    data.NAME = (int)node->value.toNumber();                                  \
-    std::cout << "INT: " << node->key << " = " << data.NAME << std::endl;     \
+    data.PROP_NAME = (unsigned int)node->value.toNumber();                    \
+    std::cout << "INT: " << node->key << " = " << data.PROP_NAME << std::endl;     \
   }
 
-#define READ_ARRAY(NAME)                                                     \
+#define READ_ARRAY2(NAME, PROP_NAME)                                         \
   if (strcmp(node->key, #NAME) == 0 && node->value.getTag() == JSON_ARRAY) { \
     auto arr_raw = node->value;                                              \
     std::cout << "ARRAY: " << node->key << std::endl;                        \
     for (auto val : arr_raw) {                                               \
       /* ASSERT(val->value.getTag() == JSON_NUMBER);*/                       \
       double num = val->value.toNumber();                                    \
-      data.NAME.push_back(num);                                              \
+      data.PROP_NAME.push_back(num);                                         \
     }                                                                        \
   }
+
+#define READ_INT(NAME) READ_INT2(NAME, NAME)
+#define READ_ARRAY(NAME) READ_ARRAY2(NAME, NAME)
 
 bool TestDataProvider::read_layer_1_data(const JsonValue& object,
                                          Layer1Data& data) {
@@ -121,6 +126,24 @@ bool TestDataProvider::read_layer_2_data(const JsonValue& object,
     // std::cout << i->key << std::endl;
     READ_INT(n2)
     READ_INT(f2)
+    READ_ARRAY(input)
+    READ_ARRAY(output)
+    READ_ARRAY(weights)
+    READ_ARRAY(bias)
+  }
+  return true;
+}
+
+bool TestDataProvider::read_layer_3_data(const JsonValue& object,
+                                         LayerData& data) {
+  // ASSERT(object.getTag() == JSON_TAG_OBJECT);
+  for (auto node : object) {
+    // std::cout << i->key << std::endl;
+    READ_INT2(n2, n_prev_filter_cnt)
+    // NO current_filter_count: default '1'
+    READ_INT2(f3, f_spatial_size)
+    READ_INT(input_w)
+    READ_INT(input_h)
     READ_ARRAY(input)
     READ_ARRAY(output)
     READ_ARRAY(weights)
