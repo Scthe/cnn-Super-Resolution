@@ -202,7 +202,7 @@ DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
   unsigned __int64 read_val;
   _context->read_buffer(gpu_buf_out, 0, sizeof(cl_ulong), (void *)&read_val,
                         true, &finish_token, 1);
-  std::cout << "expected: " << expected << "\tgot: " << read_val << std::endl;
+  // std::cout << "expected: " << expected << "\tgot: " << read_val << std::endl;
   assert_equals(expected, read_val);
 
   return true;
