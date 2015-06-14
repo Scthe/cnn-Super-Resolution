@@ -1,7 +1,4 @@
 #include <iostream>
-#include <time.h>
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>  // TODO remove ?
 
 #include "opencl\Context.hpp"
 #include "opencl\UtilsOpenCL.hpp"
@@ -9,17 +6,9 @@
 #include "Config.hpp"
 
 // http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html
-
-#define OUT_CHANNELS 1
-
-const char *cSourceFile = "src/kernel/greyscale.cl";
-const char *img_path = "data/cold_reflection_by_lildream.jpg";
-const char *img_path2 = "data/cold_2.png";
-
 // http://www.thebigblob.com/gaussian-blur-using-opencl-and-the-built-in-images-textures/
 
 void luma_extract(int argc, char **argv);
-
 void cfg_tests();
 
 int main(int argc, char **argv) {
@@ -46,8 +35,14 @@ void cfg_tests() {
   std::cout << cfg << std::endl;
 }
 
+#define OUT_CHANNELS 1
+
 void luma_extract(int argc, char **argv) {
   using namespace opencl::utils;
+
+  const char *cSourceFile = "src/kernel/greyscale.cl";
+  const char *img_path = "data/cold_reflection_by_lildream.jpg";
+  const char *img_path2 = "data/cold_2.png";
 
   ImageData data;
   load_image(img_path, data);

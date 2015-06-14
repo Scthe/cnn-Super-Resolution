@@ -1,40 +1,15 @@
 #include "Config.hpp"
-#include <sstream>
-#include <fstream>
+#include <cstdio>  // snprintf
+#include <ios>     // std::ios_base::failure
 #include <iostream>
-#include <cstring>
-#include <ios>  // std::ios_base::failure
 
 #include "json/gason.h"
+#include "Utils.hpp"
 
 typedef std::ios_base::failure IOException;
 
-// TODO move to utils header
-void getFileContent(const char* const filename, std::stringstream& sstr) {
-  // TODO use to load kernel file too
-  std::fstream file(filename);
-  if (!file.is_open()) {
-    throw IOException("File not found");
-  }
-
-  std::string line;
-  while (file.good()) {
-    getline(file, line);
-    sstr << line;
-  }
-}
-
-#define READ_INT(NODE, OBJECT, PROP_NAME)                          \
-  if (strcmp(NODE->key, #PROP_NAME) == 0 &&                        \
-      NODE->value.getTag() == JSON_NUMBER) {                       \
-    OBJECT.PROP_NAME = (unsigned int)NODE->value.toNumber();       \
-    /*std::cout << "INT: " << NODE->key << " = " << OBJECT.PROP_NAME \
-              << std::endl;*/                                        \
-  }
-
-bool is_odd(size_t x) { return (x & 1) != 0; }
-
 namespace cnn_sr {
+using namespace utils;
 
 Config::Config(const char* const src_file)
     : n1(0), n2(0), f1(0), f2(0), f3(0), source_file(src_file) {}
@@ -58,19 +33,19 @@ Config ConfigReader::read(const char* const file) {
   auto status = jsonParse(source, &endptr, &value, allocator);
   if (status != JSON_OK) {
     char buf[255];
-    sprintf(buf, "Json parsing error: %s in: '%-20s'", jsonStrError(status),
-            endptr);
+    snprintf(buf, 255, "Json parsing error: %s in: '%-20s'",
+             jsonStrError(status), endptr);
     throw IOException(buf);
   }
 
   Config cfg(file);
   if (value.getTag() == JSON_OBJECT) {
     for (auto node : value) {
-      READ_INT(node, cfg, n1)
-      READ_INT(node, cfg, n2)
-      READ_INT(node, cfg, f1)
-      READ_INT(node, cfg, f2)
-      READ_INT(node, cfg, f3)
+      JSON_READ_UINT(node, cfg, n1)
+      JSON_READ_UINT(node, cfg, n2)
+      JSON_READ_UINT(node, cfg, f1)
+      JSON_READ_UINT(node, cfg, f2)
+      JSON_READ_UINT(node, cfg, f3)
     }
   }
 
