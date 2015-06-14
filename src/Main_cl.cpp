@@ -6,8 +6,9 @@
 #include "opencl\Context.hpp"
 #include "opencl\UtilsOpenCL.hpp"
 
+#include "Config.hpp"
+
 // http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html
-// f_ numbers should be odd
 
 #define OUT_CHANNELS 1
 
@@ -17,7 +18,35 @@ const char *img_path2 = "data/cold_2.png";
 
 // http://www.thebigblob.com/gaussian-blur-using-opencl-and-the-built-in-images-textures/
 
+void luma_extract(int argc, char **argv);
+
+void cfg_tests();
+
 int main(int argc, char **argv) {
+  try {
+    // luma_extract(argc, argv);
+    cfg_tests();
+  } catch (const std::exception &e) {
+    std::cout << "[ERROR] " << e.what() << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  std::cout << "DONE" << std::endl;
+  exit(EXIT_SUCCESS);
+}
+
+void cfg_tests() {
+  using namespace cnn_sr;
+  ConfigReader reader;
+  // reader.read("non_exists.json");
+  // reader.read("tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___.json");
+  // reader.read("data\\config_err.json");
+  Config cfg = reader.read("data\\config.json");
+
+  std::cout << cfg << std::endl;
+}
+
+void luma_extract(int argc, char **argv) {
   using namespace opencl::utils;
 
   ImageData data;
@@ -101,5 +130,4 @@ int main(int argc, char **argv) {
 
   std::cout << "write status: " << res << std::endl
             << "--end--" << std::endl;
-  exit(EXIT_SUCCESS);
 }
