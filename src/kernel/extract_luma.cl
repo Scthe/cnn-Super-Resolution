@@ -15,6 +15,6 @@ void main(__read_only image2d_t image,
 		int idx = pos.y * w + pos.x;
 		uint4 pixel_col = read_imageui(image, sampler, pos);
 		float4 pixel_col_f = convert_float4(pixel_col);
-		target[idx] = dot(pixel_col_f, rgb2ycbcr);
+		target[idx] = dot(pixel_col_f, rgb2ycbcr) / 255.0f;
 	}
 }

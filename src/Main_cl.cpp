@@ -45,8 +45,8 @@ int main(int argc, char **argv) {
   context.write_image(gpu_image, data, true);
 
   // TODO change last arg to be pointer to data, now it is unused
-  auto gpu_buf = context.allocate(CL_MEM_WRITE_ONLY,
-                                  sizeof(cl_uchar) * data_total, nullptr);
+  auto gpu_buf =
+      context.allocate(CL_MEM_WRITE_ONLY, sizeof(cl_uchar) * data_total);
   std::cout << "cpu/gpu buffers pair allocated" << std::endl;
   std::cout << "kernel create" << std::endl;
 

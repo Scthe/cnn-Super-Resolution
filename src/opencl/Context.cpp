@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 #include "UtilsOpenCL.hpp"
 
@@ -107,8 +108,7 @@ void Context::check_error(bool check, char  const *msg){
 
 // execution
 
-MemoryHandler* Context::allocate(cl_mem_flags flags,
-                                 size_t size, void * host_ptr){
+MemoryHandler* Context::allocate(cl_mem_flags flags, size_t size){
   check_error(initialized, "Context was not initialized");
   check_error(_allocation_count < MAX_ALLOCATIONS_COUNT,
     "Wrapper hit allocations limit, increase MAX_ALLOCATIONS_COUNT");
@@ -116,7 +116,8 @@ MemoryHandler* Context::allocate(cl_mem_flags flags,
   cl_int ciErr1;
   MemoryHandler* k = _allocations + _allocation_count;
   ++_allocation_count;
-  k->handle = clCreateBuffer(_clcontext, flags, size, host_ptr, &ciErr1);
+  k->handle = clCreateBuffer(_clcontext, flags, size, nullptr, &ciErr1);
+  k->size = size;
   check_error(ciErr1, "Error in clCreateBuffer");
   return k;
 }
@@ -180,6 +181,7 @@ cl_event Context::read_buffer(MemoryHandler* gpu_buffer,
                               cl_event* events_to_wait_for,
                               int events_to_wait_for_count){
   check_error(initialized, "Context was not initialized");
+  check_error(size <= gpu_buffer->size, "Tried to read more then is allocated");
   cl_event finish_token;
   cl_bool clblock = block? CL_TRUE : CL_FALSE;
   cl_mem gpu_memory_pointer = gpu_buffer->handle;
@@ -192,12 +194,20 @@ cl_event Context::read_buffer(MemoryHandler* gpu_buffer,
   return finish_token;
 }
 
-cl_event Context::write_buffer(MemoryHandler* gpu_buffer,
-                              size_t offset, size_t size, void *src,
-                              bool block,
+cl_event Context::read_buffer(MemoryHandler* gpu_buffer, void *dst, bool block,
                               cl_event* events_to_wait_for,
                               int events_to_wait_for_count){
+  return this->read_buffer(gpu_buffer, 0, gpu_buffer->size, dst, block,
+                           events_to_wait_for, events_to_wait_for_count);
+}
+
+cl_event Context::write_buffer(MemoryHandler* gpu_buffer,
+                               size_t offset, size_t size, void *src,
+                               bool block,
+                               cl_event* events_to_wait_for,
+                               int events_to_wait_for_count){
   check_error(initialized, "Context was not initialized");
+  check_error(size <= gpu_buffer->size, "Tried to write more then is allocated");
   cl_event finish_token;
   cl_bool clblock = block? CL_TRUE : CL_FALSE;
   cl_mem gpu_memory_pointer = gpu_buffer->handle;
@@ -208,6 +218,24 @@ cl_event Context::write_buffer(MemoryHandler* gpu_buffer,
     events_to_wait_for_count, events_to_wait_for, &finish_token); // sync events
   check_error(ciErr1, "Error in write buffer");
   return finish_token;
+}
+
+cl_event Context::write_buffer(MemoryHandler* gpu_buffer, void *src, bool block,
+                               cl_event* events_to_wait_for,
+                               int events_to_wait_for_count){
+  return this->write_buffer(gpu_buffer, 0, gpu_buffer->size, src, block,
+                            events_to_wait_for, events_to_wait_for_count);
+}
+
+cl_event Context::zeros_float(MemoryHandler* handler, bool block,
+                              cl_event* es, int event_count){
+  size_t len = handler->size / sizeof(float);
+  std::vector<float> v;
+  v.reserve(len);
+  for (size_t i = 0; i < len; i++) {
+    v.push_back(0.0f);
+  }
+  return this->write_buffer(handler, &v[0], block, es, event_count);
 }
 
 MemoryHandler* Context::create_image(cl_mem_flags flags,
