@@ -4,10 +4,16 @@
 #include <sstream>
 #include <cstring>
 
+union JsonValue;
+class JsonAllocator;
+
 namespace cnn_sr {
 namespace utils {
 
-void getFileContent(const char* const, std::stringstream&);
+void get_file_content(const char* const, std::stringstream&);
+
+void read_json_file(const char* const, JsonValue&, JsonAllocator&,
+                    int root_type);
 
 template <typename T>
 inline bool is_odd(T x) {
@@ -20,6 +26,12 @@ inline bool is_even(T x) {
 }
 }
 }
+
+// it's easier then including header file just for one typedef,
+// since we can't typedef member class
+#define IOException std::ios_base::failure
+
+#define NUM_ELEMS(x) (sizeof(x) / sizeof((x)[0]))
 
 #define JSON_READ_UINT(NODE, OBJECT, PROP_NAME)              \
   if (strcmp(NODE->key, #PROP_NAME) == 0 &&                  \

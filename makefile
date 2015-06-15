@@ -26,6 +26,7 @@ LFLAGS = -std=c++11 \
 	-I$(IDIR)
 
 __OBJ = Config.o \
+	LayerData.o \
 	Utils.o \
 	Context.o \
 	UtilsOpenCL.o \

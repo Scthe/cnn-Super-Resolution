@@ -4,17 +4,21 @@
 #include "opencl\UtilsOpenCL.hpp"
 
 #include "Config.hpp"
+#include "LayerData.hpp"
+#include "Utils.hpp"
 
 // http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html
 // http://www.thebigblob.com/gaussian-blur-using-opencl-and-the-built-in-images-textures/
 
 void luma_extract(int argc, char **argv);
 void cfg_tests();
+void layerData_tests();
 
 int main(int argc, char **argv) {
   try {
     // luma_extract(argc, argv);
     cfg_tests();
+    layerData_tests();
   } catch (const std::exception &e) {
     std::cout << "[ERROR] " << e.what() << std::endl;
     exit(EXIT_FAILURE);
@@ -23,6 +27,10 @@ int main(int argc, char **argv) {
   std::cout << "DONE" << std::endl;
   exit(EXIT_SUCCESS);
 }
+
+///
+///
+///
 
 void cfg_tests() {
   using namespace cnn_sr;
@@ -34,6 +42,39 @@ void cfg_tests() {
 
   std::cout << cfg << std::endl;
 }
+
+///
+///
+///
+
+void layerData_tests() {
+  using namespace cnn_sr;
+  std::vector<LayerData> data;
+  data.push_back(LayerData(1, 3, 3));
+  data.push_back(LayerData(3, 2, 3));
+  data.push_back(LayerData(3, 3, 1));
+  data.push_back(LayerData(3, 1, 3));
+
+
+  // read from file
+  const char *const layer_keys[4] = {"layer_1", "layer_2_data_set_1",
+                                     "layer_2_data_set_2", "layer_3"};
+
+  LayerParametersIO param_reader;
+  std::cout << "reading" << std::endl;
+  param_reader.read("data/layer_data_example.json", data, layer_keys, NUM_ELEMS(layer_keys));
+
+  for (auto a : data) {
+    std::cout << a << std::endl;
+  }
+
+  std::cout << "from_N_distribution" << std::endl;
+  LayerData nn = LayerData::from_N_distribution(1, 3, 3);
+}
+
+///
+///
+///
 
 #define OUT_CHANNELS 1
 

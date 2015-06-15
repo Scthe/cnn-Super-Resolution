@@ -38,55 +38,15 @@
  * clang-format on
  */
 
-
-bool getFileContent(const char* const filename, std::stringstream& sstr) {
-  std::fstream file(filename);
-  if (!file.is_open()) {
-    return false;
-  }
-
-  std::string line;
-  while (file.good()) {
-    getline(file, line);
-    // LOGD << line;
-    sstr << line;
-  }
-  return true;
-}
-
 namespace test {
 namespace data {
 
 bool TestDataProvider::read(char const* const file) {
   std::cout << "Loading test data from: '" << file << "'" << std::endl;
 
-  if (strlen(file) > 230) {
-    std::cout << "test data filepath is too long (max 230 chars)" << std::endl;
-    return false;
-  }
-
-  std::stringstream sstr;
-  bool ok = getFileContent(file, sstr);
-  if (!ok) {
-    std::cout << "file not found" << std::endl;
-    return false;
-  }
-
-  const std::string& tmp = sstr.str();
-  const char* source_ = tmp.c_str();
-  char* source = const_cast<char*>(source_);
-
-  char* endptr;
   JsonValue value;
   JsonAllocator allocator;
-  auto status = jsonParse(source, &endptr, &value, allocator);
-  if (status != JSON_OK) {
-    char buf[255];
-    sprintf(buf, "Json parsing error at %zd, status: %d", endptr - source,
-            (int)status);
-    std::cout << buf << std::endl;
-    return false;
-  }
+  cnn_sr::utils::read_json_file(file, value, allocator, JSON_OBJECT);
 
   bool read_status = true;
   if (value.getTag() == JSON_OBJECT) {
