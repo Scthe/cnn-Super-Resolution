@@ -8,6 +8,17 @@
 
 #include "../src/Utils.hpp"
 
+/*
+ * TODO merge test::data::LayerData with cnn_sr::LayerData, possible problems:
+ * test::data::LayerData requires some additional fields -> inherit from
+ * cnn_sr::LayerData and add them. This will force TestDataProvider rewrite.
+ * Inherit from LayerParametersIO (?) and either use Reader(JsonValue,Config&)
+ * monad-like design or move all JSON_READ_NUM_ARRAY(subnode, obj, weights)
+ * to separate method and override in subclass (still, remember to call super).
+ * Use templates LayerParametersIO<LayerDataType> or do it in some covariant
+ * way by f.e. dynamic_cast<TestLayerData*>(layer_data)
+ */
+
 /* clang-format off */
 /*
  *

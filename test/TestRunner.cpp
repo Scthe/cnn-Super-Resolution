@@ -77,6 +77,8 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
                out_count = out_w * out_h * data->current_filter_count,
                input_size =
                    data->input_w * data->input_h * data->n_prev_filter_cnt;
+  // TODO use system provided in LayerExecutor instead of most of the following
+  // code
   this->assert_true(
       data->input.size() >= input_size,
       "Declared input_w*input_h*n_prev_filter_cnt is bigger then input array");
