@@ -53,7 +53,7 @@ class Kernel {
                    cl_event *events_to_wait_for = nullptr, int event_count = 0);
 
   inline size_t get_max_work_group_size() const { return max_work_group_size; }
-  inline const Context *get_context() const { return context; }
+  inline Context *get_context() const { return context; }
 
  private:
   /**

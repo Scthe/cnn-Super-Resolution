@@ -60,53 +60,33 @@ LayerData LayerData::from_N_distribution(size_t n_prev_filter_cnt,
                    weights_buf.get(), bias_buf.get());
 }
 
-/*
-TODO invoke this on layer execute
-void LayerData::validate_buffer_sizes(std::vector<float>& input,
-                                      size_t input_size,
-                                      std::vector<float>& weights,
-                                      std::vector<float>& bias,
-                                      const LayerData& data) {
-  if (input.size() < input_size) {
-    char buf[255];
-    snprintf(buf, 255,
-             "Declared input_w(%d)*input_h(%d)*n_prev_filter_cnt(%d)=%d "
-             "is bigger then input array (%d elements)."
-             " Expected more elements in input array.",
-             input_w, input_h, data.n_prev_filter_cnt, input_size,
-             input.size());
-    throw std::runtime_error(buf);
-  }
-
+void LayerData::validate(const LayerData& data) {
   size_t weights_size = data.f_spatial_size * data.f_spatial_size *
                         data.n_prev_filter_cnt * data.current_filter_count;
-  if (weights.size() < weights_size) {
+  if (data.weights.size() < weights_size) {
     char buf[255];
     snprintf(buf, 255,
-             "Declared "
-             "f_spatial_size(%d)*f_spatial_size(%d)*n_prev_filter_cnt(%d)*"
-             "current_filter_count(%d)=%d"
+             "Declared f_spatial_size(%d)*f_spatial_size(%d)"
+             "*n_prev_filter_cnt(%d)*current_filter_count(%d)=%d"
              " is bigger then weights array (%d elements)."
-             " Expected more elements in weights array.",
+             " Expected more elements in weights array",
              data.f_spatial_size, data.f_spatial_size, data.n_prev_filter_cnt,
-             data.current_filter_count, weights_size, weights.size());
+             data.current_filter_count, weights_size, data.weights.size());
     throw std::runtime_error(buf);
   }
 
-  if (bias.size() < data.current_filter_count) {
+  if (data.bias.size() < data.current_filter_count) {
     char buf[255];
     snprintf(buf, 255,
              "Bias array(size=%d) should have equal size to "
              "current_filter_count(%d)",
-             bias.size(), current_filter_count);
+             data.bias.size(), data.current_filter_count);
     throw std::runtime_error(buf);
   }
 }
-*/
 
 void LayerParametersIO::read(const char* const file,
                              std::vector<LayerData>& data,
-                             //  const char* (&layer_keys)[]) {
                              const char* const* layer_keys,
                              size_t layer_key_count) {
   std::cout << "Loading layer parameters from: '" << file << "'" << std::endl;

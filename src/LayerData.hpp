@@ -40,6 +40,8 @@ struct LayerData {
                                        float mean_w = 0.0f, float sd_w = 0.001f,
                                        float mean_b = 0.0f, float sd_b = 0.0f);
 
+  static void validate(const LayerData&);
+
   inline void get_output_dimensions(size_t* dim_arr, size_t input_w,
                                     size_t input_h) const {
     dim_arr[0] = input_w - f_spatial_size + 1;

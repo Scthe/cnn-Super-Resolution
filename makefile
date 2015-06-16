@@ -27,6 +27,7 @@ LFLAGS = -std=c++11 \
 
 __OBJ = Config.o \
 	LayerData.o \
+	LayerExecutor.o \
 	Utils.o \
 	Context.o \
 	UtilsOpenCL.o \

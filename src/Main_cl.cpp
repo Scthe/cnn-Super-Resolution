@@ -1,10 +1,12 @@
 #include <iostream>
 
 #include "opencl\Context.hpp"
+#include "opencl\Kernel.hpp"
 #include "opencl\UtilsOpenCL.hpp"
 
 #include "Config.hpp"
 #include "LayerData.hpp"
+#include "LayerExecutor.hpp"
 #include "Utils.hpp"
 
 // http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html
@@ -13,12 +15,14 @@
 void luma_extract(int argc, char **argv);
 void cfg_tests();
 void layerData_tests();
+void LayerExecutor_tests();
 
 int main(int argc, char **argv) {
   try {
     // luma_extract(argc, argv);
-    cfg_tests();
-    layerData_tests();
+    // cfg_tests();
+    // layerData_tests();
+    LayerExecutor_tests();
   } catch (const std::exception &e) {
     std::cout << "[ERROR] " << e.what() << std::endl;
     exit(EXIT_FAILURE);
@@ -55,14 +59,14 @@ void layerData_tests() {
   data.push_back(LayerData(3, 3, 1));
   data.push_back(LayerData(3, 1, 3));
 
-
   // read from file
   const char *const layer_keys[4] = {"layer_1", "layer_2_data_set_1",
                                      "layer_2_data_set_2", "layer_3"};
 
   LayerParametersIO param_reader;
   std::cout << "reading" << std::endl;
-  param_reader.read("data/layer_data_example.json", data, layer_keys, NUM_ELEMS(layer_keys));
+  param_reader.read("data/layer_data_example.json", data, layer_keys,
+                    NUM_ELEMS(layer_keys));
 
   for (auto a : data) {
     std::cout << a << std::endl;
@@ -70,6 +74,26 @@ void layerData_tests() {
 
   std::cout << "from_N_distribution" << std::endl;
   LayerData nn = LayerData::from_N_distribution(1, 3, 3);
+}
+
+///
+///
+///
+
+void LayerExecutor_tests() {
+  using namespace cnn_sr;
+  opencl::Kernel kernel;
+
+  LayerExecutor exec;
+  /*
+  size_t gws[2];
+  size_t lws[2];
+  exec.work_sizes(kernel, gws, lws, 16523, 5);
+  std::cout << "global: " << gws[0] << ", " << gws[1] << std::endl;
+  std::cout << "local: " << lws[0] << ", " << lws[1] << std::endl;
+  std::cout << "(global should be closes power2)" << std::endl;
+  std::cout << "(local[0]*local[1] should be < CONST)" << std::endl;
+  */
 }
 
 ///
