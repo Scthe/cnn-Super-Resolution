@@ -6,6 +6,8 @@
 
 #include "../src/opencl/Context.hpp"
 #include "../src/opencl/UtilsOpenCL.hpp"
+#include "../src/LayerData.hpp"
+#include "../src/LayerExecutor.hpp"
 #include "TestRunner.hpp"
 #include "TestDataProvider.hpp"
 
@@ -72,35 +74,11 @@ END_TEST
 /// LayerTest
 ///
 DEFINE_TEST(LayerTest, data->name.c_str(), context) {
-  const size_t out_w = data->input_w - data->f_spatial_size + 1,
-               out_h = data->input_h - data->f_spatial_size + 1,
-               out_count = out_w * out_h * data->current_filter_count,
-               input_size =
-                   data->input_w * data->input_h * data->n_prev_filter_cnt;
-  this->assert_true(
-      data->input.size() >= input_size,
-      "Declared input_w*input_h*n_prev_filter_cnt is bigger then input array");
-  std::cout << "out size:" << out_w << "x" << out_h << std::endl;
-
-  if (data->preproces_mean) {
-    float input_mean = mean(&data->input[0], data->input_w * data->input_h);
-    for (size_t i = 0; i < data->input_w * data->input_h; i++) {
-      data->input[i] -= input_mean;
-    }
-  }
-
-  // buffers: in_source, W, B , out_target
-  /* clang-format off */
-  auto gpu_buf_in = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * input_size);
-  _context->write_buffer(gpu_buf_in, (void *)&data->input[0], true);
-  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data->weights.size());
-  _context->write_buffer(gpu_buf_W, (void *)&data->weights[0], true);
-  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, sizeof(cl_float) * data->bias.size());
-  _context->write_buffer(gpu_buf_B, (void *)&data->bias[0], true);
-
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * out_count);
-  _context->zeros_float(gpu_buf_out, true);
-  /* clang-format on */
+  // convert layer test definition to cnn_sr::LayerData object
+  // TODO remove layer test definition as is and merge with cnn_sr::LayerData
+  cnn_sr::LayerData layer_data(data->n_prev_filter_cnt,
+                               data->current_filter_count, data->f_spatial_size,
+                               &data->weights[0], &data->bias[0]);
 
   // create kernel
   std::stringstream kernel_compile_opts;
@@ -117,20 +95,23 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   auto kernel = _context->create_kernel("src/kernel/layer_uber_kernel.cl",
                                         kernel_compile_opts.str().c_str());
 
-  // args
-  kernel->push_arg(gpu_buf_in);
-  kernel->push_arg(gpu_buf_out);
-  kernel->push_arg(gpu_buf_W);
-  kernel->push_arg(gpu_buf_B);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data->n_prev_filter_cnt);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data->f_spatial_size);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data->input_w);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data->input_h);
+  // pre run fixes
+  if (data->preproces_mean) {
+    float input_mean = mean(&data->input[0], data->input_w * data->input_h);
+    for (size_t i = 0; i < data->input_w * data->input_h; i++) {
+      data->input[i] -= input_mean;
+    }
+  }
 
   // run
-  size_t global_work_size[2] = {16, 16};
-  size_t local_work_size[2] = {8, 8};
-  cl_event finish_token = kernel->execute(2, global_work_size, local_work_size);
+  opencl::MemoryHandler *gpu_buf_out;
+  cnn_sr::LayerExecutor exec;
+  cl_event finish_token = exec(*kernel, layer_data, data->input, gpu_buf_out,
+                               data->input_w, data->input_h);
+
+  const size_t out_w = data->input_w - data->f_spatial_size + 1,
+               out_h = data->input_h - data->f_spatial_size + 1,
+               out_count = out_w * out_h * data->current_filter_count;
 
   // read results
   std::unique_ptr<float[]> cpu_buf(new float[out_count]);
@@ -161,7 +142,7 @@ END_TEST
 DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
   const size_t test_data_len = 10000;  // pixel count
   const size_t global_work_size[1] = {16384};
-  const size_t local_work_size[1] = {512}; // local work size - need to set the size of scrap buffer
+  const size_t local_work_size[1] = {512};  // (also the size of scrap buffer)
 
   unsigned seed1 = std::chrono::system_clock::now().time_since_epoch().count();
   std::mt19937 generator(seed1);
@@ -202,7 +183,8 @@ DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
   unsigned __int64 read_val;
   _context->read_buffer(gpu_buf_out, 0, sizeof(cl_ulong), (void *)&read_val,
                         true, &finish_token, 1);
-  // std::cout << "expected: " << expected << "\tgot: " << read_val << std::endl;
+  // std::cout << "expected: " << expected << "\tgot: " << read_val <<
+  // std::endl;
   assert_equals(expected, read_val);
 
   return true;

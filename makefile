@@ -25,10 +25,19 @@ LFLAGS = -std=c++11 \
 	-l "stdc++" \
 	-I$(IDIR)
 
-_OBJ = Main_cl.o Context.o UtilsOpenCL.o Kernel.o gason.o TestDataProvider.o
+__OBJ = Config.o \
+	LayerData.o \
+	LayerExecutor.o \
+	Utils.o \
+	Context.o \
+	UtilsOpenCL.o \
+	Kernel.o \
+	gason.o
+
+_OBJ = Main_cl.o $(__OBJ)
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ)) # append ODIR to each entry
 
-_TEST_OBJ = TestRunner.o Context.o UtilsOpenCL.o Kernel.o gason.o TestDataProvider.o
+_TEST_OBJ = TestRunner.o $(__OBJ) TestDataProvider.o
 TEST_OBJ = $(patsubst %,$(ODIR)/%,$(_TEST_OBJ))
 
 

@@ -4,6 +4,21 @@
 #include <iostream>
 #include <cstring>
 
+#include "json/gason.h"
+
+#include "../src/Utils.hpp"
+
+/*
+ * TODO merge test::data::LayerData with cnn_sr::LayerData, possible problems:
+ * test::data::LayerData requires some additional fields -> inherit from
+ * cnn_sr::LayerData and add them. This will force TestDataProvider rewrite.
+ * Inherit from LayerParametersIO (?) and either use Reader(JsonValue,Config&)
+ * monad-like design or move all JSON_READ_NUM_ARRAY(subnode, obj, weights)
+ * to separate method and override in subclass (still, remember to call super).
+ * Use templates LayerParametersIO<LayerDataType> or do it in some covariant
+ * way by f.e. dynamic_cast<TestLayerData*>(layer_data)
+ */
+
 /* clang-format off */
 /*
  *
@@ -34,56 +49,15 @@
  * clang-format on
  */
 
-
-bool getFileContent(const char* const filename, std::stringstream& sstr) {
-  // TODO use to load kernel file too
-  std::fstream file(filename);
-  if (!file.is_open()) {
-    return false;
-  }
-
-  std::string line;
-  while (file.good()) {
-    getline(file, line);
-    // LOGD << line;
-    sstr << line;
-  }
-  return true;
-}
-
 namespace test {
 namespace data {
 
 bool TestDataProvider::read(char const* const file) {
   std::cout << "Loading test data from: '" << file << "'" << std::endl;
 
-  if (strlen(file) > 230) {
-    std::cout << "test data filepath is too long (max 230 chars)" << std::endl;
-    return false;
-  }
-
-  std::stringstream sstr;
-  bool ok = getFileContent(file, sstr);
-  if (!ok) {
-    std::cout << "file not found" << std::endl;
-    return false;
-  }
-
-  const std::string& tmp = sstr.str();
-  const char* source_ = tmp.c_str();
-  char* source = const_cast<char*>(source_);
-
-  char* endptr;
   JsonValue value;
   JsonAllocator allocator;
-  auto status = jsonParse(source, &endptr, &value, allocator);
-  if (status != JSON_OK) {
-    char buf[255];
-    sprintf(buf, "Json parsing error at %zd, status: %d", endptr - source,
-            (int)status);
-    std::cout << buf << std::endl;
-    return false;
-  }
+  cnn_sr::utils::read_json_file(file, value, allocator, JSON_OBJECT);
 
   bool read_status = true;
   if (value.getTag() == JSON_OBJECT) {
@@ -107,88 +81,24 @@ bool TestDataProvider::read(char const* const file) {
   return read_status;
 }
 
-
-#define READ_INT(PROP_NAME)                                                    \
-  if (strcmp(node->key, #PROP_NAME) == 0 &&                                    \
-      node->value.getTag() == JSON_NUMBER) {                                   \
-    data.PROP_NAME = (unsigned int)node->value.toNumber();                     \
-    std::cout << "INT: " << node->key << " = " << data.PROP_NAME << std::endl; \
-    read_##PROP_NAME = true;                                                   \
-  }
-
-#define READ_ARRAY(PROP_NAME)                          \
-  if (strcmp(node->key, #PROP_NAME) == 0 &&            \
-      node->value.getTag() == JSON_ARRAY) {            \
-    auto arr_raw = node->value;                        \
-    std::cout << "ARRAY: " << node->key << std::endl;  \
-    for (auto val : arr_raw) {                         \
-      /* ASSERT(val->value.getTag() == JSON_NUMBER);*/ \
-      double num = val->value.toNumber();              \
-      data.PROP_NAME.push_back(num);                   \
-    }                                                  \
-    read_##PROP_NAME = true;                           \
-  }
-
-#define READ_STR(PROP_NAME)                                                    \
-  if (strcmp(node->key, #PROP_NAME) == 0 &&                                    \
-      node->value.getTag() == JSON_STRING) {                                   \
-    data.PROP_NAME = node->value.toString();                                   \
-    std::cout << "STR: " << node->key << " = '" << data.PROP_NAME << "'" << std::endl; \
-    read_##PROP_NAME = true;                                                   \
-  }
-
 bool TestDataProvider::read_layer_data(const JsonValue& object,
                                        LayerData& data) {
   // ASSERT(object.getTag() == JSON_TAG_OBJECT);
 
-  /* clang-format off */
-  bool read_name = false,
-       read_n_prev_filter_cnt = false,
-       read_current_filter_count = false,
-       read_f_spatial_size = false,
-       read_input_w = false, read_input_h = false,
-       // vectors:
-       read_input = false,
-       read_output = false,
-       read_weights = false,
-       read_bias = false;
-   bool read_result_multiply = true; // optional
-   bool read_preproces_mean = true; // optional
-  /* clang-format on */
-
   for (auto node : object) {
-    // std::cout << i->key << std::endl;
-    READ_STR(name)
-    READ_INT(n_prev_filter_cnt)
-    READ_INT(f_spatial_size)
-    READ_INT(current_filter_count)
-    READ_INT(input_w)
-    READ_INT(input_h)
-    READ_ARRAY(input)
-    READ_ARRAY(output)
-    READ_ARRAY(weights)
-    READ_ARRAY(bias)
-    READ_INT(result_multiply)
-    READ_INT(preproces_mean)
+    JSON_READ_STR (node, data, name)
+    JSON_READ_UINT(node, data, n_prev_filter_cnt)
+    JSON_READ_UINT(node, data, f_spatial_size)
+    JSON_READ_UINT(node, data, current_filter_count)
+    JSON_READ_UINT(node, data, input_w)
+    JSON_READ_UINT(node, data, input_h)
+    JSON_READ_NUM_ARRAY(node, data, input)
+    JSON_READ_NUM_ARRAY(node, data, output)
+    JSON_READ_NUM_ARRAY(node, data, weights)
+    JSON_READ_NUM_ARRAY(node, data, bias)
+    JSON_READ_UINT(node, data, result_multiply)
+    JSON_READ_UINT(node, data, preproces_mean)
   }
-
-#define ASSERT_READ(PROP_NAME)                                            \
-  if (!read_##PROP_NAME) {                                                \
-    std::cout << "Expected to read: '" << #PROP_NAME << "'" << std::endl; \
-    return false;                                                         \
-  }
-
-  ASSERT_READ(n_prev_filter_cnt);
-  ASSERT_READ(current_filter_count);
-  ASSERT_READ(f_spatial_size);
-  ASSERT_READ(input_w);
-  ASSERT_READ(input_h);
-  ASSERT_READ(input);
-  ASSERT_READ(output);
-  ASSERT_READ(weights);
-  ASSERT_READ(bias);
-
-#undef ASSERT_READ
 
   return true;
 }

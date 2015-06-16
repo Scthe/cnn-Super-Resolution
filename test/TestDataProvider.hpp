@@ -1,9 +1,10 @@
 #ifndef __TEST_DATA_PROVIDER_H
 #define __TEST_DATA_PROVIDER_H
 
-#include "json/gason.h"
 #include <vector>
 #include <string>
+
+union JsonValue;
 
 namespace test {
 namespace data {

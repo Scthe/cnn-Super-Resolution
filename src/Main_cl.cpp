@@ -1,24 +1,113 @@
 #include <iostream>
-#include <time.h>
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>  // TODO remove ?
 
 #include "opencl\Context.hpp"
+#include "opencl\Kernel.hpp"
 #include "opencl\UtilsOpenCL.hpp"
 
+#include "Config.hpp"
+#include "LayerData.hpp"
+#include "LayerExecutor.hpp"
+#include "Utils.hpp"
+
 // http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html
-// f_ numbers should be odd
+// http://www.thebigblob.com/gaussian-blur-using-opencl-and-the-built-in-images-textures/
+
+void luma_extract(int argc, char **argv);
+void cfg_tests();
+void layerData_tests();
+void LayerExecutor_tests();
+
+int main(int argc, char **argv) {
+  try {
+    // luma_extract(argc, argv);
+    // cfg_tests();
+    // layerData_tests();
+    LayerExecutor_tests();
+  } catch (const std::exception &e) {
+    std::cout << "[ERROR] " << e.what() << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  std::cout << "DONE" << std::endl;
+  exit(EXIT_SUCCESS);
+}
+
+///
+///
+///
+
+void cfg_tests() {
+  using namespace cnn_sr;
+  ConfigReader reader;
+  // reader.read("non_exists.json");
+  // reader.read("tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___.json");
+  // reader.read("data\\config_err.json");
+  Config cfg = reader.read("data\\config.json");
+
+  std::cout << cfg << std::endl;
+}
+
+///
+///
+///
+
+void layerData_tests() {
+  using namespace cnn_sr;
+  std::vector<LayerData> data;
+  data.push_back(LayerData(1, 3, 3));
+  data.push_back(LayerData(3, 2, 3));
+  data.push_back(LayerData(3, 3, 1));
+  data.push_back(LayerData(3, 1, 3));
+
+  // read from file
+  const char *const layer_keys[4] = {"layer_1", "layer_2_data_set_1",
+                                     "layer_2_data_set_2", "layer_3"};
+
+  LayerParametersIO param_reader;
+  std::cout << "reading" << std::endl;
+  param_reader.read("data/layer_data_example.json", data, layer_keys,
+                    NUM_ELEMS(layer_keys));
+
+  for (auto a : data) {
+    std::cout << a << std::endl;
+  }
+
+  std::cout << "from_N_distribution" << std::endl;
+  LayerData nn = LayerData::from_N_distribution(1, 3, 3);
+}
+
+///
+///
+///
+
+void LayerExecutor_tests() {
+  using namespace cnn_sr;
+  opencl::Kernel kernel;
+
+  LayerExecutor exec;
+  /*
+  size_t gws[2];
+  size_t lws[2];
+  exec.work_sizes(kernel, gws, lws, 16523, 5);
+  std::cout << "global: " << gws[0] << ", " << gws[1] << std::endl;
+  std::cout << "local: " << lws[0] << ", " << lws[1] << std::endl;
+  std::cout << "(global should be closes power2)" << std::endl;
+  std::cout << "(local[0]*local[1] should be < CONST)" << std::endl;
+  */
+}
+
+///
+///
+///
 
 #define OUT_CHANNELS 1
 
-const char *cSourceFile = "src/kernel/greyscale.cl";
-const char *img_path = "data/cold_reflection_by_lildream.jpg";
-const char *img_path2 = "data/cold_2.png";
-
-// http://www.thebigblob.com/gaussian-blur-using-opencl-and-the-built-in-images-textures/
-
-int main(int argc, char **argv) {
+void luma_extract(int argc, char **argv) {
   using namespace opencl::utils;
+
+  const char *cSourceFile = "src/kernel/greyscale.cl";
+  const char *img_path = "data/cold_reflection_by_lildream.jpg";
+  const char *img_path2 = "data/cold_2.png";
 
   ImageData data;
   load_image(img_path, data);
@@ -101,5 +190,4 @@ int main(int argc, char **argv) {
 
   std::cout << "write status: " << res << std::endl
             << "--end--" << std::endl;
-  exit(EXIT_SUCCESS);
 }
