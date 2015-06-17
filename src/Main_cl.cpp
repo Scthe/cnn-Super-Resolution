@@ -9,20 +9,80 @@
 #include "LayerExecutor.hpp"
 #include "Utils.hpp"
 
-// http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html
-// http://www.thebigblob.com/gaussian-blur-using-opencl-and-the-built-in-images-textures/
+/*
+ * http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html
+ * http://www.thebigblob.com/gaussian-blur-using-opencl-and-the-built-in-images-textures/
+ *
+ * 1. load small.jpg, large.jpg
+ * 2. create upscaled from small
+ * 3. Extract luma from (2) and large
+ * 4. go with the pipeline for (3)
+ * 5. cmp. results with mean
+ * 6. BACKPROPAGATE
+ *
+ * Later:
+ * only patches from images
+ *
+ */
 
-void luma_extract(int argc, char **argv);
-void cfg_tests();
-void layerData_tests();
-void LayerExecutor_tests();
+cl_event extract_luma(opencl::Kernel &, opencl::utils::ImageData &,
+                      opencl::MemoryHandler *&, cl_event *ev = nullptr);
 
+///
+///
+///
 int main(int argc, char **argv) {
+  const char *const luma_kernel_file = "src/kernel/extract_luma.cl";
+  const char *const layer_kernel_file = "src/kernel/layer_uber_kernel.cl";
+  const char *const sum_sq_kernel_file = "src/kernel/sum_squared.cl";
+
+  const char *const cfg_file = "data\\config.json";
+  const char *const img_small_file = "data\\small.jpg";
+  const char *const img_large_file = "data\\large.jpg";
+
   try {
-    // luma_extract(argc, argv);
-    // cfg_tests();
-    // layerData_tests();
-    LayerExecutor_tests();
+    using namespace cnn_sr;
+
+    opencl::Context context(argc, argv);
+    context.init();
+
+    // load kernels
+    auto luma_kernel = context.create_kernel(luma_kernel_file);
+    auto layer_kernel = context.create_kernel(layer_kernel_file);
+    auto sum_sq_kernel = context.create_kernel(sum_sq_kernel_file);
+
+    // read config
+    ConfigReader reader;
+    Config cfg = reader.read(cfg_file);
+    std::cout << cfg << std::endl;
+
+    // load images
+    opencl::utils::ImageData img_large;
+    opencl::utils::load_image(img_large_file, img_large);
+    std::cout << "img_large: " << img_large.w << "x" << img_large.h << "x"
+              << img_large.bpp << std::endl;
+    opencl::utils::ImageData img_small;
+    opencl::utils::load_image(img_small_file, img_small);
+    std::cout << "img_small: " << img_small.w << "x" << img_small.h << "x"
+              << img_small.bpp << std::endl;
+
+    // read/init layer data
+    LayerData layer_1 = LayerData::from_N_distribution(1, cfg.n1, cfg.f1);
+    LayerData layer_2 = LayerData::from_N_distribution(cfg.n1, cfg.n2, cfg.f2);
+    LayerData layer_3 = LayerData::from_N_distribution(cfg.n2, 1, cfg.f3);
+
+    // TODO naive upscale for small image
+
+    // extract luma from small image
+    // (small to process, large to mean square error)
+    opencl::MemoryHandler *luma_result_buf_small, *luma_result_buf_large;
+    auto finish_token = extract_luma(*luma_kernel, img_small, luma_result_buf_small);
+    finish_token = extract_luma(*luma_kernel, img_large, luma_result_buf_large, &finish_token);
+
+    // process with layers
+    // LayerExecutor layer_executor;
+    // layer_executor
+
   } catch (const std::exception &e) {
     std::cout << "[ERROR] " << e.what() << std::endl;
     exit(EXIT_FAILURE);
@@ -31,6 +91,44 @@ int main(int argc, char **argv) {
   std::cout << "DONE" << std::endl;
   exit(EXIT_SUCCESS);
 }
+
+///
+///
+///
+cl_event extract_luma(opencl::Kernel &kernel,
+                      opencl::utils::ImageData &img_data,
+                      opencl::MemoryHandler *&gpu_buf_out, cl_event *ev) {
+  opencl::Context *const context = kernel.get_context();
+  size_t out_pixel_count = img_data.w * img_data.h;
+
+  size_t global_work_size[2];
+  size_t local_work_size[2];
+  opencl::utils::work_sizes(kernel, global_work_size, local_work_size,
+                            img_data.w, img_data.h);
+  std::cout << "global work size: " << global_work_size[0] << ", "
+            << global_work_size[1] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << ", "
+            << local_work_size[1] << std::endl;
+
+  // memory allocation
+  auto gpu_image = context->create_image(CL_MEM_READ_WRITE, CL_RGBA, CL_UNSIGNED_INT8, img_data.w, img_data.h);
+  context->write_image(gpu_image, img_data, true);
+  gpu_buf_out = context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_uchar) * out_pixel_count);
+  // std::cout << "cpu/gpu buffers pair allocated" << std::endl;
+
+  // std::cout << "push args" << std::endl;
+  // kernel args
+  kernel.push_arg(gpu_image);
+  kernel.push_arg(gpu_buf_out);
+  kernel.push_arg(sizeof(cl_uint), (void *)&img_data.w);
+  kernel.push_arg(sizeof(cl_uint), (void *)&img_data.h);
+
+  // Launch kernel
+  // std::cout << "execute" << std::endl;
+  return kernel.execute(2, global_work_size, local_work_size, ev, 1);
+}
+
+// TODO remove all code below - it is just as code sample now
 
 ///
 ///
@@ -84,7 +182,7 @@ void LayerExecutor_tests() {
   using namespace cnn_sr;
   opencl::Kernel kernel;
 
-  LayerExecutor exec;
+  // LayerExecutor exec;
   /*
   size_t gws[2];
   size_t lws[2];
@@ -126,14 +224,10 @@ void luma_extract(int argc, char **argv) {
   size_t pixel_total = data.w * data.h,  //
       data_total = pixel_total * OUT_CHANNELS;
 
-  cl_image_format pixel_format;
-  pixel_format.image_channel_order = CL_RGBA;
-  pixel_format.image_channel_data_type = CL_UNSIGNED_INT8;
-  auto gpu_image = context.create_image(CL_MEM_READ_WRITE,  //
-                                        data.w, data.h, &pixel_format);
+  auto gpu_image = context.create_image(CL_MEM_READ_WRITE, CL_RGBA,
+                                        CL_UNSIGNED_INT8, data.w, data.h);
   context.write_image(gpu_image, data, true);
 
-  // TODO change last arg to be pointer to data, now it is unused
   auto gpu_buf =
       context.allocate(CL_MEM_WRITE_ONLY, sizeof(cl_uchar) * data_total);
   std::cout << "cpu/gpu buffers pair allocated" << std::endl;

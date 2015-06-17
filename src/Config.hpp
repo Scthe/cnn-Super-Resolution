@@ -24,7 +24,7 @@ class ConfigReader {
   Config read(const char* const);
 
  private:
-  bool validate(const Config&);
+  void validate(const Config&);
 };
 }
 

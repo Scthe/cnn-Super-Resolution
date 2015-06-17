@@ -57,7 +57,8 @@ bool TestDataProvider::read(char const* const file) {
 
   JsonValue value;
   JsonAllocator allocator;
-  cnn_sr::utils::read_json_file(file, value, allocator, JSON_OBJECT);
+  std::string source;
+  cnn_sr::utils::read_json_file(file, value, allocator,source, JSON_OBJECT);
 
   bool read_status = true;
   if (value.getTag() == JSON_OBJECT) {

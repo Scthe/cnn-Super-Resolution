@@ -239,17 +239,22 @@ cl_event Context::zeros_float(MemoryHandler* handler, bool block,
 }
 
 MemoryHandler* Context::create_image(cl_mem_flags flags,
-                                     size_t w, size_t h,
-                                     const cl_image_format *image_format){
+                                     cl_channel_order image_channel_order,
+                                     cl_channel_type image_channel_data_type,
+                                     size_t w, size_t h){
   check_error(initialized, "Context was not initialized");
   check_error(_allocation_count < MAX_ALLOCATIONS_COUNT,
     "Wrapper hit allocations limit, increase MAX_ALLOCATIONS_COUNT");
+
+  cl_image_format image_format;
+  image_format.image_channel_order = image_channel_order;
+  image_format.image_channel_data_type = image_channel_data_type;
 
   cl_int ciErr1;
   MemoryHandler* k = _allocations + _allocation_count;
   ++_allocation_count;
   k->handle = clCreateImage2D(_clcontext, flags,
-                              image_format, w, h,
+                              &image_format, w, h,
                               0, nullptr, &ciErr1);
   check_error(ciErr1, "Error in clCreateImage2D");
   return k;

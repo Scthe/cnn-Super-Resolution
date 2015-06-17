@@ -27,11 +27,8 @@ DEFINE_TEST_STR(ExtractLumaTest, "Extract luma test", context) {
       "Vector of 1st layer's input values should be at least as big as test"
       " image");
 
-  cl_image_format pixel_format;
-  pixel_format.image_channel_order = CL_RGBA;
-  pixel_format.image_channel_data_type = CL_UNSIGNED_INT8;
-  auto gpu_image = _context->create_image(CL_MEM_READ_WRITE,  //
-                                          data.w, data.h, &pixel_format);
+  auto gpu_image = _context->create_image(CL_MEM_READ_WRITE, CL_RGBA,
+                                          CL_UNSIGNED_INT8, data.w, data.h);
   _context->write_image(gpu_image, data, true);
 
   size_t data_total = sizeof(cl_float) * data.w * data.h;

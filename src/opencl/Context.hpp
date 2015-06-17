@@ -171,7 +171,9 @@ public:
    * @param  image_format
    * @return              handler used by context
    */
-  MemoryHandler* create_image(cl_mem_flags, size_t, size_t, const cl_image_format*);
+  MemoryHandler* create_image(cl_mem_flags, cl_channel_order, cl_channel_type,
+                              size_t, size_t);
+
 
   /**
    * Write image data to buffer

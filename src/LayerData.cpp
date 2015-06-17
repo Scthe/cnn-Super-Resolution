@@ -101,7 +101,8 @@ void LayerParametersIO::read(const char* const file,
 
   JsonValue value;
   JsonAllocator allocator;
-  utils::read_json_file(file, value, allocator, JSON_OBJECT);
+  std::string source;
+  utils::read_json_file(file, value, allocator, source, JSON_OBJECT);
 
   LayerData* obj_ptr = &data[0];
   for (auto node : value) {

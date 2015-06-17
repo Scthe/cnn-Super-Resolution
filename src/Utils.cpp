@@ -24,15 +24,16 @@ void get_file_content(const char* const filename, std::stringstream& sstr) {
 }
 
 void read_json_file(const char* const file, JsonValue& value,
-                    JsonAllocator& allocator, int root_type) {
+                    JsonAllocator& allocator, std::string& file_content,
+                    int root_type) {
   if (strlen(file) > 250) {
     throw IOException("Filepath is too long");
   }
 
   std::stringstream sstr;
   get_file_content(file, sstr);
-  const std::string& tmp = sstr.str();
-  char* source = const_cast<char*>(tmp.c_str());
+  file_content = sstr.str();
+  char* source = const_cast<char*>(file_content.c_str());
 
   char* endptr;
   auto status = jsonParse(source, &endptr, &value, allocator);

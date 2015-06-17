@@ -3,6 +3,7 @@
 
 #include <sstream>
 #include <cstring>
+#include <string>
 
 union JsonValue;
 class JsonAllocator;
@@ -13,7 +14,7 @@ namespace utils {
 void get_file_content(const char* const, std::stringstream&);
 
 void read_json_file(const char* const, JsonValue&, JsonAllocator&,
-                    int root_type);
+                    std::string& file_content, int root_type);
 
 template <typename T>
 inline bool is_odd(T x) {
