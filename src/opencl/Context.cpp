@@ -108,6 +108,14 @@ void Context::check_error(bool check, char  const *msg){
 
 // execution
 
+void Context::block(){
+  cl_int ciErr1;
+  ciErr1 = clFlush(_clcommand_queue);
+  check_error(ciErr1, "Error during command queue flush during Context::block()");
+  ciErr1 = clFinish(_clcommand_queue);
+  check_error(ciErr1, "Error during clFinish during Context::block()");
+}
+
 MemoryHandler* Context::allocate(cl_mem_flags flags, size_t size){
   check_error(initialized, "Context was not initialized");
   check_error(_allocation_count < MAX_ALLOCATIONS_COUNT,
@@ -127,7 +135,8 @@ Kernel* Context::create_kernel(char const *file_path,
   check_error(initialized, "Context was not initialized");
   check_error(_kernel_count < MAX_KERNEL_COUNT,
     "Wrapper hit kernel limit, increase MAX_KERNEL_COUNT");
-  std::cout << "Reading kernel function from '" << file_path << "'" << std::endl;
+  std::cout << "Reading kernel function from '" << file_path << "' with args: '"
+            << (cmp_opt ? cmp_opt : "") << "'" << std::endl;
   cl_int ciErr1;
 
   Kernel* k = _kernels + _kernel_count;

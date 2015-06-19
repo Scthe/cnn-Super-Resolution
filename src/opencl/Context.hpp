@@ -72,6 +72,8 @@ public:
   // execution
   //
 
+  void block();
+
   /**
    * Allocate memory on opencl device
    * https://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clCreateBuffer.html

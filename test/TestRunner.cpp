@@ -34,7 +34,10 @@ DEFINE_TEST_STR(ExtractLumaTest, "Extract luma test", context) {
   size_t data_total = sizeof(cl_float) * data.w * data.h;
   auto gpu_buf = _context->allocate(CL_MEM_WRITE_ONLY, data_total);
 
-  auto kernel = _context->create_kernel("src/kernel/extract_luma.cl");
+  const char *kernel_args = normalize ? "-D NORMALIZE" : "";
+  auto *kernel =
+      _context->create_kernel("src/kernel/extract_luma.cl", kernel_args);
+
   kernel->push_arg(gpu_image);
   kernel->push_arg(gpu_buf);
   kernel->push_arg(sizeof(cl_uint), (void *)&data.w);
@@ -52,18 +55,22 @@ DEFINE_TEST_STR(ExtractLumaTest, "Extract luma test", context) {
   for (int i = 0; i < data.w * data.h; i++) {
     // std::cout << (i + 1) << ": " << cpu_buf[i] << "\t" << layer_1_input[i]
     // << std::endl;
-    assert_equals((*layer_1_input)[i], cpu_buf[i]);
+    float expected = (*layer_1_input)[i];
+    if (!normalize) expected *= 255;
+    assert_equals(expected, cpu_buf[i]);
   }
 
   return true;
 }
 
-void init(const std::vector<float> *layer_1_input) {
+void init(bool normalize, const std::vector<float> *layer_1_input) {
   this->layer_1_input = layer_1_input;
+  this->normalize = normalize;
 }
 
 private:
 const std::vector<float> *layer_1_input = nullptr;
+bool normalize;
 
 END_TEST
 
@@ -76,21 +83,6 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   cnn_sr::LayerData layer_data(data->n_prev_filter_cnt,
                                data->current_filter_count, data->f_spatial_size,
                                &data->weights[0], &data->bias[0]);
-
-  // create kernel
-  std::stringstream kernel_compile_opts;
-  if (data->result_multiply) {
-    kernel_compile_opts << "-D RESULT_MULTIPLY=" << data->result_multiply;
-    std::cout << "RESULT_MULTIPLY=" << data->result_multiply << " (last layer)"
-              << std::endl;
-  } else {
-    kernel_compile_opts << "-D CURRENT_FILTER_COUNT="
-                        << data->current_filter_count;
-    std::cout << "CURRENT_FILTER_COUNT=" << data->current_filter_count
-              << " (layers 1,2)" << std::endl;
-  }
-  auto kernel = _context->create_kernel("src/kernel/layer_uber_kernel.cl",
-                                        kernel_compile_opts.str().c_str());
 
   // pre run fixes
   if (data->preproces_mean) {
@@ -105,9 +97,12 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
                                        sizeof(cl_float) * data->input.size());
   _context->write_buffer(gpu_buf_in, (void *)&data->input[0], true);
 
-  // run
-  opencl::MemoryHandler *gpu_buf_out;
+  // create kernel & run
   cnn_sr::LayerExecutor exec;
+  auto kernel = exec.create_layer_kernel(
+      _context, "src/kernel/layer_uber_kernel.cl", data->current_filter_count,
+      data->result_multiply);
+  opencl::MemoryHandler *gpu_buf_out;
   cl_event finish_token = exec(*kernel, layer_data, gpu_buf_in, data->input_w,
                                data->input_h, gpu_buf_out);
 
@@ -259,7 +254,8 @@ int main(int argc, char **argv) {
   //
   //
 
-  ADD_TEST(ExtractLumaTest, &data_provider.layer1_data.input);
+  ADD_TEST(ExtractLumaTest, false, &data_provider.layer1_data.input);
+  ADD_TEST(ExtractLumaTest, true, &data_provider.layer1_data.input);
   ADD_TEST(LayerTest, &data_provider.layer1_data);
   ADD_TEST(LayerTest, &data_provider.layer2_data_set1);
   ADD_TEST(LayerTest, &data_provider.layer2_data_set2);

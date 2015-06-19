@@ -50,19 +50,26 @@ int main(int argc, char **argv) {
   try {
     using namespace cnn_sr;
 
+    // read config
+    ConfigReader reader;
+    Config cfg = reader.read(cfg_file);
+    std::cout << cfg << std::endl;
+
+    // opencl context
     opencl::Context context(argc, argv);
     context.init();
     cl_event finish_token;
 
     // load kernels
-    auto luma_kernel = context.create_kernel(luma_kernel_file);
-    auto layer_kernel = context.create_kernel(layer_kernel_file);
+    /* clang-format off */
+    LayerExecutor layer_executor;
+    auto luma_kernel_small = context.create_kernel(luma_kernel_file, "-D NORMALIZE");
+    auto luma_kernel_large = context.create_kernel(luma_kernel_file);
+    auto layer_1_kernel = layer_executor.create_layer_kernel(&context, layer_kernel_file, cfg.n1);
+    auto layer_2_kernel = layer_executor.create_layer_kernel(&context, layer_kernel_file, cfg.n2);
+    auto layer_3_kernel = layer_executor.create_layer_kernel(&context, layer_kernel_file, 1, 255);
     auto sum_sq_kernel = context.create_kernel(sum_sq_kernel_file);
-
-    // read config
-    ConfigReader reader;
-    Config cfg = reader.read(cfg_file);
-    std::cout << cfg << std::endl;
+    /* clang-format on */
 
     // load images - large
     opencl::utils::ImageData img_large;
@@ -81,37 +88,46 @@ int main(int argc, char **argv) {
     // (small to process, large to mean square error)
     /* clang-format off */
     opencl::MemoryHandler *luma_result_buf_small, *luma_result_buf_large;
-    finish_token = extract_luma(*luma_kernel, img_small, luma_result_buf_small);
-    finish_token = extract_luma(*luma_kernel, img_large, luma_result_buf_large, &finish_token);
+    finish_token = extract_luma(*luma_kernel_small, img_small, luma_result_buf_small);
+    finish_token = extract_luma(*luma_kernel_large, img_large, luma_result_buf_large, &finish_token);
     /* clang-format on */
 
     // process with layers
     LayerData layer_1 = LayerData::from_N_distribution(1, cfg.n1, cfg.f1);
     LayerData layer_2 = LayerData::from_N_distribution(cfg.n1, cfg.n2, cfg.f2);
     LayerData layer_3 = LayerData::from_N_distribution(cfg.n2, 1, cfg.f3);
-    LayerExecutor layer_executor;
     opencl::MemoryHandler *layer_1_out, *layer_2_out, *layer_3_out;
+
     // layer 1
+    context.block();
+    std::cout << "### Executing layer 1" << std::endl;
     // TODO mean subtract
     finish_token =
-        layer_executor(*layer_kernel, layer_1, luma_result_buf_small,
+        layer_executor(*layer_1_kernel, layer_1, luma_result_buf_small,
                        img_small.w, img_small.h, layer_1_out, &finish_token);
+    context.block();
+
     // layer 2
     size_t l2_input_w = img_small.w - cfg.f1 + 1,
            l2_input_h = img_small.h - cfg.f1 + 1;
+    std::cout << "### Executing layer 2" << std::endl;
     finish_token =
-        layer_executor(*layer_kernel, layer_2, layer_1_out, l2_input_w,
+        layer_executor(*layer_2_kernel, layer_2, layer_1_out, l2_input_w,
                        l2_input_h, layer_2_out, &finish_token);
+    context.block();
 
     // layer 3
+    std::cout << "### Executing layer 3" << std::endl;
     size_t l3_input_w = l2_input_w - cfg.f2 + 1,
            l3_input_h = l2_input_h - cfg.f2 + 1;
     finish_token =
-        layer_executor(*layer_kernel, layer_3, layer_2_out, l3_input_w,
+        layer_executor(*layer_3_kernel, layer_3, layer_2_out, l3_input_w,
                        l3_input_h, layer_3_out, &finish_token);
+    context.block();
 
     // mean square error
-    // TODO luma is 0-1 or 0-255 ? (res:0-1, provide multiplier for luma_kernel)
+    // TODO luma is 0-1 or 0-255 ? (res:0-1)
+    std::cout << "### Calcutating mean squared error" << std::endl;
     auto mse = mean_squared_error(*sum_sq_kernel, cfg, luma_result_buf_large,
                                   layer_3_out, img_large.w, img_large.h,
                                   &finish_token);

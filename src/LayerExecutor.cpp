@@ -19,8 +19,8 @@ cl_event LayerExecutor::operator()(opencl::Kernel& kernel,
   size_t out_size[2];
   data.get_output_dimensions(out_size, input_w, input_h);
   size_t out_count = out_size[0] * out_size[1] * data.current_filter_count;
-  // std::cout << "out size: " << out_size[0] << "x" << out_size[1] <<
-  // std::endl;
+  std::cout << "out size: " << out_size[0] << "x" << out_size[1] << "x"
+            << data.current_filter_count << "=" << out_count << std::endl;
 
   pre_exec_validation(data, gpu_buf_in, input_w, input_h);
 
@@ -67,7 +67,7 @@ void LayerExecutor::pre_exec_validation(const LayerData& data,
                                         size_t input_w, size_t input_h) {
   LayerData::validate(data);
 
-  size_t input_size =
+  size_t input_size =  // TODO move all calcs. like this to LayerData
       input_w * input_h * data.n_prev_filter_cnt * sizeof(cl_float);
 
   if (input->size < input_size) {
@@ -76,10 +76,27 @@ void LayerExecutor::pre_exec_validation(const LayerData& data,
              "Declared input_w(%d)*input_h(%d)*n_prev_filter_cnt(%d)=%d "
              "is bigger then input array (%d elements)."
              " Expected more elements in input array.",
-             input_w, input_h, data.n_prev_filter_cnt, input_size,
-             input->size);
+             input_w, input_h, data.n_prev_filter_cnt, input_size, input->size);
     throw std::runtime_error(buf);
   }
+}
+
+opencl::Kernel* LayerExecutor::create_layer_kernel(
+    opencl::Context* const ctx, const char* const kernel_file,
+    size_t current_filter_count, int result_multiply) {
+  char buf[255];
+  if (result_multiply) {
+    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=1 -D RESULT_MULTIPLY=%d",
+             result_multiply);
+    std::cout << "RESULT_MULTIPLY=" << result_multiply << " (last layer)"
+              << std::endl;
+  } else {
+    // TODO current_filter_count=64 causes errors:
+    // CL_INVALID_COMMAND_QUEUE (maybe memory alloc?)
+    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", current_filter_count);
+  }
+
+  return ctx->create_kernel(kernel_file, buf);
 }
 
 //

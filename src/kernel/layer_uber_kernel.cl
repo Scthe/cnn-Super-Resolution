@@ -6,10 +6,6 @@ float sigmoid(float x){
 // if CURRENT_FILTER_COUNT is not defined it is assumed to be 1
 // TODO: optimize the code adding ifdef checks
 
-#ifndef CURRENT_FILTER_COUNT
-#define CURRENT_FILTER_COUNT 1
-#endif
-
 // MACRO: RESULT_MULTIPLY if defined: sigmoid will not be aplied to the result.
 // Instead it will be multiplied by RESULT_MULTIPLY value.
 
