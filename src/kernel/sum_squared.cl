@@ -13,11 +13,13 @@
  */
 
 __kernel
-void main(__read_only __global uchar* original_image,
+void main(__read_only __global float* ground_truth_image,
           __read_only __global float* algo_result,
           __local float* scratch,
           volatile __global ulong* target,
-          __const uint pixel_count){
+          __const uint ground_truth_w,
+          __const uint algo_result_w,
+          __const uint algo_result_size){
   // note we operate on floats in local stage
   // an then switch to long for global
 
@@ -26,8 +28,16 @@ void main(__read_only __global uchar* original_image,
 
   // each kernel computes it's value and stores in local scratch buffer
   float squared_diff = 0.0;
-  if (global_index < pixel_count) {
-    uchar a = original_image[global_index];
+  if (global_index < algo_result_size) {
+    // size of ground_truth != algo res (padding)
+    // The offset is not const, since it depends on the row we are in
+    size_t padding = (ground_truth_w - algo_result_w) / 2,
+           row = global_index / algo_result_w,
+           col = global_index % algo_result_w,
+           g_t_idx = (row + padding) * ground_truth_w + padding + col;
+      // or g_t_idx = global_index + padding * (row + ground_truth_w - padding);
+
+    float a = ground_truth_image[g_t_idx];
     float b = algo_result[global_index];
     float d  = a - b;
     squared_diff = d*d;

@@ -137,26 +137,51 @@ END_TEST
 /// SumSquaredTest
 ///
 DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
-  const size_t test_data_len = 10000;  // pixel count
-  const size_t global_work_size[1] = {16384};
-  const size_t local_work_size[1] = {512};  // (also the size of scrap buffer)
+  // total padding (from both sides) = padding*2
+  const size_t algo_w = 1000, algo_h = 2000, padding = 4;  // SETTINGS
+  const size_t ground_truth_w = algo_w + padding * 2,
+               algo_size = algo_w * algo_h,
+               ground_truth_len =
+                   (algo_w + padding * 2) * (algo_h + padding * 2);
+#define DBG(X) std::cout << #X << "=" << X << std::endl;
+  DBG(ground_truth_w)
+  DBG(algo_size)
+  DBG(ground_truth_len)
+#undef DBG
+
+  std::unique_ptr<float[]> cpu_algo_res(new float[algo_size]);
+  std::unique_ptr<float[]> cpu_ground_truth(new float[ground_truth_len]);
+  for (size_t i = 0; i < ground_truth_len; i++) {
+    cpu_ground_truth[i] = 99999.0f;
+  }
 
   unsigned seed1 = std::chrono::system_clock::now().time_since_epoch().count();
   std::mt19937 generator(seed1);
-  std::vector<unsigned char> cpu_org_img(test_data_len);
-  std::vector<float> cpu_algo_res(test_data_len);
   double expected = 0.0;
-  for (size_t i = 0; i < test_data_len; i++) {
-    cpu_org_img[i] = (unsigned char)(generator() & 0x15);
+  for (size_t i = 0; i < algo_size; i++) {
+    size_t row = i / algo_w, col = i % algo_w,
+           g_t_idx = (row + padding) * ground_truth_w + padding + col;
+    cpu_ground_truth[g_t_idx] = generator() % 256;
     cpu_algo_res[i] = (generator() % 2560) / 10.0f;
-    double d = cpu_org_img[i] - cpu_algo_res[i];
+    double d = cpu_ground_truth[g_t_idx] - cpu_algo_res[i];
     expected += d * d;
+    // std::cout << d << "\t\t**2 => " << expected << std::endl;
+    // std::cout << cpu_algo_res[i] << std::endl;
   }
+  /*
+  for (size_t i = 0; i < algo_h + padding * 2; i++) {
+    size_t idx = i * ground_truth_w;
+    std::cout << "[ ";
+    for (size_t j = 0; j < ground_truth_w; j++) {
+      std::cout << cpu_ground_truth[idx + j] << ", ";
+    }
+    std::cout << "]" << std::endl;
+  }*/
 
   /* clang-format off */
-  auto gpu_buf_org_img = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_uchar) * test_data_len);
-  _context->write_buffer(gpu_buf_org_img, (void *)&cpu_org_img[0], true);
-  auto gpu_buf_algo_res = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * test_data_len);
+  auto gpu_buf_org_img = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * ground_truth_len);
+  _context->write_buffer(gpu_buf_org_img, (void *)&cpu_ground_truth[0], true);
+  auto gpu_buf_algo_res = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * algo_size);
   _context->write_buffer(gpu_buf_algo_res, (void *)&cpu_algo_res[0], true);
 
   const unsigned __int64 out_init_val = 0;
@@ -166,11 +191,22 @@ DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
 
   // kernel+args
   auto kernel = _context->create_kernel("src/kernel/sum_squared.cl");
+  size_t global_work_size[2];
+  size_t local_work_size[2];
+  opencl::utils::work_sizes(*kernel, global_work_size, local_work_size, algo_w,
+                            algo_h);
+  global_work_size[0] *= global_work_size[1];
+  local_work_size[0] *= local_work_size[1];
+  std::cout << "global work size: " << global_work_size[0] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << std::endl;
+
   kernel->push_arg(gpu_buf_org_img);
   kernel->push_arg(gpu_buf_algo_res);
   kernel->push_arg(sizeof(cl_float) * local_work_size[0], nullptr);  // scrath
   kernel->push_arg(gpu_buf_out);
-  kernel->push_arg(sizeof(cl_uint), (void *)&test_data_len);
+  kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
+  kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
+  kernel->push_arg(sizeof(cl_uint), (void *)&algo_size);
 
   // run
   cl_event finish_token = kernel->execute(1, global_work_size, local_work_size);
