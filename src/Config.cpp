@@ -75,8 +75,8 @@ void ConfigReader::validate(const Config& cfg) {
 }
 
 std::ostream& operator<<(std::ostream& os, const cnn_sr::Config& cfg) {
-  os << "Config from file: '" << cfg.source_file << std::endl
-     << "'  layer 1: " << cfg.n1 << " filters, " << cfg.f1 << " spatial size"
+  os << "Config from file: '" << cfg.source_file << "':" << std::endl
+     << "  layer 1: " << cfg.n1 << " filters, " << cfg.f1 << " spatial size"
      << std::endl
      << "  layer 2: " << cfg.n2 << " filters, " << cfg.f2 << " spatial size"
      << std::endl

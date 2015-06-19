@@ -28,6 +28,13 @@
 cl_event extract_luma(opencl::Kernel &, opencl::utils::ImageData &,
                       opencl::MemoryHandler *&, cl_event *ev = nullptr);
 
+unsigned __int64
+mean_squared_error(opencl::Kernel &kernel, cnn_sr::Config &cfg,
+                   opencl::MemoryHandler *&gpu_buf_ground_truth,
+                   opencl::MemoryHandler *&gpu_buf_algo_res,
+                   size_t ground_truth_w, size_t ground_truth_h,
+                   cl_event *finish_token);
+
 ///
 ///
 ///
@@ -45,6 +52,7 @@ int main(int argc, char **argv) {
 
     opencl::Context context(argc, argv);
     context.init();
+    cl_event finish_token;
 
     // load kernels
     auto luma_kernel = context.create_kernel(luma_kernel_file);
@@ -56,32 +64,61 @@ int main(int argc, char **argv) {
     Config cfg = reader.read(cfg_file);
     std::cout << cfg << std::endl;
 
-    // load images
+    // load images - large
     opencl::utils::ImageData img_large;
     opencl::utils::load_image(img_large_file, img_large);
     std::cout << "img_large: " << img_large.w << "x" << img_large.h << "x"
               << img_large.bpp << std::endl;
+    // load images - small
     opencl::utils::ImageData img_small;
     opencl::utils::load_image(img_small_file, img_small);
     std::cout << "img_small: " << img_small.w << "x" << img_small.h << "x"
               << img_small.bpp << std::endl;
 
-    // read/init layer data
+    // TODO naive upscale for small image
+
+    // extract luma
+    // (small to process, large to mean square error)
+    /* clang-format off */
+    opencl::MemoryHandler *luma_result_buf_small, *luma_result_buf_large;
+    finish_token = extract_luma(*luma_kernel, img_small, luma_result_buf_small);
+    finish_token = extract_luma(*luma_kernel, img_large, luma_result_buf_large, &finish_token);
+    /* clang-format on */
+
+    // process with layers
     LayerData layer_1 = LayerData::from_N_distribution(1, cfg.n1, cfg.f1);
     LayerData layer_2 = LayerData::from_N_distribution(cfg.n1, cfg.n2, cfg.f2);
     LayerData layer_3 = LayerData::from_N_distribution(cfg.n2, 1, cfg.f3);
+    LayerExecutor layer_executor;
+    opencl::MemoryHandler *layer_1_out, *layer_2_out, *layer_3_out;
+    // layer 1
+    // TODO mean subtract
+    finish_token =
+        layer_executor(*layer_kernel, layer_1, luma_result_buf_small,
+                       img_small.w, img_small.h, layer_1_out, &finish_token);
+    // layer 2
+    size_t l2_input_w = img_small.w - cfg.f1 + 1,
+           l2_input_h = img_small.h - cfg.f1 + 1;
+    finish_token =
+        layer_executor(*layer_kernel, layer_2, layer_1_out, l2_input_w,
+                       l2_input_h, layer_2_out, &finish_token);
 
-    // TODO naive upscale for small image
+    // layer 3
+    size_t l3_input_w = l2_input_w - cfg.f2 + 1,
+           l3_input_h = l2_input_h - cfg.f2 + 1;
+    finish_token =
+        layer_executor(*layer_kernel, layer_3, layer_2_out, l3_input_w,
+                       l3_input_h, layer_3_out, &finish_token);
 
-    // extract luma from small image
-    // (small to process, large to mean square error)
-    opencl::MemoryHandler *luma_result_buf_small, *luma_result_buf_large;
-    auto finish_token = extract_luma(*luma_kernel, img_small, luma_result_buf_small);
-    finish_token = extract_luma(*luma_kernel, img_large, luma_result_buf_large, &finish_token);
+    // mean square error
+    // TODO luma is 0-1 or 0-255 ? (res:0-1, provide multiplier for luma_kernel)
+    auto mse = mean_squared_error(*sum_sq_kernel, cfg, luma_result_buf_large,
+                                  layer_3_out, img_large.w, img_large.h,
+                                  &finish_token);
 
-    // process with layers
-    // LayerExecutor layer_executor;
-    // layer_executor
+    std::cout << "mse: " << mse << std::endl;
+
+    // TODO release MemoryHandlers !
 
   } catch (const std::exception &e) {
     std::cout << "[ERROR] " << e.what() << std::endl;
@@ -111,9 +148,11 @@ cl_event extract_luma(opencl::Kernel &kernel,
             << local_work_size[1] << std::endl;
 
   // memory allocation
-  auto gpu_image = context->create_image(CL_MEM_READ_WRITE, CL_RGBA, CL_UNSIGNED_INT8, img_data.w, img_data.h);
+  auto gpu_image = context->create_image(
+      CL_MEM_READ_WRITE, CL_RGBA, CL_UNSIGNED_INT8, img_data.w, img_data.h);
   context->write_image(gpu_image, img_data, true);
-  gpu_buf_out = context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_uchar) * out_pixel_count);
+  gpu_buf_out =
+      context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * out_pixel_count);
   // std::cout << "cpu/gpu buffers pair allocated" << std::endl;
 
   // std::cout << "push args" << std::endl;
@@ -126,6 +165,51 @@ cl_event extract_luma(opencl::Kernel &kernel,
   // Launch kernel
   // std::cout << "execute" << std::endl;
   return kernel.execute(2, global_work_size, local_work_size, ev, 1);
+}
+
+unsigned __int64
+mean_squared_error(opencl::Kernel &kernel, cnn_sr::Config &cfg,
+                   opencl::MemoryHandler *&gpu_buf_ground_truth,
+                   opencl::MemoryHandler *&gpu_buf_algo_res,
+                   size_t ground_truth_w, size_t ground_truth_h, cl_event *ev) {
+  opencl::Context *const context = kernel.get_context();
+  size_t wasted = cfg.f1 + cfg.f2 + cfg.f3 + 3,
+         algo_w = ground_truth_w - wasted, algo_h = ground_truth_h - wasted,
+         algo_size = algo_w * algo_h;
+
+  size_t global_work_size[2];
+  size_t local_work_size[2];
+  opencl::utils::work_sizes(kernel, global_work_size, local_work_size, algo_w,
+                            algo_h);
+  global_work_size[0] *= global_work_size[1];
+  local_work_size[0] *= local_work_size[1];
+  std::cout << "global work size: " << global_work_size[0] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << std::endl;
+
+  const unsigned __int64 out_init_val = 0;
+  auto gpu_buf_out = context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_ulong));
+  context->write_buffer(gpu_buf_out, (void *)&out_init_val, true);  // zeroe
+
+  // kernel args
+  kernel.push_arg(gpu_buf_ground_truth);
+  kernel.push_arg(gpu_buf_algo_res);
+  kernel.push_arg(sizeof(cl_float) * local_work_size[0], nullptr);  // scrath
+  kernel.push_arg(gpu_buf_out);
+  kernel.push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
+  kernel.push_arg(sizeof(cl_uint), (void *)&algo_w);
+  kernel.push_arg(sizeof(cl_uint), (void *)&algo_size);
+
+  // run
+  cl_event finish_token =
+      kernel.execute(1, global_work_size, local_work_size, ev);
+
+  // read (values may not be exactly the same since float->long data loss,
+  // but should be close enough)
+  unsigned __int64 read_val;
+  context->read_buffer(gpu_buf_out, 0, sizeof(cl_ulong), (void *)&read_val,
+                       true, &finish_token, 1);
+
+  return read_val;
 }
 
 // TODO remove all code below - it is just as code sample now

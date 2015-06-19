@@ -22,12 +22,12 @@ struct LayerData;
 class LayerExecutor {
  public:
   cl_event operator()(opencl::Kernel& kernel, const LayerData& data,
-                      std::vector<float>& input,
-                      opencl::MemoryHandler*& gpu_buf_out, size_t input_w,
-                      size_t input_h, cl_event* ev = nullptr);
+                      opencl::MemoryHandler*& gpu_buf_in, size_t input_w,
+                      size_t input_h, opencl::MemoryHandler*& gpu_buf_out,
+                      cl_event* ev = nullptr);
 
  private:
-  void pre_exec_validation(const LayerData&, std::vector<float>&, size_t,
+  void pre_exec_validation(const LayerData&, opencl::MemoryHandler*, size_t,
                            size_t);
 };
 }

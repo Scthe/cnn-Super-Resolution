@@ -94,17 +94,22 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
 
   // pre run fixes
   if (data->preproces_mean) {
-    float input_mean = mean(&data->input[0], data->input_w * data->input_h);
-    for (size_t i = 0; i < data->input_w * data->input_h; i++) {
+    float input_mean = mean(&data->input[0], data->input.size());
+    for (size_t i = 0; i < data->input.size(); i++) {
       data->input[i] -= input_mean;
     }
   }
 
+  // alloc input
+  auto gpu_buf_in = _context->allocate(CL_MEM_WRITE_ONLY,
+                                       sizeof(cl_float) * data->input.size());
+  _context->write_buffer(gpu_buf_in, (void *)&data->input[0], true);
+
   // run
   opencl::MemoryHandler *gpu_buf_out;
   cnn_sr::LayerExecutor exec;
-  cl_event finish_token = exec(*kernel, layer_data, data->input, gpu_buf_out,
-                               data->input_w, data->input_h);
+  cl_event finish_token = exec(*kernel, layer_data, gpu_buf_in, data->input_w,
+                               data->input_h, gpu_buf_out);
 
   const size_t out_w = data->input_w - data->f_spatial_size + 1,
                out_h = data->input_h - data->f_spatial_size + 1,
@@ -179,14 +184,14 @@ DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
   }*/
 
   /* clang-format off */
-  auto gpu_buf_org_img = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * ground_truth_len);
-  _context->write_buffer(gpu_buf_org_img, (void *)&cpu_ground_truth[0], true);
+  auto gpu_buf_ground_truth = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * ground_truth_len);
+  _context->write_buffer(gpu_buf_ground_truth, (void *)&cpu_ground_truth[0], true);
   auto gpu_buf_algo_res = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * algo_size);
   _context->write_buffer(gpu_buf_algo_res, (void *)&cpu_algo_res[0], true);
 
   const unsigned __int64 out_init_val = 0;
   auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_ulong));
-  _context->write_buffer(gpu_buf_out, (void *)&out_init_val, true);
+  _context->write_buffer(gpu_buf_out, (void *)&out_init_val, true);//zeroe
   /* clang-format on */
 
   // kernel+args
@@ -200,7 +205,7 @@ DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
   std::cout << "global work size: " << global_work_size[0] << std::endl;
   std::cout << "local work size: " << local_work_size[0] << std::endl;
 
-  kernel->push_arg(gpu_buf_org_img);
+  kernel->push_arg(gpu_buf_ground_truth);
   kernel->push_arg(gpu_buf_algo_res);
   kernel->push_arg(sizeof(cl_float) * local_work_size[0], nullptr);  // scrath
   kernel->push_arg(gpu_buf_out);
