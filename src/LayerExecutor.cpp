@@ -42,7 +42,7 @@ cl_event LayerExecutor::operator()(opencl::Kernel& kernel,
   auto gpu_buf_B = context->allocate( CL_MEM_READ_ONLY, sizeof(cl_float) * data.bias.size());
   context->write_buffer(gpu_buf_B, (void *)data.bias_ptr(), true);
 
-  gpu_buf_out = context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float) * out_count);
+  gpu_buf_out = context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float) * out_count);
   context->zeros_float(gpu_buf_out, true);
   /* clang-format on */
 

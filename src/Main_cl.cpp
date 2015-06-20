@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
     opencl::MemoryHandler *cnn_out;
     auto finish_token3 = data_pipeline.execute_cnn(
         layer_1, layer_2, layer_3, luma_result_buf_small, cnn_out, img_small.w,
-        img_small.h, &finish_token2);
+        img_small.h, true, &finish_token2);
 
     // mean square error
     // TODO luma is 0-1 or 0-255 ? (res:0-1)

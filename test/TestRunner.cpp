@@ -8,6 +8,7 @@
 #include "../src/opencl/UtilsOpenCL.hpp"
 #include "../src/LayerData.hpp"
 #include "../src/LayerExecutor.hpp"
+#include "../src/DataPipeline.hpp"
 #include "TestRunner.hpp"
 #include "TestDataProvider.hpp"
 
@@ -106,9 +107,9 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   cl_event finish_token = exec(*kernel, layer_data, gpu_buf_in, data->input_w,
                                data->input_h, gpu_buf_out);
 
-  const size_t out_w = data->input_w - data->f_spatial_size + 1,
-               out_h = data->input_h - data->f_spatial_size + 1,
-               out_count = out_w * out_h * data->current_filter_count;
+  size_t out_dim[2];
+  layer_data.get_output_dimensions(out_dim, data->input_w, data->input_h);
+  size_t out_count = out_dim[0] * out_dim[1] * data->current_filter_count;
 
   // read results
   std::unique_ptr<float[]> cpu_buf(new float[out_count]);
@@ -143,11 +144,11 @@ DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
                algo_size = algo_w * algo_h,
                ground_truth_len =
                    (algo_w + padding * 2) * (algo_h + padding * 2);
-#define DBG(X) std::cout << #X << "=" << X << std::endl;
-  DBG(ground_truth_w)
-  DBG(algo_size)
-  DBG(ground_truth_len)
-#undef DBG
+// #define DBG(X) std::cout << #X << "=" << X << std::endl;
+  // DBG(ground_truth_w)
+  // DBG(algo_size)
+  // DBG(ground_truth_len)
+// #undef DBG
 
   std::unique_ptr<float[]> cpu_algo_res(new float[algo_size]);
   std::unique_ptr<float[]> cpu_ground_truth(new float[ground_truth_len]);
@@ -228,6 +229,75 @@ void init() {}
 END_TEST
 
 ///
+/// ExtractLumaTest
+///
+DEFINE_TEST_STR(SumTest, "Sum test", context) {
+  size_t data_len = 900, expected = 404550;
+  std::unique_ptr<float[]> cpu_data(new float[data_len]);
+  for (size_t i = 0; i < data_len; i++) {
+    cpu_data[i] = i;
+  }
+  auto gpu_buf_data =
+      _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data_len);
+  _context->write_buffer(gpu_buf_data, (void *)&cpu_data[0], true);
+
+  cl_ulong result;
+  pipeline->sum(gpu_buf_data, &result);
+  // std::cout << result << std::endl;
+  assert_equals(expected, result);
+
+  return true;
+}
+
+void init(cnn_sr::DataPipeline *pipeline) { this->pipeline = pipeline; }
+
+private:
+cnn_sr::DataPipeline *pipeline;
+
+END_TEST
+
+///
+/// SubtractFromAllTest
+///
+DEFINE_TEST_STR(SubtractFromAllTest, "Subtract from all test", context) {
+  size_t data_len = 900;
+  float to_subtract = 450.0f;
+  std::unique_ptr<float[]> cpu_data(new float[data_len]);
+  std::unique_ptr<float[]> expected_buf(new float[data_len]);
+  for (size_t i = 0; i < data_len; i++) {
+    cpu_data[i] = i;
+    expected_buf[i] = cpu_data[i] - to_subtract;
+  }
+  auto gpu_buf_data =
+      _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data_len);
+  _context->write_buffer(gpu_buf_data, (void *)&cpu_data[0], true);
+
+  auto finish_token = pipeline->subtract_from_all(gpu_buf_data, to_subtract);
+
+  // read results
+  _context->read_buffer(gpu_buf_data, 0, sizeof(cl_float) * data_len,
+                        (void *)cpu_data.get(), true, &finish_token, 1);
+
+  // compare results
+  for (size_t i = 0; i < data_len; i++) {
+    float expected = expected_buf[i];
+    float result = cpu_data[i];  // straight from gpu
+    // std::cout << (i + 1) << "  expected: " << expected << "\tgot: " << result
+    // << std::endl;
+    assert_equals(expected, result);
+  }
+
+  return true;
+}
+
+void init(cnn_sr::DataPipeline *pipeline) { this->pipeline = pipeline; }
+
+private:
+cnn_sr::DataPipeline *pipeline;
+
+END_TEST
+
+///
 /// Test runner main function
 ///
 
@@ -250,6 +320,11 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
+  opencl::Context context(argc, argv);
+  context.init();
+  cnn_sr::DataPipeline pipeline(nullptr, &context);
+  pipeline.init(cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
+
   //
   //
   //
@@ -261,14 +336,13 @@ int main(int argc, char **argv) {
   ADD_TEST(LayerTest, &data_provider.layer2_data_set2);
   ADD_TEST(LayerTest, &data_provider.layer3_data);
   ADD_TEST(SumSquaredTest);
+  ADD_TEST(SumTest, &pipeline);
+  ADD_TEST(SubtractFromAllTest, &pipeline);
 
   //
   //
   //
   //
-
-  opencl::Context context(argc, argv);
-  context.init();
 
   int failures = 0;
   for (auto i = begin(cases); i != end(cases); ++i) {
