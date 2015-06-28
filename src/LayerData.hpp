@@ -32,21 +32,16 @@ struct LayerData {
             size_t f_spatial_size, float* weights = nullptr,
             float* bias = nullptr);
 
-  // LayerData(const LayerData&, float* weights, float* bias);
-
   static LayerData from_N_distribution(size_t n_prev_filter_cnt,
                                        size_t current_filter_count,
                                        size_t f_spatial_size,  //
                                        float mean_w = 0.0f, float sd_w = 0.001f,
                                        float mean_b = 0.0f, float sd_b = 0.0f);
-
   static void validate(const LayerData&);
 
-  inline void get_output_dimensions(size_t* dim_arr, size_t input_w,
-                                    size_t input_h) const {
-    dim_arr[0] = input_w - f_spatial_size + 1;
-    dim_arr[1] = input_h - f_spatial_size + 1;
-  }
+  void get_output_dimensions(size_t*, size_t w, size_t h) const;
+  size_t weight_count() const;
+  size_t bias_count() const;
   inline const float* weights_ptr() const { return &weights[0]; }
   inline const float* bias_ptr() const { return &bias[0]; }
 

@@ -1,9 +1,10 @@
 #ifndef DATA_PIPELINE_H
 #define DATA_PIPELINE_H
 
-#include "LayerExecutor.hpp"
+#include <cstddef>  // for size_t
 
 typedef unsigned long long u64;
+typedef struct _cl_event* cl_event;
 
 namespace opencl {
 class Kernel;
@@ -16,7 +17,9 @@ struct ImageData;
 }
 
 namespace cnn_sr {
+
 struct LayerData;
+struct Config;
 
 /**
  * Class used to execute various pipeline methods f.e.:
@@ -54,16 +57,21 @@ class DataPipeline {
   cl_event sum(opencl::MemoryHandler*, u64*, cl_event* ev = nullptr);
   cl_event subtract_from_all(opencl::MemoryHandler*, float,
                              cl_event* ev = nullptr);
+  cl_event execute_layer(opencl::Kernel&, const LayerData&,
+                         opencl::MemoryHandler*&, size_t, size_t,
+                         opencl::MemoryHandler*&, cl_event* ev = nullptr);
+  opencl::Kernel* create_layer_kernel(size_t current_filter_count,
+                                      int result_multiply = 0);
 
  private:
   void check_initialized(int kernel_load_flags);
   void load_kernels(int load_flags);
-  void debug_buffer(opencl::MemoryHandler*, size_t rows);
+  void pre_execute_layer_validation(const LayerData&, opencl::MemoryHandler*,
+                                    size_t, size_t);
 
  private:
   Config* const _config;
   opencl::Context* const _context;
-  LayerExecutor _layer_executor;
   bool _initialized;
 
   opencl::Kernel* _luma_kernel_norm;

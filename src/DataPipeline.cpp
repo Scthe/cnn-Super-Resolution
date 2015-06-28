@@ -26,6 +26,10 @@ int DataPipeline::LOAD_KERNEL_ALL = DataPipeline::LOAD_KERNEL_LUMA |
                                     DataPipeline::LOAD_KERNEL_LAYERS |
                                     DataPipeline::LOAD_KERNEL_MISC;
 
+///
+/// Construction/init/misc
+///
+
 DataPipeline::DataPipeline(Config *cfg, opencl::Context *context)
     : _config(cfg),
       _context(context),
@@ -60,11 +64,11 @@ void DataPipeline::load_kernels(int load_flags) {
     _luma_kernel_raw = _context->create_kernel(luma_kernel_file);
 
   if(load_layers && !_layer_1_kernel)
-    _layer_1_kernel = _layer_executor.create_layer_kernel(_context, layer_kernel_file, _config->n1);
+    _layer_1_kernel = create_layer_kernel(_config->n1);
   if(load_layers && !_layer_2_kernel)
-    _layer_2_kernel = _layer_executor.create_layer_kernel(_context, layer_kernel_file, _config->n2);
+    _layer_2_kernel = create_layer_kernel(_config->n2);
   if(load_layers && !_layer_3_kernel)
-    _layer_3_kernel = _layer_executor.create_layer_kernel(_context, layer_kernel_file, 1, 255);
+    _layer_3_kernel = create_layer_kernel(1, 255);
 
   if(load_misc && !_sum_sq_kernel)
     _sum_sq_kernel = _context->create_kernel(sum_sq_kernel_file);
@@ -75,6 +79,23 @@ void DataPipeline::load_kernels(int load_flags) {
   /* clang-format on */
 }
 
+opencl::Kernel *DataPipeline::create_layer_kernel(size_t current_filter_count,
+                                                  int result_multiply) {
+  char buf[255];
+  if (result_multiply) {
+    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=1 -D RESULT_MULTIPLY=%d",
+             result_multiply);
+    std::cout << "RESULT_MULTIPLY=" << result_multiply << " (last layer)"
+              << std::endl;
+  } else {
+    // TODO current_filter_count=64 causes errors:
+    // CL_INVALID_COMMAND_QUEUE (maybe memory alloc?)
+    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", current_filter_count);
+  }
+
+  return _context->create_kernel(layer_kernel_file, buf);
+}
+
 void DataPipeline::check_initialized(int kernel_load_flags) {
   if (!_initialized) {
     throw std::runtime_error(
@@ -83,6 +104,10 @@ void DataPipeline::check_initialized(int kernel_load_flags) {
 
   this->load_kernels(kernel_load_flags);
 }
+
+///
+/// execute: misc
+///
 
 cl_event DataPipeline::extract_luma(opencl::utils::ImageData &img_data,
                                     opencl::MemoryHandler *&gpu_buf_out,
@@ -115,104 +140,9 @@ cl_event DataPipeline::extract_luma(opencl::utils::ImageData &img_data,
   kernel->push_arg(sizeof(cl_uint), (void *)&img_data.h);
 
   // Launch kernel
-  return kernel->execute(2, global_work_size, local_work_size, ev_to_wait_for,
-                         ev_to_wait_for ? 1 : 0);
-}
-
-cl_event DataPipeline::execute_cnn(LayerData &layer_1, LayerData &layer_2,
-                                   LayerData &layer_3,
-                                   opencl::MemoryHandler *input,
-                                   opencl::MemoryHandler *&gpu_buf_out,
-                                   size_t upscaled_w, size_t upscaled_h,
-                                   bool subtract_input_mean,
-                                   cl_event *ev_to_wait_for) {
-  check_initialized(DataPipeline::LOAD_KERNEL_LAYERS);
-  opencl::MemoryHandler *layer_1_out, *layer_2_out;
-  size_t l2_input[2], l3_input[2];
-  layer_1.get_output_dimensions(l2_input, upscaled_w, upscaled_h);
-  layer_2.get_output_dimensions(l3_input, l2_input[0], l2_input[1]);
-
-  _context->block();
-
-  cl_event ev;
-  if (subtract_input_mean) {
-    std::cout << "### Subtracting mean from input" << std::endl;
-    ev = this->subtract_mean(input, ev_to_wait_for);
-    ev_to_wait_for = &ev;
-  }
-
-  _context->block();
-
-  // layer 1
-  std::cout << "### Executing layer 1" << std::endl;
-  cl_event finish_token1 =
-      _layer_executor(*_layer_1_kernel, layer_1, input, upscaled_w, upscaled_h,
-                      layer_1_out, ev_to_wait_for);
-  _context->block();
-
-  // layer 2
-  std::cout << "### Executing layer 2" << std::endl;
-  cl_event finish_token2 =
-      _layer_executor(*_layer_2_kernel, layer_2, layer_1_out,  //
-                      l2_input[0], l2_input[1], layer_2_out, &finish_token1);
-  _context->block();
-
-  // layer 3
-  std::cout << "### Executing layer 3" << std::endl;
-  cl_event finish_token3 =
-      _layer_executor(*_layer_3_kernel, layer_3, layer_2_out,  //
-                      l3_input[0], l3_input[1], gpu_buf_out, &finish_token2);
-  _context->block();
-
-  return finish_token3;
-}
-
-float DataPipeline::mean_squared_error(  // TODO change return type to double
-    opencl::MemoryHandler *gpu_buf_ground_truth,
-    opencl::MemoryHandler *gpu_buf_algo_res, size_t ground_truth_w,
-    size_t ground_truth_h, cl_event *ev_to_wait_for) {
-  check_initialized(DataPipeline::LOAD_KERNEL_MISC);
-  size_t wasted = _config->f1 + _config->f2 + _config->f3 - 3,
-         algo_w = ground_truth_w - wasted, algo_h = ground_truth_h - wasted,
-         algo_size = algo_w * algo_h;
-
-  size_t global_work_size[2];
-  size_t local_work_size[2];
-  opencl::utils::work_sizes(*_sum_sq_kernel, global_work_size, local_work_size,
-                            algo_w, algo_h);
-  global_work_size[0] *= global_work_size[1];
-  local_work_size[0] *= local_work_size[1];
-  std::cout << "global work size: " << global_work_size[0] << std::endl;
-  std::cout << "local work size: " << local_work_size[0] << std::endl;
-
-  const float out_init_val = 0;
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_ulong));
-  _context->write_buffer(gpu_buf_out, (void *)&out_init_val, true);  // zeroe
-
-  // kernel args
-  _sum_sq_kernel->push_arg(gpu_buf_ground_truth);
-  _sum_sq_kernel->push_arg(gpu_buf_algo_res);
-  _sum_sq_kernel->push_arg(sizeof(cl_float) * local_work_size[0],
-                           nullptr);  // scrath
-  _sum_sq_kernel->push_arg(gpu_buf_out);
-  _sum_sq_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
-  _sum_sq_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
-  _sum_sq_kernel->push_arg(sizeof(cl_uint), (void *)&algo_size);
-
-  // run
-  cl_event finish_token = _sum_sq_kernel->execute(
-      1, global_work_size, local_work_size, ev_to_wait_for);
-
-  // read (values may not be exactly the same since float->long data loss,
-  // but should be close enough)
-  float read_val;
-  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_ulong), (void *)&read_val,
-                        true, &finish_token, 1);
-
-  float mse_per_pixel = read_val / algo_size;
-  std::cout << "Mean squared error raw: " << read_val
-            << ", per pixel: " << mse_per_pixel << std::endl;
-  return mse_per_pixel;
+  auto finish_token = kernel->execute(2, global_work_size, local_work_size,
+                                      ev_to_wait_for, ev_to_wait_for ? 1 : 0);
+  return finish_token;
 }
 
 cl_event DataPipeline::subtract_mean(opencl::MemoryHandler *data,
@@ -292,18 +222,181 @@ cl_event DataPipeline::subtract_from_all(opencl::MemoryHandler *data, float val,
   return finish_token;
 }
 
-void DataPipeline::debug_buffer(opencl::MemoryHandler *data, size_t rows) {
-  _context->block();
-  size_t len = data->size / sizeof(cl_float), cols = len / rows;
-  std::unique_ptr<float[]> cpu_buf(new float[len]);
-  _context->read_buffer(data, (void *)cpu_buf.get(), true);
+///
+/// execute: cnn forward propagation
+///
 
-  for (size_t i = 0; i < rows; i++) {
-    std::cout << "[ ";
-    for (size_t j = 0; j < cols; j++) {
-      std::cout << cpu_buf[cols * i + j] << ", ";
-    }
-    std::cout << "]" << std::endl;
+cl_event DataPipeline::execute_cnn(LayerData &layer_1, LayerData &layer_2,
+                                   LayerData &layer_3,
+                                   opencl::MemoryHandler *input,
+                                   opencl::MemoryHandler *&gpu_buf_out,
+                                   size_t upscaled_w, size_t upscaled_h,
+                                   bool subtract_input_mean,
+                                   cl_event *ev_to_wait_for) {
+  check_initialized(DataPipeline::LOAD_KERNEL_LAYERS);
+  opencl::MemoryHandler *layer_1_out, *layer_2_out;
+  size_t l2_input[2], l3_input[2];
+  layer_1.get_output_dimensions(l2_input, upscaled_w, upscaled_h);
+  layer_2.get_output_dimensions(l3_input, l2_input[0], l2_input[1]);
+
+  _context->block();
+
+  cl_event ev;
+  if (subtract_input_mean) {
+    std::cout << "### Subtracting mean from input" << std::endl;
+    ev = this->subtract_mean(input, ev_to_wait_for);
+    ev_to_wait_for = &ev;
   }
+
+  _context->block();
+
+  // layer 1
+  std::cout << "### Executing layer 1" << std::endl;
+  cl_event finish_token1 =
+      execute_layer(*_layer_1_kernel, layer_1, input, upscaled_w, upscaled_h,
+                    layer_1_out, ev_to_wait_for);
+  _context->block();
+
+  // layer 2
+  std::cout << "### Executing layer 2" << std::endl;
+  cl_event finish_token2 =
+      execute_layer(*_layer_2_kernel, layer_2, layer_1_out,  //
+                    l2_input[0], l2_input[1], layer_2_out, &finish_token1);
+  _context->block();
+
+  // layer 3
+  std::cout << "### Executing layer 3" << std::endl;
+  cl_event finish_token3 =
+      execute_layer(*_layer_3_kernel, layer_3, layer_2_out,  //
+                    l3_input[0], l3_input[1], gpu_buf_out, &finish_token2);
+  _context->block();
+
+  return finish_token3;
+}
+
+void DataPipeline::pre_execute_layer_validation(const LayerData &data,
+                                                opencl::MemoryHandler *input,
+                                                size_t input_w,
+                                                size_t input_h) {
+  LayerData::validate(data);
+
+  size_t input_size =  // TODO move all calcs. like this to LayerData
+      input_w * input_h * data.n_prev_filter_cnt * sizeof(cl_float);
+
+  if (input->size < input_size) {
+    char buf[255];
+    snprintf(buf, 255,
+             "Declared input_w(%d)*input_h(%d)*n_prev_filter_cnt(%d)=%d "
+             "is bigger then input array (%d elements)."
+             " Expected more elements in input array.",
+             input_w, input_h, data.n_prev_filter_cnt, input_size, input->size);
+    throw std::runtime_error(buf);
+  }
+}
+
+cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
+                                     const LayerData &data,
+                                     opencl::MemoryHandler *&gpu_buf_in,
+                                     size_t input_w, size_t input_h,
+                                     opencl::MemoryHandler *&gpu_buf_out,
+                                     cl_event *ev_to_wait_for) {
+  size_t out_size[2];
+  data.get_output_dimensions(out_size, input_w, input_h);
+  size_t out_count = out_size[0] * out_size[1] * data.current_filter_count;
+  std::cout << "out size: " << out_size[0] << "x" << out_size[1] << "x"
+            << data.current_filter_count << "=" << out_count << std::endl;
+
+  pre_execute_layer_validation(data, gpu_buf_in, input_w, input_h);
+
+  size_t global_work_size[2];
+  size_t local_work_size[2];
+  opencl::utils::work_sizes(kernel, global_work_size, local_work_size, input_w,
+                            input_h);
+  std::cout << "global work size: " << global_work_size[0] << ", "
+            << global_work_size[1] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << ", "
+            << local_work_size[1] << std::endl;
+
+  // TODO IMPORTANT: reuse gpu buffers for better performance
+
+  // buffers: in_source, W, B , out_target
+  /* clang-format off */
+  auto gpu_buf_W = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data.weights.size());
+  _context->write_buffer(gpu_buf_W, (void *)data.weights_ptr(), true);
+  auto gpu_buf_B = _context->allocate( CL_MEM_READ_ONLY, sizeof(cl_float) * data.bias.size());
+  _context->write_buffer(gpu_buf_B, (void *)data.bias_ptr(), true);
+
+  gpu_buf_out = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float) * out_count);
+  _context->zeros_float(gpu_buf_out, true);
+  /* clang-format on */
+
+  // args
+  kernel.push_arg(gpu_buf_in);
+  kernel.push_arg(gpu_buf_out);
+  kernel.push_arg(gpu_buf_W);
+  kernel.push_arg(gpu_buf_B);
+  kernel.push_arg(sizeof(cl_uint), (void *)&data.n_prev_filter_cnt);
+  kernel.push_arg(sizeof(cl_uint), (void *)&data.f_spatial_size);
+  kernel.push_arg(sizeof(cl_uint), (void *)&input_w);
+  kernel.push_arg(sizeof(cl_uint), (void *)&input_h);
+
+  // run
+  int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
+  return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
+                        events_to_wait_for_count);
+}
+
+///
+/// execute: cnn backpropagation
+///
+
+float DataPipeline::mean_squared_error(
+    opencl::MemoryHandler *gpu_buf_ground_truth,
+    opencl::MemoryHandler *gpu_buf_algo_res, size_t ground_truth_w,
+    size_t ground_truth_h, cl_event *ev_to_wait_for) {
+  // TODO change return type to double
+  // TODO this is not correct: value per out_w*out_h*n_current_filter_count
+  check_initialized(DataPipeline::LOAD_KERNEL_MISC);
+  size_t wasted = _config->f1 + _config->f2 + _config->f3 - 3,
+         algo_w = ground_truth_w - wasted, algo_h = ground_truth_h - wasted,
+         algo_size = algo_w * algo_h;
+
+  size_t global_work_size[2];
+  size_t local_work_size[2];
+  opencl::utils::work_sizes(*_sum_sq_kernel, global_work_size, local_work_size,
+                            algo_w, algo_h);
+  global_work_size[0] *= global_work_size[1];
+  local_work_size[0] *= local_work_size[1];
+  std::cout << "global work size: " << global_work_size[0] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << std::endl;
+
+  const float out_init_val = 0;
+  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_ulong));
+  _context->write_buffer(gpu_buf_out, (void *)&out_init_val, true);  // zeroe
+
+  // kernel args
+  _sum_sq_kernel->push_arg(gpu_buf_ground_truth);
+  _sum_sq_kernel->push_arg(gpu_buf_algo_res);
+  _sum_sq_kernel->push_arg(sizeof(cl_float) * local_work_size[0],
+                           nullptr);  // scrath
+  _sum_sq_kernel->push_arg(gpu_buf_out);
+  _sum_sq_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
+  _sum_sq_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
+  _sum_sq_kernel->push_arg(sizeof(cl_uint), (void *)&algo_size);
+
+  // run
+  cl_event finish_token = _sum_sq_kernel->execute(
+      1, global_work_size, local_work_size, ev_to_wait_for);
+
+  // read (values may not be exactly the same since float->long data loss,
+  // but should be close enough)
+  float read_val;
+  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_ulong), (void *)&read_val,
+                        true, &finish_token, 1);
+
+  float mse_per_pixel = read_val / algo_size;
+  std::cout << "Mean squared error raw: " << read_val
+            << ", per pixel: " << mse_per_pixel << std::endl;
+  return mse_per_pixel;
 }
 }

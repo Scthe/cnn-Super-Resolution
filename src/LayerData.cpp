@@ -23,11 +23,10 @@ LayerData::LayerData(size_t n_prev_filter_cnt, size_t current_filter_count,
     : n_prev_filter_cnt(n_prev_filter_cnt),
       current_filter_count(current_filter_count),
       f_spatial_size(f_spatial_size) {
-  size_t weights_size = f_spatial_size * f_spatial_size * n_prev_filter_cnt *
-                        current_filter_count;
-  this->weights.reserve(weights_size);
+  this->weights.reserve(this->weight_count());
   if (weights)
-    std::copy(weights, weights + weights_size, back_inserter(this->weights));
+    std::copy(weights, weights + this->weight_count(),
+              back_inserter(this->weights));
 
   this->bias.reserve(current_filter_count);
   if (bias)
@@ -61,29 +60,41 @@ LayerData LayerData::from_N_distribution(size_t n_prev_filter_cnt,
 }
 
 void LayerData::validate(const LayerData& data) {
-  size_t weights_size = data.f_spatial_size * data.f_spatial_size *
-                        data.n_prev_filter_cnt * data.current_filter_count;
-  if (data.weights.size() < weights_size) {
+  if (data.weights.size() < data.weight_count()) {
     char buf[255];
     snprintf(buf, 255,
              "Declared f_spatial_size(%d)*f_spatial_size(%d)"
              "*n_prev_filter_cnt(%d)*current_filter_count(%d)=%d"
              " is bigger then weights array (%d elements)."
-             " Expected more elements in weights array",
+             " Expected more elements in weights array. ",
              data.f_spatial_size, data.f_spatial_size, data.n_prev_filter_cnt,
-             data.current_filter_count, weights_size, data.weights.size());
+             data.current_filter_count, data.weight_count(),
+             data.weights.size());
     throw std::runtime_error(buf);
   }
 
-  if (data.bias.size() < data.current_filter_count) {
+  if (data.bias.size() < data.bias_count()) {
     char buf[255];
     snprintf(buf, 255,
              "Bias array(size=%d) should have equal size to "
-             "current_filter_count(%d)",
-             data.bias.size(), data.current_filter_count);
+             "current_filter_count(%d).",
+             data.bias.size(), data.bias_count());
     throw std::runtime_error(buf);
   }
 }
+
+void LayerData::get_output_dimensions(size_t* dim_arr, size_t input_w,
+                                      size_t input_h) const {
+  dim_arr[0] = input_w - f_spatial_size + 1;
+  dim_arr[1] = input_h - f_spatial_size + 1;
+}
+
+size_t LayerData::weight_count() const {
+  return f_spatial_size * f_spatial_size * n_prev_filter_cnt *
+         current_filter_count;
+}
+
+size_t LayerData::bias_count() const { return current_filter_count; }
 
 void LayerParametersIO::read(const char* const file,
                              std::vector<LayerData>& data,

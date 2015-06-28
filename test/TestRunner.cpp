@@ -7,7 +7,6 @@
 #include "../src/opencl/Context.hpp"
 #include "../src/opencl/UtilsOpenCL.hpp"
 #include "../src/LayerData.hpp"
-#include "../src/LayerExecutor.hpp"
 #include "../src/DataPipeline.hpp"
 #include "TestRunner.hpp"
 #include "TestDataProvider.hpp"
@@ -99,13 +98,12 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   _context->write_buffer(gpu_buf_in, (void *)&data->input[0], true);
 
   // create kernel & run
-  cnn_sr::LayerExecutor exec;
-  auto kernel = exec.create_layer_kernel(
-      _context, "src/kernel/layer_uber_kernel.cl", data->current_filter_count,
-      data->result_multiply);
+  auto kernel = pipeline->create_layer_kernel(data->current_filter_count,
+                                              data->result_multiply);
   opencl::MemoryHandler *gpu_buf_out;
-  cl_event finish_token = exec(*kernel, layer_data, gpu_buf_in, data->input_w,
-                               data->input_h, gpu_buf_out);
+  cl_event finish_token =
+      pipeline->execute_layer(*kernel, layer_data, gpu_buf_in, data->input_w,
+                              data->input_h, gpu_buf_out);
 
   size_t out_dim[2];
   layer_data.get_output_dimensions(out_dim, data->input_w, data->input_h);
@@ -128,10 +126,14 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   return true;
 }
 
-void init(LayerData *data) { this->data = data; }
+void init(cnn_sr::DataPipeline *pipeline, LayerData *data) {
+  this->data = data;
+  this->pipeline = pipeline;
+}
 
 private:
 LayerData *data = nullptr;
+cnn_sr::DataPipeline *pipeline = nullptr;
 END_TEST
 
 ///
@@ -144,11 +146,11 @@ DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
                algo_size = algo_w * algo_h,
                ground_truth_len =
                    (algo_w + padding * 2) * (algo_h + padding * 2);
-// #define DBG(X) std::cout << #X << "=" << X << std::endl;
+  // #define DBG(X) std::cout << #X << "=" << X << std::endl;
   // DBG(ground_truth_w)
   // DBG(algo_size)
   // DBG(ground_truth_len)
-// #undef DBG
+  // #undef DBG
 
   std::unique_ptr<float[]> cpu_algo_res(new float[algo_size]);
   std::unique_ptr<float[]> cpu_ground_truth(new float[ground_truth_len]);
@@ -331,10 +333,10 @@ int main(int argc, char **argv) {
 
   ADD_TEST(ExtractLumaTest, false, &data_provider.layer1_data.input);
   ADD_TEST(ExtractLumaTest, true, &data_provider.layer1_data.input);
-  ADD_TEST(LayerTest, &data_provider.layer1_data);
-  ADD_TEST(LayerTest, &data_provider.layer2_data_set1);
-  ADD_TEST(LayerTest, &data_provider.layer2_data_set2);
-  ADD_TEST(LayerTest, &data_provider.layer3_data);
+  ADD_TEST(LayerTest, &pipeline, &data_provider.layer1_data);
+  ADD_TEST(LayerTest, &pipeline, &data_provider.layer2_data_set1);
+  ADD_TEST(LayerTest, &pipeline, &data_provider.layer2_data_set2);
+  ADD_TEST(LayerTest, &pipeline, &data_provider.layer3_data);
   ADD_TEST(SumSquaredTest);
   ADD_TEST(SumTest, &pipeline);
   ADD_TEST(SubtractFromAllTest, &pipeline);
