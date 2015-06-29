@@ -53,10 +53,21 @@ class DataPipeline {
                        opencl::MemoryHandler*, size_t, size_t, bool,
                        cl_event* ev = nullptr);
 
-  float mean_squared_error(opencl::MemoryHandler* gpu_buf_ground_truth,
-                           opencl::MemoryHandler* gpu_buf_algo_res,
-                           size_t ground_truth_w, size_t ground_truth_h,
-                           cl_event* ev = nullptr);
+  cl_event mean_squared_error(opencl::MemoryHandler* gpu_buf_ground_truth,
+                              opencl::MemoryHandler* gpu_buf_algo_res,
+                              opencl::MemoryHandler*& gpu_buf_target,
+                              size_t ground_truth_w, size_t ground_truth_h,
+                              cl_event* ev = nullptr);
+  /**
+   * Raw form - see @param total_padding
+   * @param  total_padding        difference in size between ground_truth image
+   * and result. Should be equal to f1+f2+f3-3
+   */
+  cl_event mean_squared_error(opencl::MemoryHandler* gpu_buf_ground_truth,
+                              opencl::MemoryHandler* gpu_buf_algo_res,
+                              opencl::MemoryHandler*& gpu_buf_target,
+                              size_t ground_truth_w, size_t ground_truth_h,
+                              size_t total_padding, cl_event* ev = nullptr);
 
   // misc. kernels
   cl_event subtract_mean(opencl::MemoryHandler*, cl_event* ev = nullptr);
@@ -94,7 +105,7 @@ class DataPipeline {
   opencl::Kernel* _layer_1_kernel;
   opencl::Kernel* _layer_2_kernel;
   opencl::Kernel* _layer_3_kernel;
-  opencl::Kernel* _sum_sq_kernel;
+  opencl::Kernel* _mse_kernel;
   opencl::Kernel* _sum_kernel;
   opencl::Kernel* _subtract_from_all_kernel;
 };

@@ -11,7 +11,7 @@
 
 const char *const luma_kernel_file = "src/kernel/extract_luma.cl";
 const char *const layer_kernel_file = "src/kernel/layer_uber_kernel.cl";
-const char *const sum_sq_kernel_file = "src/kernel/sum_squared.cl";
+const char *const mse_kernel_file = "src/kernel/mse.cl";
 const char *const sum_kernel_file = "src/kernel/sum.cl";
 const char *const subtract_from_all_kernel_file =
     "src/kernel/subtract_from_all.cl";
@@ -39,7 +39,7 @@ DataPipeline::DataPipeline(Config *cfg, opencl::Context *context)
       _layer_1_kernel(nullptr),
       _layer_2_kernel(nullptr),
       _layer_3_kernel(nullptr),
-      _sum_sq_kernel(nullptr),
+      _mse_kernel(nullptr),
       _sum_kernel(nullptr),
       _subtract_from_all_kernel(nullptr) {}
 
@@ -70,8 +70,8 @@ void DataPipeline::load_kernels(int load_flags) {
   if(load_layers && !_layer_3_kernel)
     _layer_3_kernel = create_layer_kernel(1, 255);
 
-  if(load_misc && !_sum_sq_kernel)
-    _sum_sq_kernel = _context->create_kernel(sum_sq_kernel_file);
+  if(load_misc && !_mse_kernel)
+    _mse_kernel = _context->create_kernel(mse_kernel_file);
   if(load_misc && !_sum_kernel)
     _sum_kernel = _context->create_kernel(sum_kernel_file);
   if(load_misc && !_subtract_from_all_kernel)
@@ -371,53 +371,67 @@ cl_event DataPipeline::execute_layer(
 /// execute: cnn backpropagation
 ///
 
-float DataPipeline::mean_squared_error(
+cl_event DataPipeline::mean_squared_error(
     opencl::MemoryHandler *gpu_buf_ground_truth,
-    opencl::MemoryHandler *gpu_buf_algo_res, size_t ground_truth_w,
-    size_t ground_truth_h, cl_event *ev_to_wait_for) {
-  // TODO change return type to double
-  // TODO this is not correct: value per out_w*out_h*n_current_filter_count
+    opencl::MemoryHandler *gpu_buf_algo_res,
+    opencl::MemoryHandler *&gpu_buf_target,  //
+    size_t ground_truth_w, size_t ground_truth_h, cl_event *ev_to_wait_for) {
+  size_t padding = _config->f1 + _config->f2 + _config->f3 - 3;
+  return mean_squared_error(gpu_buf_ground_truth, gpu_buf_algo_res,
+                            gpu_buf_target, ground_truth_w, ground_truth_h,
+                            padding, ev_to_wait_for);
+}
+
+cl_event DataPipeline::mean_squared_error(
+    opencl::MemoryHandler *gpu_buf_ground_truth,
+    opencl::MemoryHandler *gpu_buf_algo_res,
+    opencl::MemoryHandler *&gpu_buf_target,  //
+    size_t ground_truth_w, size_t ground_truth_h, size_t total_padding,
+    cl_event *ev_to_wait_for) {
+  //
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
-  size_t wasted = _config->f1 + _config->f2 + _config->f3 - 3,
-         algo_w = ground_truth_w - wasted, algo_h = ground_truth_h - wasted,
-         algo_size = algo_w * algo_h;
+  size_t algo_w = ground_truth_w - total_padding,
+         algo_h = ground_truth_h - total_padding, algo_size = algo_w * algo_h;
 
   size_t global_work_size[2];
   size_t local_work_size[2];
-  opencl::utils::work_sizes(*_sum_sq_kernel, global_work_size, local_work_size,
+  opencl::utils::work_sizes(*_mse_kernel, global_work_size, local_work_size,
                             algo_w, algo_h);
   global_work_size[0] *= global_work_size[1];
   local_work_size[0] *= local_work_size[1];
   std::cout << "global work size: " << global_work_size[0] << std::endl;
   std::cout << "local work size: " << local_work_size[0] << std::endl;
 
-  const float out_init_val = 0;
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_ulong));
-  _context->write_buffer(gpu_buf_out, (void *)&out_init_val, true);  // zeroe
+  // check allocations
+  if (!allocation_has_right_size(
+          gpu_buf_ground_truth,
+          sizeof(cl_float) * ground_truth_w * ground_truth_h)) {
+    throw std::runtime_error(
+        "Provided ground_truth_w, ground_truth_h dimensions did not match "
+        "allocated gpu_buf_ground_truth buffer size");
+  }
+  if (!allocation_has_right_size(gpu_buf_algo_res,
+                                 sizeof(cl_float) * algo_size)) {
+    throw std::runtime_error(
+        "Allocated gpu_buf_algo_res buffer size did not match calculated size");
+  }
+  if (!allocation_has_right_size(gpu_buf_target,
+                                 sizeof(cl_float) * algo_size)) {
+    gpu_buf_target =
+        _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float) * algo_size);
+  }
+  _context->zeros_float(gpu_buf_target, true);
 
   // kernel args
-  _sum_sq_kernel->push_arg(gpu_buf_ground_truth);
-  _sum_sq_kernel->push_arg(gpu_buf_algo_res);
-  _sum_sq_kernel->push_arg(sizeof(cl_float) * local_work_size[0],
-                           nullptr);  // scrath
-  _sum_sq_kernel->push_arg(gpu_buf_out);
-  _sum_sq_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
-  _sum_sq_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
-  _sum_sq_kernel->push_arg(sizeof(cl_uint), (void *)&algo_size);
+  _mse_kernel->push_arg(gpu_buf_ground_truth);
+  _mse_kernel->push_arg(gpu_buf_algo_res);
+  _mse_kernel->push_arg(gpu_buf_target);
+  _mse_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
+  _mse_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
+  _mse_kernel->push_arg(sizeof(cl_uint), (void *)&algo_size);
 
   // run
-  cl_event finish_token = _sum_sq_kernel->execute(
-      1, global_work_size, local_work_size, ev_to_wait_for);
-
-  // read (values may not be exactly the same since float->long data loss,
-  // but should be close enough)
-  float read_val;
-  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_ulong), (void *)&read_val,
-                        true, &finish_token, 1);
-
-  float mse_per_pixel = read_val / algo_size;
-  std::cout << "Mean squared error raw: " << read_val
-            << ", per pixel: " << mse_per_pixel << std::endl;
-  return mse_per_pixel;
+  return _mse_kernel->execute(1, global_work_size, local_work_size,
+                              ev_to_wait_for);
 }
 }
