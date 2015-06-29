@@ -21,13 +21,17 @@ namespace cnn_sr {
 struct LayerData;
 struct Config;
 
+struct CnnLayerGpuAllocationPool {
+  opencl::MemoryHandler* weights = nullptr;
+  opencl::MemoryHandler* bias = nullptr;
+  opencl::MemoryHandler* output = nullptr;
+};
+
 /**
  * Class used to execute various pipeline methods f.e.:
  * - luma extraction
  * - mean squared error
  * - whole cnn
- *
- * TODO manage gpu bufers here
  */
 class DataPipeline {
  public:
@@ -41,11 +45,13 @@ class DataPipeline {
   void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
 
   cl_event extract_luma(opencl::utils::ImageData&, opencl::MemoryHandler*&,
-                        bool, cl_event* ev = nullptr);
+                        opencl::MemoryHandler*&, bool, cl_event* ev = nullptr);
 
-  cl_event execute_cnn(LayerData&, LayerData&, LayerData&,
-                       opencl::MemoryHandler*, opencl::MemoryHandler*&, size_t,
-                       size_t, bool, cl_event* ev = nullptr);
+  cl_event execute_cnn(LayerData&, cnn_sr::CnnLayerGpuAllocationPool&,  //
+                       LayerData&, cnn_sr::CnnLayerGpuAllocationPool&,  //
+                       LayerData&, cnn_sr::CnnLayerGpuAllocationPool&,  //
+                       opencl::MemoryHandler*, size_t, size_t, bool,
+                       cl_event* ev = nullptr);
 
   float mean_squared_error(opencl::MemoryHandler* gpu_buf_ground_truth,
                            opencl::MemoryHandler* gpu_buf_algo_res,
@@ -58,8 +64,9 @@ class DataPipeline {
   cl_event subtract_from_all(opencl::MemoryHandler*, float,
                              cl_event* ev = nullptr);
   cl_event execute_layer(opencl::Kernel&, const LayerData&,
+                         cnn_sr::CnnLayerGpuAllocationPool&,
                          opencl::MemoryHandler*&, size_t, size_t,
-                         opencl::MemoryHandler*&, cl_event* ev = nullptr);
+                         cl_event* ev = nullptr);
   opencl::Kernel* create_layer_kernel(size_t current_filter_count,
                                       int result_multiply = 0);
 
@@ -68,11 +75,19 @@ class DataPipeline {
   void load_kernels(int load_flags);
   void pre_execute_layer_validation(const LayerData&, opencl::MemoryHandler*,
                                     size_t, size_t);
+  /** Either allocation has exact size or release it. Memory is deallocated
+   * here, but we cannot allocate it with proper size since f.e. allocating
+   * image is different then allocating normal buffer.
+   * */
+  bool allocation_has_right_size(opencl::MemoryHandler*, size_t);
 
  private:
   Config* const _config;
   opencl::Context* const _context;
   bool _initialized;
+
+  /** Single 64bit number. Quite useful. */
+  opencl::MemoryHandler* _tmp_64bit = nullptr;
 
   opencl::Kernel* _luma_kernel_norm;
   opencl::Kernel* _luma_kernel_raw;

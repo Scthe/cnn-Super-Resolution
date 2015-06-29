@@ -19,8 +19,11 @@ MemoryHandler::MemoryHandler()
 }
 
 void MemoryHandler::release(){
-  if(!released && handle)
+  if(!released && handle){
     clReleaseMemObject(handle);
+    // auto ciErr1 = clReleaseMemObject(handle); // TODO check error
+    // check_error(ciErr1, "Error in MemoryHandler::release");
+  }
   released = true;
 }
 
@@ -265,6 +268,7 @@ MemoryHandler* Context::create_image(cl_mem_flags flags,
   k->handle = clCreateImage2D(_clcontext, flags,
                               &image_format, w, h,
                               0, nullptr, &ciErr1);
+  k->size = w * h; // TODO mul by #channels
   check_error(ciErr1, "Error in clCreateImage2D");
   return k;
 }

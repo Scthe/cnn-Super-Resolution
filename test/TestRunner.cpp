@@ -17,6 +17,7 @@ using namespace test::data;
 /// ExtractLumaTest
 ///
 DEFINE_TEST_STR(ExtractLumaTest, "Extract luma test", context) {
+  // TODO use DataPipeline
   opencl::utils::ImageData data;
   load_image("test/data/color_grid.png", data);
   // std::cout << "img: " << data.w << "x" << data.h << "x" << data.bpp
@@ -100,10 +101,9 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   // create kernel & run
   auto kernel = pipeline->create_layer_kernel(data->current_filter_count,
                                               data->result_multiply);
-  opencl::MemoryHandler *gpu_buf_out;
-  cl_event finish_token =
-      pipeline->execute_layer(*kernel, layer_data, gpu_buf_in, data->input_w,
-                              data->input_h, gpu_buf_out);
+  cnn_sr::CnnLayerGpuAllocationPool gpu_alloc;
+  cl_event finish_token = pipeline->execute_layer(
+      *kernel, layer_data, gpu_alloc, gpu_buf_in, data->input_w, data->input_h);
 
   size_t out_dim[2];
   layer_data.get_output_dimensions(out_dim, data->input_w, data->input_h);
@@ -111,7 +111,7 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
 
   // read results
   std::unique_ptr<float[]> cpu_buf(new float[out_count]);
-  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_float) * out_count,
+  _context->read_buffer(gpu_alloc.output, 0, sizeof(cl_float) * out_count,
                         (void *)cpu_buf.get(), true, &finish_token, 1);
 
   // compare results
