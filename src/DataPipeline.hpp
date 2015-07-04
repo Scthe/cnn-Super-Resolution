@@ -37,6 +37,7 @@ class DataPipeline {
  public:
   static int LOAD_KERNEL_LUMA;
   static int LOAD_KERNEL_LAYERS;
+  static int LOAD_KERNEL_BACKPROPAGATE;
   static int LOAD_KERNEL_MISC;
   static int LOAD_KERNEL_NONE;
   static int LOAD_KERNEL_ALL;
@@ -80,6 +81,7 @@ class DataPipeline {
                          cl_event* ev = nullptr);
   opencl::Kernel* create_layer_kernel(size_t current_filter_count,
                                       int result_multiply = 0);
+  opencl::Kernel* create_backpropagation_kernel(size_t current_filter_count);
 
  private:
   void check_initialized(int kernel_load_flags);
@@ -105,6 +107,9 @@ class DataPipeline {
   opencl::Kernel* _layer_1_kernel;
   opencl::Kernel* _layer_2_kernel;
   opencl::Kernel* _layer_3_kernel;
+  opencl::Kernel* _layer_1_backpropagate_kernel;
+  opencl::Kernel* _layer_2_backpropagate_kernel;
+  opencl::Kernel* _layer_3_backpropagate_kernel;
   opencl::Kernel* _mse_kernel;
   opencl::Kernel* _sum_kernel;
   opencl::Kernel* _subtract_from_all_kernel;

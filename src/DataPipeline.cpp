@@ -13,6 +13,7 @@ const char *const luma_kernel_file = "src/kernel/extract_luma.cl";
 const char *const layer_kernel_file = "src/kernel/layer_uber_kernel.cl";
 const char *const mse_kernel_file = "src/kernel/mse.cl";
 const char *const sum_kernel_file = "src/kernel/sum.cl";
+const char *const deltas_kernel_file = "src/kernel/layer_deltas.cl";
 const char *const subtract_from_all_kernel_file =
     "src/kernel/subtract_from_all.cl";
 
@@ -21,9 +22,11 @@ namespace cnn_sr {
 int DataPipeline::LOAD_KERNEL_LUMA = 1;
 int DataPipeline::LOAD_KERNEL_LAYERS = 2;
 int DataPipeline::LOAD_KERNEL_MISC = 4;
+int DataPipeline::LOAD_KERNEL_BACKPROPAGATE = 8;
 int DataPipeline::LOAD_KERNEL_NONE = 0;
-int DataPipeline::LOAD_KERNEL_ALL = DataPipeline::LOAD_KERNEL_LUMA |
+int DataPipeline::LOAD_KERNEL_ALL = DataPipeline::LOAD_KERNEL_LUMA |  //
                                     DataPipeline::LOAD_KERNEL_LAYERS |
+                                    DataPipeline::LOAD_KERNEL_BACKPROPAGATE |
                                     DataPipeline::LOAD_KERNEL_MISC;
 
 ///
@@ -51,6 +54,7 @@ void DataPipeline::init(int load_flags) {
 void DataPipeline::load_kernels(int load_flags) {
   bool load_luma = (load_flags & DataPipeline::LOAD_KERNEL_LUMA) != 0,
        load_layers = (load_flags & DataPipeline::LOAD_KERNEL_LAYERS) != 0,
+       load_backp = (load_flags & DataPipeline::LOAD_KERNEL_BACKPROPAGATE) != 0,
        load_misc = (load_flags & DataPipeline::LOAD_KERNEL_MISC) != 0;
   if (load_layers && !_config) {
     throw std::runtime_error(
@@ -69,6 +73,13 @@ void DataPipeline::load_kernels(int load_flags) {
     _layer_2_kernel = create_layer_kernel(_config->n2);
   if(load_layers && !_layer_3_kernel)
     _layer_3_kernel = create_layer_kernel(1, 255);
+
+  if(load_backp && !_layer_1_backpropagate_kernel)
+    _layer_1_backpropagate_kernel = create_backpropagation_kernel(1);
+  if(load_backp && !_layer_2_backpropagate_kernel)
+    _layer_2_backpropagate_kernel = create_backpropagation_kernel(_config->n1);
+  if(load_backp && !_layer_3_backpropagate_kernel)
+    _layer_3_backpropagate_kernel = create_backpropagation_kernel(_config->n2);
 
   if(load_misc && !_mse_kernel)
     _mse_kernel = _context->create_kernel(mse_kernel_file);
@@ -94,6 +105,13 @@ opencl::Kernel *DataPipeline::create_layer_kernel(size_t current_filter_count,
   }
 
   return _context->create_kernel(layer_kernel_file, buf);
+}
+
+opencl::Kernel *DataPipeline::create_backpropagation_kernel(
+    size_t current_filter_count) {
+  char buf[255];
+  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", current_filter_count);
+  return _context->create_kernel(deltas_kernel_file, buf);
 }
 
 void DataPipeline::check_initialized(int kernel_load_flags) {
