@@ -35,10 +35,12 @@
  *  												 Each row for different point in range 0..input_w*input_h
  *  output               := VECTOR[FLOAT], min size: out_w * out_h * current_filter_count
  *                           Expected output
- *  weights              := VECTOR[FLOAT], min size: f_spatial_size^2 * n_prev_filter_cnt
- *  												 Each column for different filter(from 1 to n_prev_filter_cnt)
- *  												 Each row for different point in range 0..f_spatial_size^2
- *  												 Each paragraph is 1 row of points  (f_spatial_size points)
+ *  weights              := VECTOR[FLOAT], min size: f_spatial_size^2 * n_prev_filter_cnt * current_filter_count
+ *  												 There are f_spatial_size paragraphs
+ *  												 Each paragraph consists of f_spatial_size lines, representing 1 row.
+ *  												 Each row contains current_filter_count*n_prev_filter_cnt numbers,
+ *  												 grouped by n_prev_filter_cnt (n_prev_filter_cnt groups,
+ *  												 current_filter_count numbers per each group).
  *  bias                 := VECTOR[FLOAT], min size: current_filter_count
  *
  *
