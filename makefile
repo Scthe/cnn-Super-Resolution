@@ -28,6 +28,7 @@ LFLAGS = -std=c++11 \
 __OBJ = Config.o \
 	LayerData.o \
 	DataPipeline.o \
+	ConfigBasedDataPipeline.o \
 	Utils.o \
 	Context.o \
 	UtilsOpenCL.o \

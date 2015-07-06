@@ -2,7 +2,7 @@
 
 #include "Config.hpp"
 #include "LayerData.hpp"
-#include "DataPipeline.hpp"
+#include "ConfigBasedDataPipeline.hpp"
 #include "Utils.hpp"
 #include "opencl\Context.hpp"
 #include "opencl\UtilsOpenCL.hpp"
@@ -64,12 +64,26 @@ int main(int argc, char** argv) {
     opencl::Context context(argc, argv);
     context.init();
 
-    DataPipeline data_pipeline(&cfg, &context);
+    ConfigBasedDataPipeline data_pipeline(&cfg, &context);
     data_pipeline.init();
 
+    std::cout << "DONE" << std::endl;
+    exit(EXIT_SUCCESS);
+
+    ///
+    ///
+    ///
+    ///
+    ///
+    ///
+    ///
+    ///
+    ///
+    ///
+    ///
     GpuAllocationPool gpu_alloc;
 
-    // load images
+    // read images
     // (small to process, large to mean square error)
     opencl::utils::ImageData img_large, img_small;
     opencl::utils::load_image(img_large_file, img_large);
@@ -78,6 +92,7 @@ int main(int argc, char** argv) {
     opencl::utils::load_image(img_small_file, img_small);
     std::cout << "img_small: " << img_small.w << "x" << img_small.h << "x"
               << img_small.bpp << std::endl;
+
     // load images into gpu, preprocess
     /* clang-format off */
     cl_event finish_token1 = data_pipeline.extract_luma(img_large,
@@ -89,14 +104,11 @@ int main(int argc, char** argv) {
     /* clang-format on */
 
     // process with layers
-    LayerData layer_1 = LayerData::from_N_distribution(1, cfg.n1, cfg.f1);
-    LayerData layer_2 = LayerData::from_N_distribution(cfg.n1, cfg.n2, cfg.f2);
-    LayerData layer_3 = LayerData::from_N_distribution(cfg.n2, 1, cfg.f3);
 
-    auto finish_token3 = data_pipeline.execute_cnn(
-        layer_1, gpu_alloc.layer_1_pool,  //
-        layer_2, gpu_alloc.layer_2_pool,  //
-        layer_3, gpu_alloc.layer_3_pool,  //
+    auto finish_token3 = data_pipeline.forward(
+        gpu_alloc.layer_1_pool,  //
+        gpu_alloc.layer_2_pool,  //
+        gpu_alloc.layer_3_pool,  //
         gpu_alloc.cnn_input, img_small.w, img_small.h, true, &finish_token2);
 
     // mean square error

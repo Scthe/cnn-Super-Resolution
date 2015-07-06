@@ -99,8 +99,8 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   _context->write_buffer(gpu_buf_in, (void *)&data->input[0], true);
 
   // create kernel & run
-  auto kernel = pipeline->create_layer_kernel(data->current_filter_count,
-                                              data->result_multiply);
+  auto kernel =
+      pipeline->create_layer_kernel(layer_data, data->result_multiply);
   cnn_sr::CnnLayerGpuAllocationPool gpu_alloc;
   cl_event finish_token = pipeline->execute_layer(
       *kernel, layer_data, gpu_alloc, gpu_buf_in, data->input_w, data->input_h);
@@ -296,7 +296,7 @@ int main(int argc, char **argv) {
 
   opencl::Context context(argc, argv);
   context.init();
-  cnn_sr::DataPipeline pipeline(nullptr, &context);
+  cnn_sr::DataPipeline pipeline(&context);
   pipeline.init(cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
 
   //

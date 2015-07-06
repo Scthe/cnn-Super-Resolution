@@ -7,7 +7,6 @@
 #include "LayerData.hpp"
 #include "opencl/Context.hpp"
 #include "opencl/UtilsOpenCL.hpp"
-#include "Config.hpp"
 
 const char *const luma_kernel_file = "src/kernel/extract_luma.cl";
 const char *const layer_kernel_file = "src/kernel/layer_uber_kernel.cl";
@@ -34,21 +33,11 @@ int DataPipeline::LOAD_KERNEL_ALL = DataPipeline::LOAD_KERNEL_LUMA |  //
 /// Construction/init/misc
 ///
 
-DataPipeline::DataPipeline(Config *cfg, opencl::Context *context)
-    : _config(cfg),
-      _context(context),
+DataPipeline::DataPipeline(opencl::Context *context)
+    : _context(context),
       _initialized(false),
       _luma_kernel_norm(nullptr),
       _luma_kernel_raw(nullptr),
-      _layer_1_kernel(nullptr),
-      _layer_2_kernel(nullptr),
-      _layer_3_kernel(nullptr),
-      _layer_1_backpropagate_kernel(nullptr),
-      _layer_2_backpropagate_kernel(nullptr),
-      _layer_3_backpropagate_kernel(nullptr),
-      _layer_1_deltas_kernel(nullptr),
-      _layer_2_deltas_kernel(nullptr),
-      _layer_3_deltas_kernel(nullptr),
       _mse_kernel(nullptr),
       _sum_kernel(nullptr),
       _subtract_from_all_kernel(nullptr) {}
@@ -56,91 +45,6 @@ DataPipeline::DataPipeline(Config *cfg, opencl::Context *context)
 void DataPipeline::init(int load_flags) {
   load_kernels(load_flags);
   _initialized = true;
-}
-
-void DataPipeline::load_kernels(int load_flags) {
-  bool load_luma = (load_flags & DataPipeline::LOAD_KERNEL_LUMA) != 0,
-       load_layers = (load_flags & DataPipeline::LOAD_KERNEL_LAYERS) != 0,
-       load_backp = (load_flags & DataPipeline::LOAD_KERNEL_BACKPROPAGATE) != 0,
-       load_misc = (load_flags & DataPipeline::LOAD_KERNEL_MISC) != 0;
-  if (load_layers && !_config) {
-    throw std::runtime_error(
-        "Tried to load layer kernels without provided config");
-  }
-
-  if (load_luma && !_luma_kernel_norm)
-    _luma_kernel_norm =
-        _context->create_kernel(luma_kernel_file, "-D NORMALIZE");
-  if (load_luma && !_luma_kernel_raw)
-    _luma_kernel_raw = _context->create_kernel(luma_kernel_file);
-
-  if (load_layers && !_layer_1_kernel)
-    _layer_1_kernel = create_layer_kernel(_config->n1);
-  if (load_layers && !_layer_2_kernel)
-    _layer_2_kernel = create_layer_kernel(_config->n2);
-  if (load_layers && !_layer_3_kernel)
-    _layer_3_kernel = create_layer_kernel(1, 255);
-
-  if (load_backp) {
-    if (!_layer_1_deltas_kernel)
-      _layer_1_deltas_kernel = create_deltas_kernel(1);
-    if (!_layer_2_deltas_kernel)
-      _layer_2_deltas_kernel = create_deltas_kernel(_config->n1);
-    if (!_layer_3_deltas_kernel)
-      _layer_3_deltas_kernel = create_deltas_kernel(_config->n2);
-
-    if (!_layer_1_backpropagate_kernel)
-      _layer_1_backpropagate_kernel =
-          create_backpropagation_kernel(_config->n1, 1, _config->f1);
-    if (!_layer_2_backpropagate_kernel)
-      _layer_2_backpropagate_kernel =
-          create_backpropagation_kernel(_config->n2, _config->n1, _config->f2);
-    if (!_layer_3_backpropagate_kernel)
-      _layer_3_backpropagate_kernel =
-          create_backpropagation_kernel(1, _config->n2, _config->f3);
-  }
-
-  if (load_misc && !_mse_kernel)
-    _mse_kernel = _context->create_kernel(mse_kernel_file);
-  if (load_misc && !_sum_kernel)
-    _sum_kernel = _context->create_kernel(sum_kernel_file);
-  if (load_misc && !_subtract_from_all_kernel)
-    _subtract_from_all_kernel =
-        _context->create_kernel(subtract_from_all_kernel_file);
-}
-
-opencl::Kernel *DataPipeline::create_layer_kernel(size_t current_filter_count,
-                                                  int result_multiply) {
-  char buf[255];
-  if (result_multiply) {
-    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=1 -D RESULT_MULTIPLY=%d",
-             result_multiply);
-    std::cout << "RESULT_MULTIPLY=" << result_multiply << " (last layer)"
-              << std::endl;
-  } else {
-    // TODO current_filter_count=64 causes errors:
-    // CL_INVALID_COMMAND_QUEUE (maybe memory alloc?)
-    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", current_filter_count);
-  }
-
-  return _context->create_kernel(layer_kernel_file, buf);
-}
-
-opencl::Kernel *DataPipeline::create_deltas_kernel(
-    size_t current_filter_count) {
-  char buf[255];
-  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", current_filter_count);
-  return _context->create_kernel(deltas_kernel_file, buf);
-}
-
-opencl::Kernel *DataPipeline::create_backpropagation_kernel(
-    size_t current_filter_count, size_t n_prev_filter_cnt,
-    size_t f_spatial_size) {
-  size_t per_filter_size = f_spatial_size * f_spatial_size * n_prev_filter_cnt;
-  char buf[255];
-  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d -D PER_FILTER_SIZE=%d",
-           current_filter_count, per_filter_size);
-  return _context->create_kernel(backpropagate_kernel_file, buf);
 }
 
 void DataPipeline::check_initialized(int kernel_load_flags) {
@@ -161,6 +65,64 @@ bool DataPipeline::allocation_has_right_size(opencl::MemoryHandler *alloc,
                "may be a bug." << std::endl;
   alloc->release();
   return false;
+}
+
+///
+/// Kernel loading
+///
+
+void DataPipeline::load_kernels(int load_flags) {
+  bool load_luma = (load_flags & DataPipeline::LOAD_KERNEL_LUMA) != 0,
+       load_misc = (load_flags & DataPipeline::LOAD_KERNEL_MISC) != 0;
+
+  if (load_luma) {
+    auto norm_arg = "-D NORMALIZE";
+    if (!_luma_kernel_norm)
+      _luma_kernel_norm = _context->create_kernel(luma_kernel_file, norm_arg);
+    if (!_luma_kernel_raw)
+      _luma_kernel_raw = _context->create_kernel(luma_kernel_file);
+  }
+
+  if (load_misc) {
+    if (!_mse_kernel) _mse_kernel = _context->create_kernel(mse_kernel_file);
+    if (!_sum_kernel) _sum_kernel = _context->create_kernel(sum_kernel_file);
+    if (!_subtract_from_all_kernel)
+      _subtract_from_all_kernel =
+          _context->create_kernel(subtract_from_all_kernel_file);
+  }
+}
+
+opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d,
+                                                  int result_multiply) {
+  char buf[255];
+  if (result_multiply) {
+    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=1 -D RESULT_MULTIPLY=%d",
+             result_multiply);
+    std::cout << "RESULT_MULTIPLY=" << result_multiply << " (last layer)"
+              << std::endl;
+  } else {
+    // TODO current_filter_count=64 causes errors:
+    // CL_INVALID_COMMAND_QUEUE (maybe gpu memory alloc?)
+    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.current_filter_count);
+  }
+
+  return _context->create_kernel(layer_kernel_file, buf);
+}
+
+opencl::Kernel *DataPipeline::create_deltas_kernel(const LayerData &d) {
+  char buf[255];
+  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.current_filter_count);
+  return _context->create_kernel(deltas_kernel_file, buf);
+}
+
+opencl::Kernel *DataPipeline::create_backpropagation_kernel(
+    const LayerData &d) {
+  size_t per_filter_size =
+      d.f_spatial_size * d.f_spatial_size * d.n_prev_filter_cnt;
+  char buf[255];
+  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d -D PER_FILTER_SIZE=%d",
+           d.current_filter_count, per_filter_size);
+  return _context->create_kernel(backpropagate_kernel_file, buf);
 }
 
 ///
@@ -291,52 +253,6 @@ cl_event DataPipeline::subtract_from_all(opencl::MemoryHandler *data, float val,
 /// execute: cnn forward propagation
 ///
 
-cl_event DataPipeline::execute_cnn(
-    LayerData &layer_1, cnn_sr::CnnLayerGpuAllocationPool &layer_1_alloc,
-    LayerData &layer_2, cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
-    LayerData &layer_3, cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc,
-    opencl::MemoryHandler *input, size_t input_w, size_t input_h,
-    bool subtract_input_mean, cl_event *ev_to_wait_for) {
-  check_initialized(DataPipeline::LOAD_KERNEL_LAYERS);
-  size_t l2_input[2], l3_input[2];
-  layer_1.get_output_dimensions(l2_input, input_w, input_h);
-  layer_2.get_output_dimensions(l3_input, l2_input[0], l2_input[1]);
-
-  _context->block();
-
-  cl_event ev;
-  if (subtract_input_mean) {
-    std::cout << "### Subtracting mean from input" << std::endl;
-    ev = this->subtract_mean(input, ev_to_wait_for);
-    ev_to_wait_for = &ev;
-  }
-
-  _context->block();
-
-  // layer 1
-  std::cout << "### Executing layer 1" << std::endl;
-  cl_event finish_token1 =
-      execute_layer(*_layer_1_kernel, layer_1, layer_1_alloc,  //
-                    input, input_w, input_h, ev_to_wait_for);
-  _context->block();
-
-  // layer 2
-  std::cout << "### Executing layer 2" << std::endl;
-  cl_event finish_token2 = execute_layer(
-      *_layer_2_kernel, layer_2, layer_2_alloc, layer_1_alloc.output,
-      l2_input[0], l2_input[1], &finish_token1);
-  _context->block();
-
-  // layer 3
-  std::cout << "### Executing layer 3" << std::endl;
-  cl_event finish_token3 = execute_layer(
-      *_layer_3_kernel, layer_3, layer_3_alloc, layer_2_alloc.output,
-      l3_input[0], l3_input[1], &finish_token2);
-  _context->block();
-
-  return finish_token3;
-}
-
 void DataPipeline::pre_execute_layer_validation(const LayerData &data,
                                                 opencl::MemoryHandler *input,
                                                 size_t input_w,
@@ -415,19 +331,8 @@ cl_event DataPipeline::execute_layer(
 }
 
 ///
-/// execute: cnn backpropagation
+/// backpropagation
 ///
-
-cl_event DataPipeline::mean_squared_error(
-    opencl::MemoryHandler *gpu_buf_ground_truth,
-    opencl::MemoryHandler *gpu_buf_algo_res,
-    opencl::MemoryHandler *&gpu_buf_target,  //
-    size_t ground_truth_w, size_t ground_truth_h, cl_event *ev_to_wait_for) {
-  size_t padding = _config->f1 + _config->f2 + _config->f3 - 3;
-  return mean_squared_error(gpu_buf_ground_truth, gpu_buf_algo_res,
-                            gpu_buf_target, ground_truth_w, ground_truth_h,
-                            padding, ev_to_wait_for);
-}
 
 cl_event DataPipeline::mean_squared_error(
     opencl::MemoryHandler *gpu_buf_ground_truth,
