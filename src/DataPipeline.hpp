@@ -81,7 +81,10 @@ class DataPipeline {
                          cl_event* ev = nullptr);
   opencl::Kernel* create_layer_kernel(size_t current_filter_count,
                                       int result_multiply = 0);
-  opencl::Kernel* create_backpropagation_kernel(size_t current_filter_count);
+  opencl::Kernel* create_deltas_kernel(size_t current_filter_count);
+  opencl::Kernel* create_backpropagation_kernel(size_t current_filter_count,
+                                                size_t n_prev_filter_cnt,
+                                                size_t f_spatial_size);
 
  private:
   void check_initialized(int kernel_load_flags);
@@ -110,6 +113,9 @@ class DataPipeline {
   opencl::Kernel* _layer_1_backpropagate_kernel;
   opencl::Kernel* _layer_2_backpropagate_kernel;
   opencl::Kernel* _layer_3_backpropagate_kernel;
+  opencl::Kernel* _layer_1_deltas_kernel;
+  opencl::Kernel* _layer_2_deltas_kernel;
+  opencl::Kernel* _layer_3_deltas_kernel;
   opencl::Kernel* _mse_kernel;
   opencl::Kernel* _sum_kernel;
   opencl::Kernel* _subtract_from_all_kernel;
