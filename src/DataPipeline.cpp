@@ -111,7 +111,7 @@ opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d,
 
 opencl::Kernel *DataPipeline::create_deltas_kernel(const LayerData &d) {
   char buf[255];
-  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.current_filter_count);
+  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.n_prev_filter_cnt);
   return _context->create_kernel(deltas_kernel_file, buf);
 }
 
@@ -301,17 +301,15 @@ cl_event DataPipeline::execute_layer(
   if (!allocation_has_right_size(gpu_alloc.weights, weights_alloc_size)) {
     gpu_alloc.weights =
         _context->allocate(CL_MEM_READ_ONLY, weights_alloc_size);
+    _context->write_buffer(gpu_alloc.weights, (void *)data.weights_ptr(), true);
   }
   if (!allocation_has_right_size(gpu_alloc.bias, bias_alloc_size)) {
     gpu_alloc.bias = _context->allocate(CL_MEM_READ_ONLY, bias_alloc_size);
+    _context->write_buffer(gpu_alloc.bias, (void *)data.bias_ptr(), true);
   }
   if (!allocation_has_right_size(gpu_alloc.output, out_alloc_size)) {
     gpu_alloc.output = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
   }
-
-  _context->block();
-  _context->write_buffer(gpu_alloc.weights, (void *)data.weights_ptr(), true);
-  _context->write_buffer(gpu_alloc.bias, (void *)data.bias_ptr(), true);
   _context->zeros_float(gpu_alloc.output, true);
 
   // args
@@ -355,23 +353,19 @@ cl_event DataPipeline::mean_squared_error(
   std::cout << "local work size: " << local_work_size[0] << std::endl;
 
   // check allocations
-  if (!allocation_has_right_size(
-          gpu_buf_ground_truth,
-          sizeof(cl_float) * ground_truth_w * ground_truth_h)) {
+  /* clang-format off */
+  if (!allocation_has_right_size(gpu_buf_ground_truth, sizeof(cl_float) * ground_truth_w * ground_truth_h)) {
     throw std::runtime_error(
         "Provided ground_truth_w, ground_truth_h dimensions did not match "
         "allocated gpu_buf_ground_truth buffer size");
   }
-  if (!allocation_has_right_size(gpu_buf_algo_res,
-                                 sizeof(cl_float) * algo_size)) {
-    throw std::runtime_error(
-        "Allocated gpu_buf_algo_res buffer size did not match calculated size");
+  if (!allocation_has_right_size(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
+    throw std::runtime_error( "Allocated gpu_buf_algo_res buffer size did not match calculated size");
   }
-  if (!allocation_has_right_size(gpu_buf_target,
-                                 sizeof(cl_float) * algo_size)) {
-    gpu_buf_target =
-        _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float) * algo_size);
+  if (!allocation_has_right_size(gpu_buf_target, sizeof(cl_float) * algo_size)) {
+    gpu_buf_target = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float) * algo_size);
   }
+  /* clang-format on */
   _context->zeros_float(gpu_buf_target, true);
 
   // kernel args
@@ -385,5 +379,82 @@ cl_event DataPipeline::mean_squared_error(
   // run
   return _mse_kernel->execute(1, global_work_size, local_work_size,
                               ev_to_wait_for);
+}
+
+cl_event DataPipeline::calculate_deltas(
+    opencl::Kernel &kernel,       //
+    const LayerData &prev_layer,  //
+    const LayerData &curr_layer,  //
+    CnnLayerGpuAllocationPool &prev_gpu_alloc,
+    CnnLayerGpuAllocationPool &curr_gpu_alloc,  //
+    size_t curr_layer_out_w,
+    size_t curr_layer_out_h,  //
+    cl_event *ev_to_wait_for) {
+  // deltas for previous layer based on current layer
+  //
+  // pre validation
+  LayerData::validate(curr_layer);
+  // TODO assert prev_layer.current_filter_count ==
+  // current_layer.n_previous_filter_count
+
+  size_t input_w = curr_layer_out_w + curr_layer.f_spatial_size - 1,
+         input_h = curr_layer_out_h + curr_layer.f_spatial_size - 1;
+  size_t out_count = curr_layer_out_w * curr_layer_out_h *
+                     curr_layer.current_filter_count,
+         in_count = input_w * input_h * curr_layer.n_prev_filter_cnt;
+  // gpu memory alloc sizes
+  size_t weights_alloc_size = sizeof(cl_float) * curr_layer.weight_size(),
+         in_alloc_size = sizeof(cl_float) * in_count,
+         out_alloc_size = sizeof(cl_float) * out_count;
+
+  /* clang-format off */
+  // gpu memory allocation, used buffers:
+  //   curr_gpu_alloc.deltas
+  //   curr_gpu_alloc.weights
+  //   prev_layer.output <- this is input for current layer (used for activation_func_derivative)
+  //   prev_layer.deltas <- as target
+  if (!allocation_has_right_size(curr_gpu_alloc.deltas, out_alloc_size)) {
+    throw std::runtime_error(
+        "Tried to calculate deltas for previous layer, but deltas for current layer are not valid !");
+  }
+  if (!allocation_has_right_size(curr_gpu_alloc.weights, weights_alloc_size)) {
+    curr_gpu_alloc.weights = _context->allocate(CL_MEM_READ_ONLY, weights_alloc_size);
+    _context->write_buffer(curr_gpu_alloc.weights, (void *)curr_layer.weights_ptr(), true);
+  }
+  if (!allocation_has_right_size(prev_gpu_alloc.output, in_alloc_size)) {
+    throw std::runtime_error(
+        "Tried to calculate deltas for previous layer, but there are no previous layer output values."
+        "They are normally allocated during forward step.");
+  }
+  if (!allocation_has_right_size(prev_gpu_alloc.deltas, in_alloc_size)) {
+    prev_gpu_alloc.deltas = _context->allocate(CL_MEM_READ_WRITE, in_alloc_size);
+  }
+  _context->zeros_float(prev_gpu_alloc.deltas, true);
+  /* clang-format on */
+
+  // args
+  kernel.push_arg(curr_gpu_alloc.deltas);
+  kernel.push_arg(prev_gpu_alloc.output);
+  kernel.push_arg(prev_gpu_alloc.deltas);
+  kernel.push_arg(curr_gpu_alloc.weights);
+  kernel.push_arg(sizeof(cl_uint), (void *)&prev_layer.f_spatial_size);
+  kernel.push_arg(sizeof(cl_uint), (void *)&curr_layer.f_spatial_size);
+  kernel.push_arg(sizeof(cl_uint), (void *)&curr_layer.current_filter_count);
+  kernel.push_arg(sizeof(cl_uint), (void *)&input_w);
+  kernel.push_arg(sizeof(cl_uint), (void *)&input_h);
+
+  _context->block();  // TODO remove
+
+  // run
+  size_t global_work_size[2], local_work_size[2];
+  opencl::utils::work_sizes(kernel, global_work_size, local_work_size,  //
+                            input_w, input_h);
+  std::cout << "global work size: " << global_work_size[0] << ", "
+            << global_work_size[1] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << ", "
+            << local_work_size[1] << std::endl;
+  int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
+  return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
+                        events_to_wait_for_count);
 }
 }

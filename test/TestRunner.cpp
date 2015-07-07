@@ -10,7 +10,7 @@
 #include "../src/DataPipeline.hpp"
 #include "TestRunner.hpp"
 #include "TestDataProvider.hpp"
-// #include "specs/TestSpecsDeclarations.hpp"
+#include "specs/TestSpecsDeclarations.hpp"
 #include "TestException.hpp"
 
 using namespace test::data;
@@ -320,7 +320,7 @@ int main(int argc, char **argv) {
   std::cout << "STARTING TESTS" << std::endl;
 
   using namespace test::data;
-  // using namespace test::specs;
+  using namespace test::specs;
 
   std::vector<TestCase *> cases;
   std::vector<int> results;
@@ -349,7 +349,7 @@ int main(int argc, char **argv) {
   ADD_TEST(SumTest, &pipeline);
   ADD_TEST(SubtractFromAllTest, &pipeline);
   ADD_TEST(MeanSquaredErrorTest, &pipeline);
-  // ADD_TEST(LayerDeltasTest, &pipeline);
+  ADD_TEST(LayerDeltasTest, &pipeline);
 
   //
   //

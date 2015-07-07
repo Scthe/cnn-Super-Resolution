@@ -24,6 +24,7 @@ struct CnnLayerGpuAllocationPool {
   opencl::MemoryHandler* weights = nullptr;
   opencl::MemoryHandler* bias = nullptr;
   opencl::MemoryHandler* output = nullptr;
+  opencl::MemoryHandler* deltas = nullptr;
 };
 
 /**
@@ -62,6 +63,12 @@ class DataPipeline {
                               opencl::MemoryHandler*& gpu_buf_target,
                               size_t ground_truth_w, size_t ground_truth_h,
                               size_t total_padding, cl_event* ev = nullptr);
+
+  cl_event calculate_deltas(opencl::Kernel&, const LayerData&, const LayerData&,
+                            cnn_sr::CnnLayerGpuAllocationPool&,
+                            cnn_sr::CnnLayerGpuAllocationPool&,  //
+                            size_t, size_t,                     //
+                            cl_event* ev = nullptr);
 
   ///
   /// misc. kernels

@@ -43,6 +43,8 @@ struct LayerData {
   static void validate(const LayerData&);
 
   // get&set
+  void set_weights(float*);
+  void set_bias(float*);
   size_t input_size(size_t w, size_t h) const;
   void get_output_dimensions(size_t*, size_t w, size_t h) const;
   size_t weight_size() const;

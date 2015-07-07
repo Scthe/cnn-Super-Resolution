@@ -3,7 +3,7 @@
 # $< - first of dependencies
 
 CC = clang++
-VPATH = src/opencl src test libs/cpp
+VPATH = src/opencl src test test/specs libs/cpp
 IDIR = libs/include
 ODIR = obj
 BINDIR = bin
@@ -38,7 +38,7 @@ __OBJ = Config.o \
 _OBJ = Main_cl.o $(__OBJ)
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ)) # append ODIR to each entry
 
-_TEST_OBJ = TestRunner.o $(__OBJ) TestDataProvider.o
+_TEST_OBJ = TestRunner.o $(__OBJ) TestDataProvider.o LayerDeltasTest.o
 TEST_OBJ = $(patsubst %,$(ODIR)/%,$(_TEST_OBJ))
 
 
