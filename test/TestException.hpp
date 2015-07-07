@@ -1,3 +1,6 @@
+#ifndef TEST_EXCEPTION_H
+#define TEST_EXCEPTION_H
+
 #include <stdexcept>
 #include <sstream>
 
@@ -37,3 +40,5 @@ class TestException : public std::runtime_error {
 
 template <typename T>
 std::ostringstream TestException<T>::cnvt;
+
+#endif /* TEST_EXCEPTION_H   */

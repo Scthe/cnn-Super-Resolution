@@ -10,8 +10,44 @@
 #include "../src/DataPipeline.hpp"
 #include "TestRunner.hpp"
 #include "TestDataProvider.hpp"
+// #include "specs/TestSpecsDeclarations.hpp"
+#include "TestException.hpp"
 
 using namespace test::data;
+using namespace test;
+
+namespace test {
+float sigmoid(float x) { return 1 / (1 + std::exp(-x)); }
+
+float mean(float *arr, size_t count) {
+  // TODO move to gpu
+  float acc = 0;
+  for (size_t i = 0; i < count; i++) {
+    acc += arr[i];
+  }
+  return acc / count;
+}
+
+void TestCase::assert_equals(float expected, float result) {
+  float margin = expected * 0.01f;
+  ABS(margin);
+  margin = margin < 0.01f ? 0.01f : margin;
+  float err = expected - result;
+  ABS(err);
+
+  if (err > margin) {
+    snprintf(msg_buffer, sizeof(msg_buffer),  //
+             "Expected %f to be %f", result, expected);
+    throw TestException<float>(expected, result, msg_buffer);
+  }
+}
+
+void TestCase::assert_true(bool v, const char *msg) {
+  if (!v) {
+    throw TestException<float>(msg);
+  }
+}
+}
 
 ///
 /// ExtractLumaTest
@@ -284,6 +320,7 @@ int main(int argc, char **argv) {
   std::cout << "STARTING TESTS" << std::endl;
 
   using namespace test::data;
+  // using namespace test::specs;
 
   std::vector<TestCase *> cases;
   std::vector<int> results;
@@ -312,6 +349,7 @@ int main(int argc, char **argv) {
   ADD_TEST(SumTest, &pipeline);
   ADD_TEST(SubtractFromAllTest, &pipeline);
   ADD_TEST(MeanSquaredErrorTest, &pipeline);
+  // ADD_TEST(LayerDeltasTest, &pipeline);
 
   //
   //
@@ -332,7 +370,7 @@ int main(int argc, char **argv) {
       passed = (*test)(&context);
 
     } catch (const std::exception &ex) {
-      std::cout << ex.what() << std::endl;
+      std::cout << "[ERROR] " << ex.what() << std::endl;
     } catch (...) {
       std::cout << "Undefined exception" << std::endl;
     }
