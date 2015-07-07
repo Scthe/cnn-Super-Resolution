@@ -350,6 +350,7 @@ int main(int argc, char **argv) {
   ADD_TEST(SubtractFromAllTest, &pipeline);
   ADD_TEST(MeanSquaredErrorTest, &pipeline);
   ADD_TEST(LayerDeltasTest, &pipeline);
+  ADD_TEST(BackpropagationTest, &pipeline);
 
   //
   //

@@ -21,10 +21,16 @@ namespace cnn_sr {
 struct LayerData;
 
 struct CnnLayerGpuAllocationPool {
+  // forward:
   opencl::MemoryHandler* weights = nullptr;
   opencl::MemoryHandler* bias = nullptr;
   opencl::MemoryHandler* output = nullptr;
+  // backpropagation:
   opencl::MemoryHandler* deltas = nullptr;
+  opencl::MemoryHandler* grad_w = nullptr;
+  opencl::MemoryHandler* grad_b = nullptr;
+  opencl::MemoryHandler* scratch_w = nullptr;
+  opencl::MemoryHandler* scratch_b = nullptr;
 };
 
 /**
@@ -64,11 +70,17 @@ class DataPipeline {
                               size_t ground_truth_w, size_t ground_truth_h,
                               size_t total_padding, cl_event* ev = nullptr);
 
+  /** deltas for previous layer based on current layer */
   cl_event calculate_deltas(opencl::Kernel&, const LayerData&, const LayerData&,
                             cnn_sr::CnnLayerGpuAllocationPool&,
                             cnn_sr::CnnLayerGpuAllocationPool&,  //
-                            size_t, size_t,                     //
+                            size_t, size_t,                      //
                             cl_event* ev = nullptr);
+
+  cl_event backpropagate(opencl::Kernel&, const LayerData&,
+                         opencl::MemoryHandler* layer_input,
+                         CnnLayerGpuAllocationPool&, size_t layer_out_w,
+                         size_t layer_out_h, cl_event* ev = nullptr);
 
   ///
   /// misc. kernels

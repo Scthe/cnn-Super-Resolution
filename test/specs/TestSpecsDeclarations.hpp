@@ -29,6 +29,7 @@ namespace test {
 namespace specs {
 
 DECLARE_TEST_SPEC(LayerDeltasTest, cnn_sr::DataPipeline *)
+DECLARE_TEST_SPEC(BackpropagationTest, cnn_sr::DataPipeline *)
 }
 }
 
