@@ -76,12 +76,8 @@ __kernel void main(__read_only __global float* deltas_next_layer,  //
       float y_ijn = layer_output[idx + n];
       float x_ijn = log(y_ijn / (1 - y_ijn));  // reverse sigmoid(log==ln)
       activation_func_derivatives[n] = x_ijn * (1 - x_ijn);
-
-      // test
-      delta_for_filter[n] = activation_func_derivatives[n];
     }
 
-    /*
     for (size_t dy = 0; dy < f_next_spatial_size; dy++) {
       for (size_t dx = 0; dx < f_next_spatial_size; dx++) {
         // NOTE: dy=a, dx=b
@@ -112,14 +108,13 @@ __kernel void main(__read_only __global float* deltas_next_layer,  //
             float activation_func_derivative = activation_func_derivatives[n];
 
             // result
-            // delta_for_filter[n] += delta * w * activation_func_derivative;
-            delta_for_filter[n] += delta;  // TODO only for tmp tests
+            delta_for_filter[n] += delta * w * activation_func_derivative;
           }
         }
 
         //
       }
-    }*/
+    }
 
     // write results
     for (size_t n = 0; n < CURRENT_FILTER_COUNT; n++) {
