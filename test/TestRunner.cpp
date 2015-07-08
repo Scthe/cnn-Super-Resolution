@@ -29,11 +29,11 @@ float mean(float *arr, size_t count) {
 }
 
 void TestCase::assert_equals(float expected, float result) {
-  float margin = expected * 0.01f;
-  ABS(margin);
-  margin = margin < 0.01f ? 0.01f : margin;
-  float err = expected - result;
-  ABS(err);
+  // (yeah, this are going to be totally arbitrary numbers)
+  float margin = 0.005f;
+  if (std::abs(expected) > 10) margin = 0.15f;
+  if (std::abs(expected) > 100) margin = 1;
+  float err = std::abs(expected) - std::abs(result);
 
   if (err > margin) {
     snprintf(msg_buffer, sizeof(msg_buffer),  //

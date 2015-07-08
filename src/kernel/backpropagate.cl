@@ -1,3 +1,32 @@
+/* clang-format off */
+/**
+ * @see http://suhorukov.blogspot.com/2011/12/opencl-11-atomic-operations-on-floating.html
+ * @see  http://simpleopencl.blogspot.com/2013/05/atomic-operations-and-floats-in-opencl.html
+ * 
+ * @param {[type]} volatile __global float   *source       [description]
+ * @param {[type]} const    float    operand [description]
+ */
+inline void atomic_add_global(volatile __global float* source, const float operand) {
+  /* clang-format on */
+  union {
+    unsigned int intVal;
+    float floatVal;
+  } newVal;
+
+  union {
+    unsigned int intVal;
+    float floatVal;
+  } prevVal;
+
+  // NOTE: atomic_cmpxchg(volatile __global unsigned int *p,
+  // 	                    unsigned int cmp, unsigned int val)
+  do {
+    prevVal.floatVal = *source;
+    newVal.floatVal = prevVal.floatVal + operand;
+  } while (atomic_cmpxchg((volatile __global unsigned int*)source,
+                          prevVal.intVal,  //
+                          newVal.intVal) != prevVal.intVal);
+}
 
 /* clang-format off */
 /**
@@ -5,8 +34,7 @@
  * Calculate grad_w and grad_b. Requires additional results summation.
  *
  * TODO use atomic floats as in:
- * http://suhorukov.blogspot.com/2011/12/opencl-11-atomic-operations-on-floating.html
- * http://simpleopencl.blogspot.com/2013/05/atomic-operations-and-floats-in-opencl.html
+
  *
  * In following notation (l), (l-1) describes relative layer and [...] lower indices.
  *
@@ -155,6 +183,7 @@ __kernel void main(__read_only __global float* deltas,       //
     // reconstruct the offset)
     if (local_index == 0) {
       size_t global_grad_w_offset = group_id * numbers_per_w;
+      // NOTE: atomic_add_global is custom function, see beginning of the file
       // weights
       /*
       for (size_t dy = 0; dy < f_spatial_size; dy++) {
@@ -171,7 +200,7 @@ __kernel void main(__read_only __global float* deltas,       //
       }
       */
       // bias
-      target_grad_b[group_id + n] = scratch_b[0];
+      atomic_add_global(target_grad_b + n, scratch_b[0]);
     }
 
     // end

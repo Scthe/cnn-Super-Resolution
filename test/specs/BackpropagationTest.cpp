@@ -102,8 +102,9 @@ bool BackpropagationTest::operator()(opencl::Context *const context) {
 
   // create kernel & run
   auto kernel = pipeline->create_backpropagation_kernel(data);
-  pipeline->backpropagate(*kernel, data, gpu_buf_layer_input, gpu_buf,  //
-                          output_dim[0], output_dim[1]);
+  auto finish_token =
+      pipeline->backpropagate(*kernel, data, gpu_buf_layer_input, gpu_buf,  //
+                              output_dim[0], output_dim[1]);
 
   std::cout << "[Info] kernel set to run, blocking" << std::endl;
   context->block();
@@ -114,8 +115,11 @@ bool BackpropagationTest::operator()(opencl::Context *const context) {
   // std::cout << "w[" << j << "] " << data.grad_weights[j] << std::endl;
   // }
 
+  float results_b[3] = {999.9f, 999.9f, 999.9f};
+  context->read_buffer(gpu_buf.grad_b, (void *)results_b, true, &finish_token,
+                       1);
   for (size_t j = 0; j < data.bias_size(); j++) {
-    float r = data.grad_bias[j];
+    float r = results_b[j];
     float expected = _impl->expected_bias[j];
     // std::cout << "b[" << j << "] expected >\t" << expected << "\tgot> " << r
     // << std::endl;

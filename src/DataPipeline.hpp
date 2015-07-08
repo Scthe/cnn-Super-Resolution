@@ -29,8 +29,6 @@ struct CnnLayerGpuAllocationPool {
   opencl::MemoryHandler* deltas = nullptr;
   opencl::MemoryHandler* grad_w = nullptr;
   opencl::MemoryHandler* grad_b = nullptr;
-  opencl::MemoryHandler* scratch_w = nullptr;
-  opencl::MemoryHandler* scratch_b = nullptr;
 };
 
 /**
@@ -77,11 +75,11 @@ class DataPipeline {
                             size_t, size_t,                      //
                             cl_event* ev = nullptr);
 
-  void backpropagate(opencl::Kernel&, LayerData&,
-                     opencl::MemoryHandler* layer_input,
-                     CnnLayerGpuAllocationPool&,  //
-                     size_t layer_out_w, size_t layer_out_h,
-                     cl_event* ev = nullptr);
+  cl_event backpropagate(opencl::Kernel&, LayerData&,
+                         opencl::MemoryHandler* layer_input,
+                         CnnLayerGpuAllocationPool&,  //
+                         size_t layer_out_w, size_t layer_out_h,
+                         cl_event* ev = nullptr);
 
   ///
   /// misc. kernels

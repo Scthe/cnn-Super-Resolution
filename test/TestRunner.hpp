@@ -5,7 +5,7 @@
 /// This file contains various definitions to make tests more concise
 ///
 
-#include <cmath>   // etd::exp
+#include <cmath>   // std::exp
 #include <cstdio>  // snprintf
 
 ///
@@ -17,7 +17,6 @@
 #define CONCATENATE_DETAIL(x, y) x##y
 #define CONCATENATE(x, y) CONCATENATE_DETAIL(x, y)
 
-#define ABS(x) x = (x) > (-(x)) ? (x) : (-(x))
 
 ///
 /// test macros

@@ -60,8 +60,6 @@ struct LayerData {
 
   std::vector<float> weights;
   std::vector<float> bias;
-  std::vector<float> grad_weights;
-  std::vector<float> grad_bias;
 };
 
 ///

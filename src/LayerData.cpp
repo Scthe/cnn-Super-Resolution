@@ -24,13 +24,11 @@ LayerData::LayerData(size_t n_prev_filter_cnt, size_t current_filter_count,
       current_filter_count(current_filter_count),
       f_spatial_size(f_spatial_size) {
   this->weights.reserve(this->weight_size());
-  this->grad_weights.reserve(this->weight_size());
   if (weights)
     std::copy(weights, weights + this->weight_size(),
               back_inserter(this->weights));
 
   this->bias.reserve(current_filter_count);
-  this->grad_bias.reserve(current_filter_count);
   if (bias)
     std::copy(bias, bias + current_filter_count, back_inserter(this->bias));
 }
