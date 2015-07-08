@@ -2,7 +2,7 @@
 
 #include <stdexcept>  // std::runtime_error
 #include <cstdio>     // snprintf
-#include <memory>     // std::unique_ptr
+#include <vector>     // to hold subresults during cpu step of backpropagation
 
 #include "LayerData.hpp"
 #include "opencl/Context.hpp"
@@ -456,12 +456,12 @@ cl_event DataPipeline::calculate_deltas(
                         events_to_wait_for_count);
 }
 
-cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,       //
-                                     const LayerData &layer_data,  //
-                                     opencl::MemoryHandler *layer_input,
-                                     CnnLayerGpuAllocationPool &gpu_alloc,
-                                     size_t layer_out_w, size_t layer_out_h,
-                                     cl_event *ev_to_wait_for) {
+void DataPipeline::backpropagate(opencl::Kernel &kernel,  //
+                                 LayerData &layer_data,   //
+                                 opencl::MemoryHandler *layer_input,
+                                 CnnLayerGpuAllocationPool &gpu_alloc,
+                                 size_t layer_out_w, size_t layer_out_h,
+                                 cl_event *ev_to_wait_for) {
   LayerData::validate(layer_data);
 
   size_t input_w = layer_out_w + layer_data.f_spatial_size - 1,
@@ -475,22 +475,24 @@ cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,       //
   opencl::utils::work_sizes(kernel, global_work_size, local_work_size,  //
                             layer_out_w, layer_out_h);
   size_t local_size = local_work_size[0] * local_work_size[1],
-         group_count = (global_work_size[0] / local_work_size[0]) *
-                       (global_work_size[1] / local_work_size[1]);
+         groups_count = (global_work_size[0] / local_work_size[0]) *
+                        (global_work_size[1] / local_work_size[1]);
   std::cout << "global work size: " << global_work_size[0] << ", "
             << global_work_size[1] << std::endl;
   std::cout << "local work size: " << local_work_size[0] << ", "
             << local_work_size[1] << std::endl;
-  std::cout << "Total " << group_count << " groups, " << local_size
+  std::cout << "Total " << groups_count << " groups, " << local_size
             << " work items each" << std::endl;
 
   // gpu memory alloc sizes
   /* clang-format off */
   size_t per_filter_size = layer_data.f_spatial_size * layer_data.f_spatial_size * layer_data.n_prev_filter_cnt,
+         grad_w_elems = groups_count * layer_data.current_filter_count * per_filter_size,
+         grad_b_elems = groups_count * layer_data.current_filter_count,
          in_alloc_size = sizeof(cl_float) * in_count,
          out_alloc_size = sizeof(cl_float) * out_count,
-         grad_w_size = sizeof(cl_float) * group_count * layer_data.current_filter_count * per_filter_size,
-         grad_b_size = sizeof(cl_float) * group_count * layer_data.current_filter_count,
+         grad_w_size = sizeof(cl_float) * grad_w_elems,
+         grad_b_size = sizeof(cl_float) * grad_b_elems,
          scratch_w_size = sizeof(cl_float) * local_size * per_filter_size,
          scratch_b_size = sizeof(cl_float) * local_size * layer_data.current_filter_count;
   /* clang-format on */
@@ -531,8 +533,40 @@ cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,       //
 
   // run
   int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
-  return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
-                        events_to_wait_for_count);
+  auto kernel_done_event =
+      kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
+                     events_to_wait_for_count);
+
+  std::cout << "Scheduled gpu backpropagation kernel, blocking" << std::endl;
+  _context->block();
+  std::cout << "kernel executed, doing cpu backpropagation step" << std::endl;
+
+  std::vector<float> subresults_w(grad_w_elems);
+  std::vector<float> subresults_b(grad_b_elems);
+  _context->read_buffer(gpu_alloc.grad_w, (void *)&subresults_w[0], true,
+                        &kernel_done_event, 1);
+  _context->read_buffer(gpu_alloc.grad_b, (void *)&subresults_b[0], true,
+                        &kernel_done_event, 1);
+  // clear gradient results
+  size_t bs = layer_data.bias_size();
+  size_t ws = layer_data.weight_size();
+  for (size_t j = 0; j < ws; j++) {
+    layer_data.grad_weights[j] = 0;
+  }
+  for (size_t j = 0; j < bs; j++) {
+    layer_data.grad_bias[j] = 0;
+  }
+  // summation
+  for (size_t i = 0; i < groups_count; i++) {
+    for (size_t j = 0; j < ws; j++) {
+      // std::cout << "w " << subresults_w[i * ws + j] << std::endl;
+      layer_data.grad_weights[j] += subresults_w[i * ws + j];
+    }
+    for (size_t j = 0; j < bs; j++) {
+      // std::cout << "b " << subresults_b[i * bs + j] << std::endl;
+      layer_data.grad_bias[j] += subresults_b[i * bs + j];
+    }
+  }
 }
 
 // end: namespace cnn_sr

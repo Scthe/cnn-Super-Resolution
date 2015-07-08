@@ -77,10 +77,11 @@ class DataPipeline {
                             size_t, size_t,                      //
                             cl_event* ev = nullptr);
 
-  cl_event backpropagate(opencl::Kernel&, const LayerData&,
-                         opencl::MemoryHandler* layer_input,
-                         CnnLayerGpuAllocationPool&, size_t layer_out_w,
-                         size_t layer_out_h, cl_event* ev = nullptr);
+  void backpropagate(opencl::Kernel&, LayerData&,
+                     opencl::MemoryHandler* layer_input,
+                     CnnLayerGpuAllocationPool&,  //
+                     size_t layer_out_w, size_t layer_out_h,
+                     cl_event* ev = nullptr);
 
   ///
   /// misc. kernels

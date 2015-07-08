@@ -42,9 +42,10 @@ struct LayerData {
                                        float mean_b = 0.0f, float sd_b = 0.0f);
   static void validate(const LayerData&);
 
-  // get&set
+  // setters
   void set_weights(float*);
   void set_bias(float*);
+  // getters
   size_t input_size(size_t w, size_t h) const;
   void get_output_dimensions(size_t*, size_t w, size_t h) const;
   size_t weight_size() const;
@@ -56,12 +57,16 @@ struct LayerData {
   const size_t n_prev_filter_cnt;
   const size_t current_filter_count;
   const size_t f_spatial_size;
+
   std::vector<float> weights;
   std::vector<float> bias;
+  std::vector<float> grad_weights;
+  std::vector<float> grad_bias;
 };
 
 ///
 /// LayerParametersReader
+/// TODO move to Config.hpp, or somewhere else, as long as it is not here
 ///
 
 /**
