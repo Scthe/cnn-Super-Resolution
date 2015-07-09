@@ -6,6 +6,17 @@
 
 using namespace cnn_sr;
 
+///
+/// NOTE: generating expected output is just checking if all inputs, deltas
+/// are read correctly. To this change following line:
+///   'scratch_w[idx] = delta * layer_input[prev_layer_idx + k];'
+/// to:
+///   'scratch_w[idx] = layer_input[prev_layer_idx + k];'
+///   OR
+///   'cratch_w[idx] = delta;'
+/// Also just use BackpropagationTest_script.py to calc the values.
+///
+
 namespace test {
 namespace specs {
 
@@ -60,6 +71,21 @@ struct BackpropagationTestImpl {
                                0.003f, 0.181f, 0.051f,   // row 3, col 1
                                0.021f, 0.136f, 0.062f,   // row 3, col 2
                                0.066f, 0.165f, 0.176f};  // row 3, col 3
+#define WEIGHTS_SIZE 54
+  /* clang-format off */
+  float expected_weights[WEIGHTS_SIZE] = {
+     0.0438, -0.008,   0.0265,           -0.0203, -0.0072, -0.0328,
+     0.0313, -0.049,   0.00872,          -0.0508, -0.096,  -0.0773,
+     0.0157,  0.027,   0.0191,           -0.0623, -0.0533, -0.0526,
+    -0.0418, -0.083,  -0.0991,            0.0052,  0.0941, -0.0232,
+     0.0150, -0.106,  -0.0252,           -0.0159,  0.111,   0.0451,
+     0.0445,  0.089,   0.109,            -0.0497, -0.109,  -0.0953,
+    -0.0366, -0.075,  -0.0556,            0.144,  -0.0422,  0.164,
+    -0.1360,  0.00027,-0.181,             0.0713,  0.12,    0.0159,
+    -0.0287,  0.0962,  0.0414,           -0.0509, -0.106,  -0.0118
+  };
+  /* clang-format on */
+
   float expected_bias[3] = {0.650f, 0.948f, 0.915f};
 };
 
@@ -76,8 +102,6 @@ void BackpropagationTest::init(DataPipeline *pipeline) {
 const char *BackpropagationTest::name() { return "Backpropagation test"; }
 
 bool BackpropagationTest::operator()(opencl::Context *const context) {
-#define WEIGHTS_SIZE 54
-
   auto pipeline = _impl->pipeline;
 
   // data for layer, needs filled up weights&bias to pass validation
@@ -106,15 +130,25 @@ bool BackpropagationTest::operator()(opencl::Context *const context) {
       pipeline->backpropagate(*kernel, data, gpu_buf_layer_input, gpu_buf,  //
                               output_dim[0], output_dim[1]);
 
-  std::cout << "[Info] kernel set to run, blocking" << std::endl;
+  // std::cout << "[Info] kernel set to run, blocking" << std::endl;
   context->block();
-  std::cout << "[Info] done" << std::endl;
+  // std::cout << "[Info] done" << std::endl;
 
-  // for (size_t j = 0; j < data.weight_size(); j++) {}
-  // for (size_t j = 0; j < 48 - 12; j++) {
-  // std::cout << "w[" << j << "] " << data.grad_weights[j] << std::endl;
-  // }
+  // check results - weights
+  std::cout << "checking weights" << std::endl;
+  float results_w[WEIGHTS_SIZE];
+  context->read_buffer(gpu_buf.grad_w, (void *)results_w, true, &finish_token,
+                       1);
+  for (size_t i = 0; i < WEIGHTS_SIZE; i++) {
+    float r = results_w[i];
+    float expected = _impl->expected_weights[i];
+    // std::cout << "w[" << i << "]\texpected > " << expected << "\tgot> " << r
+    // << std::endl;
+    assert_equals(expected, r);
+  }
 
+  // check results - bias
+  std::cout << "checking bias" << std::endl;
   float results_b[3] = {999.9f, 999.9f, 999.9f};
   context->read_buffer(gpu_buf.grad_b, (void *)results_b, true, &finish_token,
                        1);
