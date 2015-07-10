@@ -87,6 +87,14 @@ void LayerData::validate(const LayerData& data) {
 /// get&set
 ///
 
+void LayerData::set_weights(float* x) {
+  if (x) std::copy(x, x + this->weight_size(), back_inserter(this->weights));
+}
+
+void LayerData::set_bias(float* x) {
+  if (x) std::copy(x, x + this->bias_size(), back_inserter(this->bias));
+}
+
 void LayerData::get_output_dimensions(size_t* dim_arr, size_t input_w,
                                       size_t input_h) const {
   dim_arr[0] = input_w - f_spatial_size + 1;

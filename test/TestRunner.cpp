@@ -1,5 +1,5 @@
 #include <iostream>
-#include <memory>  // for std:unique_ptr
+#include <memory>  // for std:unique_ptr TODO just use vectors
 #include <vector>
 #include <random>  // for std::mt19937
 #include <chrono>  // for random seed
@@ -10,8 +10,44 @@
 #include "../src/DataPipeline.hpp"
 #include "TestRunner.hpp"
 #include "TestDataProvider.hpp"
+#include "specs/TestSpecsDeclarations.hpp"
+#include "TestException.hpp"
 
 using namespace test::data;
+using namespace test;
+
+namespace test {
+float sigmoid(float x) { return 1 / (1 + std::exp(-x)); }
+
+float mean(float *arr, size_t count) {
+  // TODO move to gpu
+  float acc = 0;
+  for (size_t i = 0; i < count; i++) {
+    acc += arr[i];
+  }
+  return acc / count;
+}
+
+void TestCase::assert_equals(float expected, float result) {
+  // (yeah, this are going to be totally arbitrary numbers)
+  float margin = 0.005f;
+  if (std::abs(expected) > 10) margin = 0.15f;
+  if (std::abs(expected) > 100) margin = 1;
+  float err = std::abs(expected) - std::abs(result);
+
+  if (err > margin) {
+    snprintf(msg_buffer, sizeof(msg_buffer),  //
+             "Expected %f to be %f", result, expected);
+    throw TestException<float>(expected, result, msg_buffer);
+  }
+}
+
+void TestCase::assert_true(bool v, const char *msg) {
+  if (!v) {
+    throw TestException<float>(msg);
+  }
+}
+}
 
 ///
 /// ExtractLumaTest
@@ -99,8 +135,8 @@ DEFINE_TEST(LayerTest, data->name.c_str(), context) {
   _context->write_buffer(gpu_buf_in, (void *)&data->input[0], true);
 
   // create kernel & run
-  auto kernel = pipeline->create_layer_kernel(data->current_filter_count,
-                                              data->result_multiply);
+  auto kernel =
+      pipeline->create_layer_kernel(layer_data, data->result_multiply);
   cnn_sr::CnnLayerGpuAllocationPool gpu_alloc;
   cl_event finish_token = pipeline->execute_layer(
       *kernel, layer_data, gpu_alloc, gpu_buf_in, data->input_w, data->input_h);
@@ -139,94 +175,66 @@ END_TEST
 ///
 /// SumSquaredTest
 ///
-DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
+DEFINE_TEST_STR(MeanSquaredErrorTest, "Mean squared error", context) {
+  // CONSTS:
+  const size_t algo_w = 1000, algo_h = 2000, padding = 4;
+  // VALUES:
   // total padding (from both sides) = padding*2
-  const size_t algo_w = 1000, algo_h = 2000, padding = 4;  // SETTINGS
   const size_t ground_truth_w = algo_w + padding * 2,
+               ground_truth_h = algo_h + padding * 2,
                algo_size = algo_w * algo_h,
-               ground_truth_len =
-                   (algo_w + padding * 2) * (algo_h + padding * 2);
-  // #define DBG(X) std::cout << #X << "=" << X << std::endl;
-  // DBG(ground_truth_w)
-  // DBG(algo_size)
-  // DBG(ground_truth_len)
-  // #undef DBG
+               ground_truth_size = ground_truth_w * ground_truth_h;
 
   std::unique_ptr<float[]> cpu_algo_res(new float[algo_size]);
-  std::unique_ptr<float[]> cpu_ground_truth(new float[ground_truth_len]);
-  for (size_t i = 0; i < ground_truth_len; i++) {
+  std::unique_ptr<float[]> cpu_expected(new float[algo_size]);
+  std::unique_ptr<float[]> cpu_ground_truth(new float[ground_truth_size]);
+  for (size_t i = 0; i < ground_truth_size; i++) {
     cpu_ground_truth[i] = 99999.0f;
   }
 
   unsigned seed1 = std::chrono::system_clock::now().time_since_epoch().count();
   std::mt19937 generator(seed1);
-  double expected = 0.0;
   for (size_t i = 0; i < algo_size; i++) {
     size_t row = i / algo_w, col = i % algo_w,
            g_t_idx = (row + padding) * ground_truth_w + padding + col;
     cpu_ground_truth[g_t_idx] = generator() % 256;
     cpu_algo_res[i] = (generator() % 2560) / 10.0f;
+    // fill expected buffer
     double d = cpu_ground_truth[g_t_idx] - cpu_algo_res[i];
-    expected += d * d;
-    // std::cout << d << "\t\t**2 => " << expected << std::endl;
-    // std::cout << cpu_algo_res[i] << std::endl;
+    cpu_expected[i] = d * d;
   }
-  /*
-  for (size_t i = 0; i < algo_h + padding * 2; i++) {
-    size_t idx = i * ground_truth_w;
-    std::cout << "[ ";
-    for (size_t j = 0; j < ground_truth_w; j++) {
-      std::cout << cpu_ground_truth[idx + j] << ", ";
-    }
-    std::cout << "]" << std::endl;
-  }*/
 
   /* clang-format off */
-  auto gpu_buf_ground_truth = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * ground_truth_len);
+  auto gpu_buf_ground_truth = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * ground_truth_size);
   _context->write_buffer(gpu_buf_ground_truth, (void *)&cpu_ground_truth[0], true);
   auto gpu_buf_algo_res = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * algo_size);
   _context->write_buffer(gpu_buf_algo_res, (void *)&cpu_algo_res[0], true);
-
-  const unsigned __int64 out_init_val = 0;
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_ulong));
-  _context->write_buffer(gpu_buf_out, (void *)&out_init_val, true);//zeroe
   /* clang-format on */
 
-  // kernel+args
-  auto kernel = _context->create_kernel("src/kernel/sum_squared.cl");
-  size_t global_work_size[2];
-  size_t local_work_size[2];
-  opencl::utils::work_sizes(*kernel, global_work_size, local_work_size, algo_w,
-                            algo_h);
-  global_work_size[0] *= global_work_size[1];
-  local_work_size[0] *= local_work_size[1];
-  std::cout << "global work size: " << global_work_size[0] << std::endl;
-  std::cout << "local work size: " << local_work_size[0] << std::endl;
+  // exec
+  opencl::MemoryHandler *gpu_buf_out = nullptr;
+  auto finish_token = pipeline->mean_squared_error(
+      gpu_buf_ground_truth, gpu_buf_algo_res, gpu_buf_out, ground_truth_w,
+      ground_truth_h, padding * 2);
 
-  kernel->push_arg(gpu_buf_ground_truth);
-  kernel->push_arg(gpu_buf_algo_res);
-  kernel->push_arg(sizeof(cl_float) * local_work_size[0], nullptr);  // scrath
-  kernel->push_arg(gpu_buf_out);
-  kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
-  kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
-  kernel->push_arg(sizeof(cl_uint), (void *)&algo_size);
-
-  // run
-  cl_event finish_token = kernel->execute(1, global_work_size, local_work_size);
-
-  // read (values may not be exactly the same since float->long data loss,
-  // but should be close enough)
-  unsigned __int64 read_val;
-  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_ulong), (void *)&read_val,
-                        true, &finish_token, 1);
-  // std::cout << "expected: " << expected << "\tgot: " << read_val <<
-  // std::endl;
-  assert_equals(expected, read_val);
-
+  // read & compare results
+  std::vector<float> results(algo_size);
+  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_float) * algo_size,
+                        (void *)&results[0], true, &finish_token, 1);
+  for (size_t i = 0; i < algo_size; i++) {
+    auto expected = cpu_expected[i];
+    auto read_val = results[i];
+    // std::cout << "expected: " << expected << "\tgot: " << read_val <<
+    // std::endl;
+    assert_equals(expected, read_val);
+  }
   return true;
 }
 
-void init() {}
+void init(cnn_sr::DataPipeline *pipeline) { this->pipeline = pipeline; }
+
+private:
+cnn_sr::DataPipeline *pipeline;
 
 END_TEST
 
@@ -312,6 +320,7 @@ int main(int argc, char **argv) {
   std::cout << "STARTING TESTS" << std::endl;
 
   using namespace test::data;
+  using namespace test::specs;
 
   std::vector<TestCase *> cases;
   std::vector<int> results;
@@ -324,7 +333,7 @@ int main(int argc, char **argv) {
 
   opencl::Context context(argc, argv);
   context.init();
-  cnn_sr::DataPipeline pipeline(nullptr, &context);
+  cnn_sr::DataPipeline pipeline(&context);
   pipeline.init(cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
 
   //
@@ -337,9 +346,11 @@ int main(int argc, char **argv) {
   ADD_TEST(LayerTest, &pipeline, &data_provider.layer2_data_set1);
   ADD_TEST(LayerTest, &pipeline, &data_provider.layer2_data_set2);
   ADD_TEST(LayerTest, &pipeline, &data_provider.layer3_data);
-  ADD_TEST(SumSquaredTest);
   ADD_TEST(SumTest, &pipeline);
   ADD_TEST(SubtractFromAllTest, &pipeline);
+  ADD_TEST(MeanSquaredErrorTest, &pipeline);
+  ADD_TEST(LayerDeltasTest, &pipeline);
+  ADD_TEST(BackpropagationTest, &pipeline);
 
   //
   //
@@ -360,7 +371,7 @@ int main(int argc, char **argv) {
       passed = (*test)(&context);
 
     } catch (const std::exception &ex) {
-      std::cout << ex.what() << std::endl;
+      std::cout << "[ERROR] " << ex.what() << std::endl;
     } catch (...) {
       std::cout << "Undefined exception" << std::endl;
     }
