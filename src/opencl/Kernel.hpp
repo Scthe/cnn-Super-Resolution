@@ -7,7 +7,7 @@ namespace opencl {
 
 // forward declaration
 class Context;
-struct MemoryHandler;
+typedef size_t MemoryHandle;
 
 class Kernel {
  public:
@@ -29,7 +29,7 @@ class Kernel {
    *
    * @param handle  gpu memory handler
    */
-  void push_arg(const MemoryHandler *);
+  void push_arg(MemoryHandle);
 
   /**
    * Execute the kernel with arguments that were pushed before this call.

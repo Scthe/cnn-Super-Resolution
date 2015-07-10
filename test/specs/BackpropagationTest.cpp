@@ -110,13 +110,11 @@ bool BackpropagationTest::operator()(size_t,
   data.set_bias(bias);
   data.set_weights(w);
 
-  size_t output_dim[2] = {3, 3},
-         input_dim[2] = {output_dim[0] + data.f_spatial_size - 1,
-                         output_dim[1] + data.f_spatial_size - 1};
+  size_t output_dim[2] = {3, 3};
 
   // gpu memory alloc
   cnn_sr::CnnLayerGpuAllocationPool gpu_buf;
-  opencl::MemoryHandler *gpu_buf_layer_input;
+  opencl::MemoryHandle gpu_buf_layer_input;
   /* clang-format off */
   gpu_buf.deltas = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * DELTAS_SIZE);
   gpu_buf_layer_input = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * INPUT_SIZE);

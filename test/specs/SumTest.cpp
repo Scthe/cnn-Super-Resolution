@@ -36,8 +36,7 @@ bool SumTest::operator()(size_t, cnn_sr::DataPipeline *const pipeline) {
       _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data_len);
   _context->write_buffer(gpu_buf_data, (void *)cpu_data, true);
 
-  cl_ulong result;
-  pipeline->sum(gpu_buf_data, &result);
+  cl_ulong result = pipeline->sum(gpu_buf_data);
   // std::cout << result << std::endl;
   assert_equals(expected, result);
 

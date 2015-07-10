@@ -32,8 +32,9 @@ void Kernel::push_arg(size_t arg_size, const void *arg_value) {
   ++arg_stack_size;
 }
 
-void Kernel::push_arg(const MemoryHandler *gpu_buf) {
-  this->push_arg(sizeof(cl_mem), (void *)&gpu_buf->handle);
+void Kernel::push_arg(MemoryHandle gpu_buf) {
+  auto mem = context->raw_memory(gpu_buf);
+  this->push_arg(sizeof(cl_mem), (void *)&mem->handle);
 }
 
 cl_event Kernel::execute(cl_uint work_dim,                //

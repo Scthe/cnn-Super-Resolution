@@ -56,17 +56,23 @@ void DataPipeline::check_initialized(int kernel_load_flags) {
   this->load_kernels(kernel_load_flags);
 }
 
-bool DataPipeline::allocation_has_right_size(opencl::MemoryHandler *alloc,
+bool DataPipeline::allocation_has_right_size(opencl::MemoryHandle alloc,
                                              size_t size) {
-  if (!alloc) return false;
-  if (alloc->size == size) return true;
+  if (alloc == gpu_nullptr) return false;
+  auto raw_mem = _context->raw_memory(alloc);
+  if (raw_mem->size == size) return true;
 
   std::cout << "Was forced to realocate gpu buffer. This is not optimal and "
                "may be a bug. In many cases DataPipeline is able to allocate "
                "buffer of right size, so You only need to explictly set "
-               "MemoryHandler* to nullptr." << std::endl;
-  alloc->release();
+               "MemoryHandle to gpu_nullptr." << std::endl;
+  raw_mem->release();
   return false;
+}
+
+size_t DataPipeline::element_count(opencl::MemoryHandle alloc, size_t el_size) {
+  auto raw_mem = _context->raw_memory(alloc);
+  return raw_mem->size / el_size;
 }
 
 opencl::Context *DataPipeline::context() { return _context; }
@@ -134,8 +140,8 @@ opencl::Kernel *DataPipeline::create_backpropagation_kernel(
 ///
 
 cl_event DataPipeline::extract_luma(opencl::utils::ImageData &img_data,
-                                    opencl::MemoryHandler *&gpu_buf_raw_img,
-                                    opencl::MemoryHandler *&gpu_buf_luma,
+                                    opencl::MemoryHandle &gpu_buf_raw_img,
+                                    opencl::MemoryHandle &gpu_buf_luma,
                                     bool normalize, cl_event *ev_to_wait_for) {
   check_initialized(DataPipeline::LOAD_KERNEL_LUMA);
 
@@ -174,24 +180,22 @@ cl_event DataPipeline::extract_luma(opencl::utils::ImageData &img_data,
   return finish_token;
 }
 
-cl_event DataPipeline::subtract_mean(opencl::MemoryHandler *data,
+cl_event DataPipeline::subtract_mean(opencl::MemoryHandle data,
                                      cl_event *ev_to_wait_for) {
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
-  size_t len = data->size / sizeof(cl_float);
+  size_t len = element_count(data, sizeof(cl_float));
+
   std::cout << "Calcutating mean from " << len << " elements" << std::endl;
-  u64 buf_sum = 0;
-  // mean (NOTE:this is sync operation, cl_event actually does not matter)
-  cl_event ev1 = sum(data, &buf_sum, ev_to_wait_for);
+  auto buf_sum = sum(data, ev_to_wait_for);
   float mean = ((float)buf_sum) / len;
   std::cout << "Mean: " << mean << std::endl;
   // subtract
-  return subtract_from_all(data, mean, &ev1);
+  return subtract_from_all(data, mean);
 }
 
-cl_event DataPipeline::sum(opencl::MemoryHandler *data, u64 *result,
-                           cl_event *ev_to_wait_for) {
+u64 DataPipeline::sum(opencl::MemoryHandle data, cl_event *ev_to_wait_for) {
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
-  size_t len = data->size / sizeof(cl_float);
+  size_t len = element_count(data, sizeof(cl_float));
 
   size_t global_work_size[2];
   size_t local_work_size[2];
@@ -202,11 +206,11 @@ cl_event DataPipeline::sum(opencl::MemoryHandler *data, u64 *result,
   std::cout << "global work size: " << global_work_size[0] << std::endl;
   std::cout << "local work size: " << local_work_size[0] << std::endl;
 
-  *result = 0;
+  u64 result = 0;
   if (!allocation_has_right_size(_tmp_64bit, sizeof(cl_ulong))) {
     _tmp_64bit = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_ulong));
   }
-  _context->write_buffer(_tmp_64bit, (void *)result, true);  // zeroe
+  _context->write_buffer(_tmp_64bit, (void *)&result, true);  // zeroe
 
   // kernel args
   _sum_kernel->push_arg(data);
@@ -220,16 +224,16 @@ cl_event DataPipeline::sum(opencl::MemoryHandler *data, u64 *result,
 
   // read (values may not be exactly the same since float->long data loss,
   // but should be close enough)
-  _context->read_buffer(_tmp_64bit, 0, sizeof(cl_ulong), (void *)result, true,
+  _context->read_buffer(_tmp_64bit, 0, sizeof(cl_ulong), (void *)&result, true,
                         &finish_token, 1);
 
-  return finish_token;
+  return result;
 }
 
-cl_event DataPipeline::subtract_from_all(opencl::MemoryHandler *data, float val,
+cl_event DataPipeline::subtract_from_all(opencl::MemoryHandle data, float val,
                                          cl_event *ev_to_wait_for) {
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
-  size_t len = data->size / sizeof(cl_float);
+  size_t len = element_count(data, sizeof(cl_float));
 
   size_t global_work_size[2];
   size_t local_work_size[2];
@@ -257,19 +261,20 @@ cl_event DataPipeline::subtract_from_all(opencl::MemoryHandler *data, float val,
 ///
 
 void DataPipeline::pre_execute_layer_validation(const LayerData &data,
-                                                opencl::MemoryHandler *input,
+                                                opencl::MemoryHandle input,
                                                 size_t input_w,
                                                 size_t input_h) {
   LayerData::validate(data);
 
-  size_t expected_input_size = data.input_size(input_w, input_h);
-  if (expected_input_size > sizeof(cl_float) > input->size) {
+  size_t expected_input_size = data.input_size(input_w, input_h),
+         cnt = element_count(input, sizeof(cl_float));
+  if (expected_input_size > sizeof(cl_float) * cnt) {
     char buf[255];
     snprintf(buf, 255,
              "Declared input_w(%d)*input_h(%d)*n_prev_filter_cnt(%d)=%d "
              "is bigger then allocated gpu memory (%d elements).",
              input_w, input_h, data.n_prev_filter_cnt, expected_input_size,
-             input->size);
+             cnt);
     throw std::runtime_error(buf);
   }
 }
@@ -277,7 +282,7 @@ void DataPipeline::pre_execute_layer_validation(const LayerData &data,
 cl_event DataPipeline::execute_layer(
     opencl::Kernel &kernel,                                               //
     const LayerData &data, cnn_sr::CnnLayerGpuAllocationPool &gpu_alloc,  //
-    opencl::MemoryHandler *&gpu_buf_in, size_t input_w, size_t input_h,
+    opencl::MemoryHandle &gpu_buf_in, size_t input_w, size_t input_h,
     cl_event *ev_to_wait_for) {
   pre_execute_layer_validation(data, gpu_buf_in, input_w, input_h);
 
@@ -336,9 +341,9 @@ cl_event DataPipeline::execute_layer(
 ///
 
 cl_event DataPipeline::mean_squared_error(
-    opencl::MemoryHandler *gpu_buf_ground_truth,
-    opencl::MemoryHandler *gpu_buf_algo_res,
-    opencl::MemoryHandler *&gpu_buf_target,  //
+    opencl::MemoryHandle gpu_buf_ground_truth,
+    opencl::MemoryHandle gpu_buf_algo_res,
+    opencl::MemoryHandle &gpu_buf_target,  //
     size_t ground_truth_w, size_t ground_truth_h, size_t total_padding,
     cl_event *ev_to_wait_for) {
   //
@@ -462,7 +467,7 @@ cl_event DataPipeline::calculate_deltas(
 
 cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,  //
                                      LayerData &layer_data,   //
-                                     opencl::MemoryHandler *layer_input,
+                                     opencl::MemoryHandle layer_input,
                                      CnnLayerGpuAllocationPool &gpu_alloc,
                                      size_t layer_out_w, size_t layer_out_h,
                                      cl_event *ev_to_wait_for) {

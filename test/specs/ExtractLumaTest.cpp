@@ -59,7 +59,8 @@ bool ExtractLumaTest::operator()(size_t data_set_id,
       "Vector of 1st layer's input values should be at least as big as test"
       " image");
 
-  opencl::MemoryHandler *gpu_buf_raw_img = nullptr, *gpu_buf_luma = nullptr;
+  opencl::MemoryHandle gpu_buf_raw_img = gpu_nullptr,
+                       gpu_buf_luma = gpu_nullptr;
   auto finish_token =
       pipeline->extract_luma(data, gpu_buf_raw_img, gpu_buf_luma, normalize);
 

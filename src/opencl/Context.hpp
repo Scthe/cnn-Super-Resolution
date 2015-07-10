@@ -1,13 +1,11 @@
 #ifndef OPENCL_CONTEXT_H_
 #define OPENCL_CONTEXT_H_
 
-#include <vector> // TODO remove vector import
-#include <iostream>  // TODO remove iostream import ?
+#include <vector>
+#include <iostream>  // for std::ostream& operator<<(..)
 #include "CL/opencl.h"
 #include "Kernel.hpp"
 
-#define MAX_KERNEL_COUNT 32
-#define MAX_ALLOCATIONS_COUNT 32
 #define MAX_INFO_STRING_LEN 256
 
 namespace opencl {
@@ -43,8 +41,13 @@ struct DeviceInfo{
 /**
  * opencl memory handle
  */
-struct MemoryHandler{
-  MemoryHandler();
+typedef size_t MemoryHandle;
+
+/**
+ * represents gpu memory allocation. Should not be used
+ */
+struct RawMemoryHandle{
+  RawMemoryHandle();
   void release();
 
   cl_mem handle;
@@ -82,7 +85,7 @@ public:
    * @param  size     bytest to allocate. Use f.e. sizeof(cl_char) * COUNT
    * @return          handler used by context
    */
-  MemoryHandler* allocate(cl_mem_flags, size_t);
+  MemoryHandle allocate(cl_mem_flags, size_t);
 
   /**
    * Create kernel from file
@@ -107,7 +110,7 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event read_buffer(MemoryHandler*, size_t offset, size_t size, void *dst,
+  cl_event read_buffer(MemoryHandle, size_t offset, size_t size, void *dst,
                        bool block, cl_event* es=nullptr, int event_count=0);
 
   /**
@@ -120,7 +123,7 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event read_buffer(MemoryHandler*, void *dst, bool block,
+  cl_event read_buffer(MemoryHandle, void *dst, bool block,
                        cl_event* es=nullptr, int event_count=0);
 
  /**
@@ -135,7 +138,7 @@ public:
   * @param  events_to_wait_for_count [OPT]
   * @return                          opencl event object
   */
-  cl_event write_buffer(MemoryHandler*, size_t offset, size_t size, void *src,
+  cl_event write_buffer(MemoryHandle, size_t offset, size_t size, void *src,
                       bool block, cl_event* es=nullptr, int event_count=0);
 
   /**
@@ -148,7 +151,7 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event write_buffer(MemoryHandler*, void *src, bool block,
+  cl_event write_buffer(MemoryHandle, void *src, bool block,
                         cl_event* es=nullptr, int event_count=0);
 
   /**
@@ -160,7 +163,7 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event zeros_float(MemoryHandler*, bool block,
+  cl_event zeros_float(MemoryHandle, bool block,
                         cl_event* es=nullptr, int event_count=0);
 
 
@@ -173,7 +176,7 @@ public:
    * @param  image_format
    * @return              handler used by context
    */
-  MemoryHandler* create_image(cl_mem_flags, cl_channel_order, cl_channel_type,
+  MemoryHandle create_image(cl_mem_flags, cl_channel_order, cl_channel_type,
                               size_t, size_t);
 
 
@@ -187,7 +190,7 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event write_image(MemoryHandler*, utils::ImageData&,
+  cl_event write_image(MemoryHandle, utils::ImageData&,
                         bool block, cl_event* es=nullptr, int event_count=0);
 
   //
@@ -226,6 +229,8 @@ public:
    */
   cl_command_queue* command_queue(){ return &_clcommand_queue; }
 
+  RawMemoryHandle* raw_memory(MemoryHandle);
+
 private:
   void _cleanup();
   void platform_info(cl_platform_id platform_id, PlatformInfo& platform_info, std::vector<DeviceInfo>* devices=nullptr);
@@ -243,10 +248,8 @@ private:
   DeviceInfo _device;
   PlatformInfo _platform;
 
-  Kernel _kernels[MAX_KERNEL_COUNT];
-  size_t _kernel_count;
-  MemoryHandler _allocations[MAX_ALLOCATIONS_COUNT];
-  size_t _allocation_count;
+  std::vector<Kernel> _kernels;
+  std::vector<RawMemoryHandle> _allocations;
 };
 }
 

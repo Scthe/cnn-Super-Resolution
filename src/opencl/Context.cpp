@@ -2,27 +2,33 @@
 
 #include <iostream>
 #include <stdexcept>
-#include <vector>
 
 #include "UtilsOpenCL.hpp"
 
+/**
+ * _kernels uses pointers, which makes the wrapper more lightweight.
+ * As soon as vector that holds original instances is reloacted
+ * the pointers are obsolete.
+ * TODO _kernels should not use pointers. Swap for handles system
+ */
+const size_t max_resources_per_type = 128;
 
 namespace opencl {
 
 //
-// MemoryHandler
+// RawMemoryHandle
 //
 
-MemoryHandler::MemoryHandler()
+RawMemoryHandle::RawMemoryHandle()
     : handle(nullptr),
       released(false){
 }
 
-void MemoryHandler::release(){
+void RawMemoryHandle::release(){
   if(!released && handle){
     clReleaseMemObject(handle);
     // auto ciErr1 = clReleaseMemObject(handle); // TODO check error
-    // check_error(ciErr1, "Error in MemoryHandler::release");
+    // check_error(ciErr1, "Error in RawMemoryHandle::release");
   }
   released = true;
 }
@@ -36,9 +42,7 @@ void MemoryHandler::release(){
 Context::Context(int argc, char **argv)
     : initialized(false),
       argc(argc),
-      argv(argv),
-      _kernel_count(0),
-      _allocation_count(0){
+      argv(argv){
 }
 
 Context::~Context() {
@@ -71,19 +75,21 @@ void Context::init() {
   _clcommand_queue = clCreateCommandQueue(_clcontext, _cldevice, 0, &ciErr1);
   check_error(ciErr1, "Error in clCreateCommandQueue");
 
+  _kernels.reserve(max_resources_per_type);
+  _allocations.reserve(max_resources_per_type);
+
   initialized = true;
 }
 
 void Context::_cleanup(){
   // kernels
-  for(size_t i = 0; i < _kernel_count; i++){
-    _kernels[i].cleanup();
+  for (auto kernel = begin(_kernels); kernel != end(_kernels); ++kernel) {
+    kernel->cleanup();
   }
 
   // memory
-  for(size_t i = 0; i < _allocation_count; i++){
-    MemoryHandler* k = _allocations + i;
-    k->release();
+  for (auto alloc = begin(_allocations); alloc != end(_allocations); ++alloc) {
+    alloc->release();
   }
 
   // other
@@ -108,6 +114,11 @@ void Context::check_error(bool check, char  const *msg){
   this->check_error(check? CL_SUCCESS : -100, msg);
 }
 
+RawMemoryHandle* Context::raw_memory(MemoryHandle handle){
+  check_error(handle < _allocations.size(), "Invalid memory handle."
+              "Could not get RawMemoryHandle object");
+  return &_allocations[handle];
+}
 
 // execution
 
@@ -119,34 +130,33 @@ void Context::block(){
   check_error(ciErr1, "Error during clFinish during Context::block()");
 }
 
-MemoryHandler* Context::allocate(cl_mem_flags flags, size_t size){
+MemoryHandle Context::allocate(cl_mem_flags flags, size_t size){
   check_error(initialized, "Context was not initialized");
-  check_error(_allocation_count < MAX_ALLOCATIONS_COUNT,
-    "Wrapper hit allocations limit, increase MAX_ALLOCATIONS_COUNT");
 
   cl_int ciErr1;
-  MemoryHandler* k = _allocations + _allocation_count;
-  ++_allocation_count;
-  k->handle = clCreateBuffer(_clcontext, flags, size, nullptr, &ciErr1);
-  k->size = size;
+  _allocations.push_back(RawMemoryHandle());
+  MemoryHandle idx = _allocations.size()-1;
+  auto mem_handle = &_allocations[idx];
+  mem_handle->handle = clCreateBuffer(_clcontext, flags, size, nullptr, &ciErr1);
+  mem_handle->size = size;
   check_error(ciErr1, "Error in clCreateBuffer");
-  return k;
+  return idx;
 }
 
 Kernel* Context::create_kernel(char const *file_path,
                                char const *cmp_opt, char const *main_f){
   check_error(initialized, "Context was not initialized");
-  check_error(_kernel_count < MAX_KERNEL_COUNT,
-    "Wrapper hit kernel limit, increase MAX_KERNEL_COUNT");
-  std::cout << "Reading kernel function from '" << file_path << "' with args: '"
+  check_error(_kernels.size() < max_resources_per_type,
+     "Wrapper hit kernel limit, increase max_resources_per_type");
+   std::cout << "Reading kernel function from '" << file_path << "' with args: '"
             << (cmp_opt ? cmp_opt : "") << "'" << std::endl;
   cl_int ciErr1;
 
-  Kernel* k = _kernels + _kernel_count;
-  ++_kernel_count;
+  _kernels.push_back(Kernel());
+  auto kernel_ptr = &_kernels[_kernels.size()-1];
 
   // TODO better manage the resources: kernel_source, program_id, kernel_id
-  // (if code crashes there is going to be a leak !)
+  // (if code crashes there is going to be a leak!)
 
   // Read the OpenCL kernel from source file
   size_t kernel_len = 0;
@@ -181,18 +191,19 @@ Kernel* Context::create_kernel(char const *file_path,
   ciErr1 = clGetKernelWorkGroupInfo(kernel_id, _cldevice,
      CL_KERNEL_WORK_GROUP_SIZE, 1024, &max_work_group_size, nullptr);
 
-  k->init(this, kernel_id, program_id, max_work_group_size);
+  kernel_ptr->init(this, kernel_id, program_id, max_work_group_size);
 
   // std::cout << "kernel created(f) :" <<k->kernel_id<<":"<<k->program_id<< std::endl;
-  return k;
+  return kernel_ptr;
 }
 
-cl_event Context::read_buffer(MemoryHandler* gpu_buffer,
+cl_event Context::read_buffer(MemoryHandle gpu_buffer_handle,
                               size_t offset, size_t size, void *dst,
                               bool block,
                               cl_event* events_to_wait_for,
                               int events_to_wait_for_count){
   check_error(initialized, "Context was not initialized");
+  auto gpu_buffer = raw_memory(gpu_buffer_handle);
   check_error(size <= gpu_buffer->size, "Tried to read more then is allocated");
   cl_event finish_token;
   cl_bool clblock = block? CL_TRUE : CL_FALSE;
@@ -206,19 +217,21 @@ cl_event Context::read_buffer(MemoryHandler* gpu_buffer,
   return finish_token;
 }
 
-cl_event Context::read_buffer(MemoryHandler* gpu_buffer, void *dst, bool block,
+cl_event Context::read_buffer(MemoryHandle gpu_buffer_handle, void *dst, bool block,
                               cl_event* events_to_wait_for,
                               int events_to_wait_for_count){
-  return this->read_buffer(gpu_buffer, 0, gpu_buffer->size, dst, block,
+  auto gpu_buffer = raw_memory(gpu_buffer_handle);
+  return this->read_buffer(gpu_buffer_handle, 0, gpu_buffer->size, dst, block,
                            events_to_wait_for, events_to_wait_for_count);
 }
 
-cl_event Context::write_buffer(MemoryHandler* gpu_buffer,
+cl_event Context::write_buffer(MemoryHandle gpu_buffer_handle,
                                size_t offset, size_t size, void *src,
                                bool block,
                                cl_event* events_to_wait_for,
                                int events_to_wait_for_count){
   check_error(initialized, "Context was not initialized");
+  auto gpu_buffer = raw_memory(gpu_buffer_handle);
   check_error(size <= gpu_buffer->size, "Tried to write more then is allocated");
   cl_event finish_token;
   cl_bool clblock = block? CL_TRUE : CL_FALSE;
@@ -232,53 +245,56 @@ cl_event Context::write_buffer(MemoryHandler* gpu_buffer,
   return finish_token;
 }
 
-cl_event Context::write_buffer(MemoryHandler* gpu_buffer, void *src, bool block,
+cl_event Context::write_buffer(MemoryHandle gpu_buffer_handle, void *src, bool block,
                                cl_event* events_to_wait_for,
                                int events_to_wait_for_count){
-  return this->write_buffer(gpu_buffer, 0, gpu_buffer->size, src, block,
+  auto gpu_buffer = raw_memory(gpu_buffer_handle);
+  return this->write_buffer(gpu_buffer_handle, 0, gpu_buffer->size, src, block,
                             events_to_wait_for, events_to_wait_for_count);
 }
 
-cl_event Context::zeros_float(MemoryHandler* handler, bool block,
+cl_event Context::zeros_float(MemoryHandle gpu_buffer_handle, bool block,
                               cl_event* es, int event_count){
-  size_t len = handler->size / sizeof(float);
+  auto gpu_buffer = raw_memory(gpu_buffer_handle);
+  size_t len = gpu_buffer->size / sizeof(float);
   std::vector<float> v;
   v.reserve(len);
   for (size_t i = 0; i < len; i++) {
     v.push_back(0.0f);
   }
-  return this->write_buffer(handler, &v[0], block, es, event_count);
+  return this->write_buffer(gpu_buffer_handle, &v[0], block, es, event_count);
 }
 
-MemoryHandler* Context::create_image(cl_mem_flags flags,
-                                     cl_channel_order image_channel_order,
-                                     cl_channel_type image_channel_data_type,
-                                     size_t w, size_t h){
+MemoryHandle Context::create_image(cl_mem_flags flags,
+                                   cl_channel_order image_channel_order,
+                                   cl_channel_type image_channel_data_type,
+                                   size_t w, size_t h){
   check_error(initialized, "Context was not initialized");
-  check_error(_allocation_count < MAX_ALLOCATIONS_COUNT,
-    "Wrapper hit allocations limit, increase MAX_ALLOCATIONS_COUNT");
 
   cl_image_format image_format;
   image_format.image_channel_order = image_channel_order;
   image_format.image_channel_data_type = image_channel_data_type;
 
   cl_int ciErr1;
-  MemoryHandler* k = _allocations + _allocation_count;
-  ++_allocation_count;
-  k->handle = clCreateImage2D(_clcontext, flags,
+  _allocations.push_back(RawMemoryHandle());
+  auto mem_idx = _allocations.size() - 1;
+  auto mem_handle = &_allocations[mem_idx];
+
+  mem_handle->handle = clCreateImage2D(_clcontext, flags,
                               &image_format, w, h,
                               0, nullptr, &ciErr1);
-  k->size = w * h; // TODO mul by #channels
+  mem_handle->size = w * h; // TODO mul by #channels
   check_error(ciErr1, "Error in clCreateImage2D");
-  return k;
+  return mem_idx;
 }
 
-cl_event Context::write_image(MemoryHandler* gpu_image,
+cl_event Context::write_image(MemoryHandle gpu_buffer_handle,
                               utils::ImageData& data,
                               bool block,
                               cl_event* events_to_wait_for,
                               int events_to_wait_for_count){
   check_error(initialized, "Context was not initialized");
+  auto gpu_image = raw_memory(gpu_buffer_handle);
   cl_event finish_token;
   cl_bool clblock = block? CL_TRUE : CL_FALSE;
   cl_mem gpu_memory_pointer = gpu_image->handle;

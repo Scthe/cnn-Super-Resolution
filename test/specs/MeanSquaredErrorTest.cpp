@@ -69,7 +69,7 @@ bool MeanSquaredErrorTest::operator()(size_t,
   auto gpu_buf_algo_res = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * algo_size);
   _context->write_buffer(gpu_buf_algo_res, (void *)&cpu_algo_res[0], true);
   /* clang-format on */
-  opencl::MemoryHandler *gpu_buf_out = nullptr;
+  opencl::MemoryHandle gpu_buf_out = gpu_nullptr;
 
   // exec
   auto finish_token = pipeline->mean_squared_error(

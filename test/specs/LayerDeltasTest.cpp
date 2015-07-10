@@ -157,9 +157,7 @@ bool LayerDeltasTest::operator()(size_t, cnn_sr::DataPipeline *const pipeline) {
   curr_data.set_weights(_impl->weights);
 
   // previous layer results - used to take care of sigmoid func.
-  size_t output_dim[2] = {3, 3},
-         input_dim[2] = {output_dim[0] + curr_data.f_spatial_size - 1,
-                         output_dim[1] + curr_data.f_spatial_size - 1};
+  size_t output_dim[2] = {3, 3};
 
   // all variations with activation function
   float output[INPUT_SIZE];

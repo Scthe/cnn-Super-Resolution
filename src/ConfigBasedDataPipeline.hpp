@@ -16,12 +16,12 @@ class ConfigBasedDataPipeline : public DataPipeline {
   cl_event forward(cnn_sr::CnnLayerGpuAllocationPool&,  //
                    cnn_sr::CnnLayerGpuAllocationPool&,  //
                    cnn_sr::CnnLayerGpuAllocationPool&,  //
-                   opencl::MemoryHandler*, size_t, size_t, bool,
+                   opencl::MemoryHandle, size_t, size_t, bool,
                    cl_event* ev = nullptr);
 
-  cl_event mean_squared_error(opencl::MemoryHandler* gpu_buf_ground_truth,
-                              opencl::MemoryHandler* gpu_buf_algo_res,
-                              opencl::MemoryHandler*& gpu_buf_target,
+  cl_event mean_squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
+                              opencl::MemoryHandle gpu_buf_algo_res,
+                              opencl::MemoryHandle& gpu_buf_target,
                               size_t ground_truth_w, size_t ground_truth_h,
                               cl_event* ev = nullptr);
 

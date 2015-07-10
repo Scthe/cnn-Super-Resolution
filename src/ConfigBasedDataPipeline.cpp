@@ -78,7 +78,7 @@ cl_event ConfigBasedDataPipeline::forward(
     cnn_sr::CnnLayerGpuAllocationPool &layer_1_alloc,
     cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
     cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc,
-    opencl::MemoryHandler *input, size_t input_w, size_t input_h,
+    opencl::MemoryHandle input, size_t input_w, size_t input_h,
     bool subtract_input_mean, cl_event *ev_to_wait_for) {
   //
   check_initialized(DataPipeline::LOAD_KERNEL_LAYERS);
@@ -126,9 +126,9 @@ cl_event ConfigBasedDataPipeline::forward(
 }
 
 cl_event ConfigBasedDataPipeline::mean_squared_error(
-    opencl::MemoryHandler *gpu_buf_ground_truth,
-    opencl::MemoryHandler *gpu_buf_algo_res,
-    opencl::MemoryHandler *&gpu_buf_target,  //
+    opencl::MemoryHandle gpu_buf_ground_truth,
+    opencl::MemoryHandle gpu_buf_algo_res,
+    opencl::MemoryHandle &gpu_buf_target,  //
     size_t ground_truth_w, size_t ground_truth_h, cl_event *ev_to_wait_for) {
   size_t padding = layer_data_1.f_spatial_size + layer_data_2.f_spatial_size +
                    layer_data_3.f_spatial_size - 3;

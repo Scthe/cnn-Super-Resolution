@@ -8,7 +8,7 @@ typedef struct _cl_event* cl_event;
 
 namespace opencl {
 class Kernel;
-struct MemoryHandler;
+typedef size_t MemoryHandle;
 class Context;
 
 namespace utils {
@@ -16,19 +16,22 @@ struct ImageData;
 }
 }
 
+// TODO move this to opencl::Context
+const opencl::MemoryHandle gpu_nullptr = 1 << 30;
+
 namespace cnn_sr {
 
 struct LayerData;
 
 struct CnnLayerGpuAllocationPool {
   // forward:
-  opencl::MemoryHandler* weights = nullptr;
-  opencl::MemoryHandler* bias = nullptr;
-  opencl::MemoryHandler* output = nullptr;
+  opencl::MemoryHandle weights = gpu_nullptr;
+  opencl::MemoryHandle bias = gpu_nullptr;
+  opencl::MemoryHandle output = gpu_nullptr;
   // backpropagation:
-  opencl::MemoryHandler* deltas = nullptr;
-  opencl::MemoryHandler* grad_w = nullptr;
-  opencl::MemoryHandler* grad_b = nullptr;
+  opencl::MemoryHandle deltas = gpu_nullptr;
+  opencl::MemoryHandle grad_w = gpu_nullptr;
+  opencl::MemoryHandle grad_b = gpu_nullptr;
 };
 
 /**
@@ -51,21 +54,21 @@ class DataPipeline {
   virtual void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
   opencl::Context* context();
 
-  cl_event extract_luma(opencl::utils::ImageData&, opencl::MemoryHandler*&,
-                        opencl::MemoryHandler*&, bool, cl_event* ev = nullptr);
+  cl_event extract_luma(opencl::utils::ImageData&, opencl::MemoryHandle&,
+                        opencl::MemoryHandle&, bool, cl_event* ev = nullptr);
 
   cl_event execute_layer(opencl::Kernel&, const LayerData&,
                          cnn_sr::CnnLayerGpuAllocationPool&,
-                         opencl::MemoryHandler*&, size_t, size_t,
+                         opencl::MemoryHandle&, size_t, size_t,
                          cl_event* ev = nullptr);
 
   /**
    * @param  total_padding        difference in size between ground_truth image
    *                              and result. Should be equal to f1+f2+f3-3
    */
-  cl_event mean_squared_error(opencl::MemoryHandler* gpu_buf_ground_truth,
-                              opencl::MemoryHandler* gpu_buf_algo_res,
-                              opencl::MemoryHandler*& gpu_buf_target,
+  cl_event mean_squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
+                              opencl::MemoryHandle gpu_buf_algo_res,
+                              opencl::MemoryHandle& gpu_buf_target,
                               size_t ground_truth_w, size_t ground_truth_h,
                               size_t total_padding, cl_event* ev = nullptr);
 
@@ -77,7 +80,7 @@ class DataPipeline {
                             cl_event* ev = nullptr);
 
   cl_event backpropagate(opencl::Kernel&, LayerData&,
-                         opencl::MemoryHandler* layer_input,
+                         opencl::MemoryHandle layer_input,
                          CnnLayerGpuAllocationPool&,  //
                          size_t layer_out_w, size_t layer_out_h,
                          cl_event* ev = nullptr);
@@ -85,9 +88,9 @@ class DataPipeline {
   ///
   /// misc. kernels
   ///
-  cl_event subtract_mean(opencl::MemoryHandler*, cl_event* ev = nullptr);
-  cl_event sum(opencl::MemoryHandler*, u64*, cl_event* ev = nullptr);
-  cl_event subtract_from_all(opencl::MemoryHandler*, float,
+  cl_event subtract_mean(opencl::MemoryHandle, cl_event* ev = nullptr);
+  u64 sum(opencl::MemoryHandle, cl_event* ev = nullptr);
+  cl_event subtract_from_all(opencl::MemoryHandle, float,
                              cl_event* ev = nullptr);
 
   ///
@@ -106,18 +109,19 @@ class DataPipeline {
    * here, but we cannot allocate it with proper size since f.e. allocating
    * image is different then allocating normal buffer.
    * */
-  bool allocation_has_right_size(opencl::MemoryHandler*, size_t);
+  bool allocation_has_right_size(opencl::MemoryHandle, size_t);
 
  private:
-  void pre_execute_layer_validation(const LayerData&, opencl::MemoryHandler*,
+  void pre_execute_layer_validation(const LayerData&, opencl::MemoryHandle,
                                     size_t, size_t);
+  size_t element_count(opencl::MemoryHandle, size_t el_size);
 
  protected:
   opencl::Context* const _context;
   bool _initialized;
 
   /** Single 64bit number. Quite useful. */
-  opencl::MemoryHandler* _tmp_64bit = nullptr;
+  opencl::MemoryHandle _tmp_64bit = gpu_nullptr;
 
   opencl::Kernel* _luma_kernel_norm;
   opencl::Kernel* _luma_kernel_raw;
