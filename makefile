@@ -38,7 +38,15 @@ __OBJ = Config.o \
 _OBJ = Main_cl.o $(__OBJ)
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ)) # append ODIR to each entry
 
-_TEST_OBJ = TestRunner.o $(__OBJ) TestDataProvider.o LayerDeltasTest.o BackpropagationTest.o
+# _TEST_OBJ = TestRunner.o $(__OBJ) TestDataProvider.o LayerDeltasTest.o BackpropagationTest.o
+_TEST_OBJ = TestRunner.o $(__OBJ) \
+	ExtractLumaTest.o \
+	MeanSquaredErrorTest.o \
+	SubtractFromAllTest.o \
+	SumTest.o \
+	LayerDeltasTest.o \
+	BackpropagationTest.o \
+	LayerTest.o
 TEST_OBJ = $(patsubst %,$(ODIR)/%,$(_TEST_OBJ))
 
 

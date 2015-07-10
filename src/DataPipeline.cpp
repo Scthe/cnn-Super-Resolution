@@ -62,10 +62,14 @@ bool DataPipeline::allocation_has_right_size(opencl::MemoryHandler *alloc,
   if (alloc->size == size) return true;
 
   std::cout << "Was forced to realocate gpu buffer. This is not optimal and "
-               "may be a bug." << std::endl;
+               "may be a bug. In many cases DataPipeline is able to allocate "
+               "buffer of right size, so You only need to explictly set "
+               "MemoryHandler* to nullptr." << std::endl;
   alloc->release();
   return false;
 }
+
+opencl::Context *DataPipeline::context() { return _context; }
 
 ///
 /// Kernel loading

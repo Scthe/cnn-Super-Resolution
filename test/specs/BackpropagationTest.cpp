@@ -24,8 +24,6 @@ namespace specs {
 /// PIMPL
 ///
 struct BackpropagationTestImpl {
-  DataPipeline *pipeline = nullptr;
-
 // INPUT_SIZE = input_dim*n(l-1)
 #define INPUT_SIZE 50
   float input[INPUT_SIZE] = {-0.083, -0.064,  //
@@ -95,14 +93,16 @@ struct BackpropagationTestImpl {
 
 TEST_SPEC_PIMPL(BackpropagationTest)
 
-void BackpropagationTest::init(DataPipeline *pipeline) {
-  _impl->pipeline = pipeline;
-}
+void BackpropagationTest::init() {}
 
-const char *BackpropagationTest::name() { return "Backpropagation test"; }
+std::string BackpropagationTest::name(size_t) { return "Backpropagation test"; }
 
-bool BackpropagationTest::operator()(opencl::Context *const context) {
-  auto pipeline = _impl->pipeline;
+size_t BackpropagationTest::data_set_count() { return 1; }
+
+bool BackpropagationTest::operator()(size_t,
+                                     cnn_sr::DataPipeline *const pipeline) {
+  assert_not_null(pipeline);
+  auto context = pipeline->context();
 
   // data for layer, needs filled up weights&bias to pass validation
   LayerData data(2, 3, 3);  // n_prev_filter_cnt/FILTER_CNT/f_spatial_size

@@ -5,8 +5,7 @@
 /// This file contains various definitions to make tests more concise
 ///
 
-#include <cmath>   // std::exp
-#include <cstdio>  // snprintf
+#include <string>
 
 ///
 /// macro - utils
@@ -17,21 +16,9 @@
 #define CONCATENATE_DETAIL(x, y) x##y
 #define CONCATENATE(x, y) CONCATENATE_DETAIL(x, y)
 
-
-///
-/// test macros
-///
-/** test definitions */
-#define DEFINE_TEST(X, DESC, CTX_VAR)            \
-  struct X : test::TestCase {                    \
-    const char *name() override { return DESC; } \
-  bool operator()(opencl::Context * const _##CTX_VAR) override
-
-#define DEFINE_TEST_STR(X, STR, CTX_VAR) DEFINE_TEST(X, STR, CTX_VAR)
-
-#define END_TEST \
-  }              \
-  ;
+namespace cnn_sr {
+class DataPipeline;
+}
 
 namespace test {
 
@@ -42,20 +29,44 @@ float sigmoid(float);
 
 float mean(float *, size_t);
 
-///
-/// main test class to inherit from
-///
-struct TestCase {
-  virtual char const *name() = 0;
-  virtual bool operator()(opencl::Context *const) = 0;
+struct DataSet {
+  DataSet(std::string name) : name(name) {}
+  DataSet() {}
+  std::string name;
+};
+
+/**
+ * main test class to inherit from
+ */
+class TestCase {
+ public:
+  ~TestCase() {}
+
+  virtual std::string name(size_t data_set_id) = 0;
+  virtual bool operator()(size_t data_set_id, cnn_sr::DataPipeline *const) = 0;
+  virtual size_t data_set_count() { return 1; }
 
  protected:
   void assert_equals(float expected, float result);
-
   void assert_true(bool v, const char *msg);
+  void assert_data_set_ok(size_t);
+
+  template <typename T>
+  void assert_not_null(T *, const char *msg = nullptr);
 
  private:
   char msg_buffer[255];
 };
+
+///
+/// template implementations
+///
+
+template <typename T>
+void TestCase::assert_not_null(T *ptr, const char *msg) {
+  if (!msg) msg = "Null pointer";
+  assert_true(ptr != nullptr, msg);
 }
+}
+
 #endif /* TEST_RUNNER_H   */

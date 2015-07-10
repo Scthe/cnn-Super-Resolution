@@ -49,6 +49,7 @@ class DataPipeline {
   DataPipeline(opencl::Context*);
   virtual ~DataPipeline() {}
   virtual void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
+  opencl::Context* context();
 
   cl_event extract_luma(opencl::utils::ImageData&, opencl::MemoryHandler*&,
                         opencl::MemoryHandler*&, bool, cl_event* ev = nullptr);

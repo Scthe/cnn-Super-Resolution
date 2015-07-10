@@ -1,24 +1,23 @@
 #ifndef TEST_SPECS_DECL_H
 #define TEST_SPECS_DECL_H
 
-#include "../../src/opencl/Context.hpp"
 #include "../TestRunner.hpp"
+#include "../../src/opencl/Context.hpp"
+#include <string>
 
-namespace cnn_sr {
-class DataPipeline;
-}
-
-#define DECLARE_TEST_SPEC(X, ...)                      \
-  struct CONCATENATE(X, Impl);                         \
-  struct X : TestCase {                                \
-    X();                                               \
-    ~X();                                              \
-    void init(__VA_ARGS__);                            \
-    const char *name() override;                       \
-    bool operator()(opencl::Context * const) override; \
-                                                       \
-   private:                                            \
-    CONCATENATE(X, Impl) *const _impl = nullptr;       \
+#define DECLARE_TEST_SPEC(X, ...)                                              \
+  struct CONCATENATE(X, Impl);                                                 \
+  class X : public TestCase {                                                  \
+   public:                                                                     \
+    X();                                                                       \
+    ~X();                                                                      \
+    void init(__VA_ARGS__);                                                    \
+    std::string name(size_t data_set_id) override;                             \
+    bool operator()(size_t data_set_id, cnn_sr::DataPipeline *const) override; \
+    size_t data_set_count() override;                                          \
+                                                                               \
+   private:                                                                    \
+    CONCATENATE(X, Impl) *const _impl = nullptr;                               \
   };
 
 #define TEST_SPEC_PIMPL(X)                      \
@@ -28,8 +27,14 @@ class DataPipeline;
 namespace test {
 namespace specs {
 
-DECLARE_TEST_SPEC(LayerDeltasTest, cnn_sr::DataPipeline *)
-DECLARE_TEST_SPEC(BackpropagationTest, cnn_sr::DataPipeline *)
+DECLARE_TEST_SPEC(ExtractLumaTest)
+DECLARE_TEST_SPEC(MeanSquaredErrorTest)
+DECLARE_TEST_SPEC(SubtractFromAllTest)
+DECLARE_TEST_SPEC(SumTest)
+DECLARE_TEST_SPEC(LayerDeltasTest)
+DECLARE_TEST_SPEC(BackpropagationTest)
+DECLARE_TEST_SPEC(LayerTest)
+
 }
 }
 

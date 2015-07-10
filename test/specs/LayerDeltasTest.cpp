@@ -26,8 +26,6 @@ namespace specs {
 /// PIMPL
 ///
 struct LayerDeltasTestImpl {
-  DataPipeline *pipeline = nullptr;
-
 // INPUT_SIZE = input_dim*n(l-1)
 #define INPUT_SIZE 50
   float input_x[INPUT_SIZE] = {-0.083, -0.064,  // pre sigmoid
@@ -71,19 +69,19 @@ float weights[WEIGHTS_SIZE] = {
     0.361, -0.055,  0.273,     0.071,  0.431, -0.095,
 
     0.229,  0.378, -0.178,     0.343,  0.114, -0.409,
-   -0.220, -0.364,  0.711,   	0.281,  0.851, -1.001,
-   -0.411,	 0.661, -0.831,    -0.091,  0.281, -0.341,
+   -0.220, -0.364,  0.711,     0.281,  0.851, -1.001,
+   -0.411,   0.661, -0.831,    -0.091,  0.281, -0.341,
 
-   -0.931,	 0.511,  0.141,    -0.591,  0.491, -0.921,
-    0.291,	-0.211,  0.151,     0.491, -0.431, -0.321,
-   -0.631,	 0.301, -0.001,    -0.761, -0.021,  0.501};
+   -0.931,   0.511,  0.141,    -0.591,  0.491, -0.921,
+    0.291,  -0.211,  0.151,     0.491, -0.431, -0.321,
+   -0.631,   0.301, -0.001,    -0.761, -0.021,  0.501};
 /* clang-format on */
 
 // per filter n_prev_layer_filter: [-0.07799999999999996, -0.584]
 // raw data:
 // [-0.369,  0.025,  0.213, 0.236,  0.071, -0.429, 0.361, -0.055,  0.273, 0.229,
-// 0.378, -0.178, -0.220, -0.364,  0.711, -0.411,	 0.661, -0.831,-0.931,
-// 0.511,  0.141,0.291,	-0.211,  0.151,-0.631,	 0.301, -0.001]
+// 0.378, -0.178, -0.220, -0.364,  0.711, -0.411,   0.661, -0.831,-0.931,
+// 0.511,  0.141,0.291,  -0.211,  0.151,-0.631,   0.301, -0.001]
 // [0.058,  0.410, -0.068,-0.104,  0.161,  0.087,0.071,  0.431, -0.095,0.343,
 // 0.114, -0.409,0.281,  0.851, -1.001,-0.091,  0.281, -0.341,-0.591,  0.491,
 // -0.921,0.491, -0.431, -0.321,-0.761, -0.021,  0.501]
@@ -139,15 +137,17 @@ float weights[WEIGHTS_SIZE] = {
 
 TEST_SPEC_PIMPL(LayerDeltasTest)
 
-void LayerDeltasTest::init(DataPipeline *pipeline) {
-  _impl->pipeline = pipeline;
-}
+void LayerDeltasTest::init() {}
 
-const char *LayerDeltasTest::name() { return "Layer deltas test"; }
+std::string LayerDeltasTest::name(size_t) { return "Layer deltas test"; }
 
-bool LayerDeltasTest::operator()(opencl::Context *const context) {
-#define IGNORED 10
-  auto pipeline = _impl->pipeline;
+size_t LayerDeltasTest::data_set_count() { return 1; }
+
+bool LayerDeltasTest::operator()(size_t, cnn_sr::DataPipeline *const pipeline) {
+  assert_not_null(pipeline);
+  auto context = pipeline->context();
+
+  const size_t IGNORED = 10;
 
   // data for layer, needs filled up weights&bias to pass validation
   LayerData prev_data(IGNORED, 2, IGNORED);  // n(l-2), n(l-1), f(l-1)
