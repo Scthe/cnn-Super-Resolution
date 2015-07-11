@@ -3,7 +3,6 @@
 
 #include <cstddef>  // for size_t
 
-typedef unsigned long long u64;
 typedef struct _cl_event* cl_event;
 
 namespace opencl {
@@ -85,11 +84,23 @@ class DataPipeline {
                          size_t layer_out_w, size_t layer_out_h,
                          cl_event* ev = nullptr);
 
+  cl_event last_layer_delta(opencl::MemoryHandle gpu_buf_ground_truth,
+                            opencl::MemoryHandle gpu_buf_algo_res,
+                            opencl::MemoryHandle& gpu_buf_target,
+                            float weight_decay,  //
+                            size_t ground_truth_w, size_t ground_truth_h,
+                            size_t total_padding, cl_event* ev = nullptr);
+
+  float weight_decay(cnn_sr::CnnLayerGpuAllocationPool,
+                     cnn_sr::CnnLayerGpuAllocationPool,
+                     cnn_sr::CnnLayerGpuAllocationPool, float,
+                     cl_event* ev = nullptr);
+
   ///
   /// misc. kernels
   ///
   cl_event subtract_mean(opencl::MemoryHandle, cl_event* ev = nullptr);
-  u64 sum(opencl::MemoryHandle, cl_event* ev = nullptr);
+  float sum(opencl::MemoryHandle, bool squared = false, cl_event* ev = nullptr);
   cl_event subtract_from_all(opencl::MemoryHandle, float,
                              cl_event* ev = nullptr);
 
@@ -121,13 +132,15 @@ class DataPipeline {
   bool _initialized;
 
   /** Single 64bit number. Quite useful. */
-  opencl::MemoryHandle _tmp_64bit = gpu_nullptr;
+  opencl::MemoryHandle _tmp_gpu_float = gpu_nullptr;
 
-  opencl::Kernel* _luma_kernel_norm;
-  opencl::Kernel* _luma_kernel_raw;
-  opencl::Kernel* _mse_kernel;
-  opencl::Kernel* _sum_kernel;
-  opencl::Kernel* _subtract_from_all_kernel;
+  opencl::Kernel* _luma_kernel_norm = nullptr;
+  opencl::Kernel* _luma_kernel_raw = nullptr;
+  opencl::Kernel* _mse_kernel = nullptr;
+  opencl::Kernel* _sum_kernel = nullptr;
+  opencl::Kernel* _sum_squared_kernel = nullptr;
+  opencl::Kernel* _subtract_from_all_kernel = nullptr;
+  opencl::Kernel* _last_layer_delta_kernel = nullptr;
 };
 }
 

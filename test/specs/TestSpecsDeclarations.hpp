@@ -34,6 +34,8 @@ DECLARE_TEST_SPEC(SumTest)
 DECLARE_TEST_SPEC(LayerDeltasTest)
 DECLARE_TEST_SPEC(BackpropagationTest)
 DECLARE_TEST_SPEC(LayerTest)
+DECLARE_TEST_SPEC(LastLayerDeltaTest)
+DECLARE_TEST_SPEC(WeightDecayTest)
 
 }
 }

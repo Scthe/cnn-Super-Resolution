@@ -46,7 +46,9 @@ _TEST_OBJ = TestRunner.o $(__OBJ) \
 	SumTest.o \
 	LayerDeltasTest.o \
 	BackpropagationTest.o \
-	LayerTest.o
+	LayerTest.o \
+	LastLayerDeltaTest.o \
+	WeightDecayTest.o
 TEST_OBJ = $(patsubst %,$(ODIR)/%,$(_TEST_OBJ))
 
 

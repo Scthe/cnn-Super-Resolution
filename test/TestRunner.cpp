@@ -25,10 +25,12 @@ float mean(float *arr, size_t count) {
 
 void TestCase::assert_equals(float expected, float result) {
   // (yeah, this are going to be totally arbitrary numbers)
+  expected = std::abs(expected);
   float margin = 0.005f;
-  if (std::abs(expected) > 10) margin = 0.15f;
-  if (std::abs(expected) > 100) margin = 1;
-  float err = std::abs(expected) - std::abs(result);
+  if (expected > 10) margin = 0.15f;
+  if (expected > 100) margin = 1;
+  if (expected > 1000) margin = expected / 10000;
+  float err = expected - std::abs(result);
 
   if (err > margin) {
     snprintf(msg_buffer, sizeof(msg_buffer),  //
@@ -85,6 +87,8 @@ int main(int argc, char **argv) {
   ADD_TEST(SumTest);
   ADD_TEST(LayerDeltasTest);
   ADD_TEST(BackpropagationTest);
+  ADD_TEST(LastLayerDeltaTest);
+  ADD_TEST(WeightDecayTest);
 
   //
   //
