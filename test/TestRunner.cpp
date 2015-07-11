@@ -45,6 +45,45 @@ void TestCase::assert_true(bool v, const char *msg) {
   }
 }
 
+void TestCase::assert_equals(const std::vector<float> &expected,
+                             const std::vector<float> &result, bool print) {
+  if (expected.size() != result.size()) {
+    snprintf(msg_buffer, sizeof(msg_buffer),  //
+             "Expected vector has %d elements, while result %d. This vectors "
+             "are not equal",
+             expected.size(), result.size());
+    throw TestException<float>(msg_buffer);
+  }
+
+  for (size_t i = 0; i < expected.size(); i++) {
+    float r = result[i];
+    float e = expected[i];
+    if (print)
+      std::cout << "[" << i << "] expected >\t" << e << "\tgot> " << r
+                << std::endl;
+    assert_equals(e, r);
+  }
+}
+void TestCase::assert_equals(cnn_sr::DataPipeline *const pipeline,
+                             const std::vector<float> &expected,
+                             opencl::MemoryHandle handle, bool print) {
+  auto context = pipeline->context();
+  auto raw_gpu_mem = context->raw_memory(handle);
+  size_t len = raw_gpu_mem->size / sizeof(cl_float);
+  if (expected.size() != len) {
+    snprintf(msg_buffer, sizeof(msg_buffer),  //
+             "Expected vector has %d elements, while gpu memory holds %d. This "
+             "vectors are not equal",
+             expected.size(), len);
+    throw TestException<float>(msg_buffer);
+  }
+
+  context->block();
+  std::vector<float> gpu_read(len);
+  context->read_buffer(handle, (void *)&gpu_read[0], true);
+  assert_equals(expected, gpu_read, print);
+}
+
 void TestCase::assert_data_set_ok(size_t idx) {
   snprintf(msg_buffer, sizeof(msg_buffer),  //
            "Incorrect data set index(%d), there are only %d data sets", idx,

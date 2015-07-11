@@ -3,7 +3,6 @@
 #include <random>  // for std::mt19937
 #include <chrono>  // for random seed
 
-#include "../../src/opencl/UtilsOpenCL.hpp"
 #include "../../src/DataPipeline.hpp"
 
 using namespace cnn_sr;
@@ -77,21 +76,10 @@ bool LastLayerDeltaTest::operator()(size_t,
   opencl::MemoryHandle gpu_buf_out = gpu_nullptr;
 
   // exec
-  auto finish_token = pipeline->last_layer_delta(
-      gpu_buf_ground_truth, gpu_buf_algo_res, gpu_buf_out, _impl->weight_decay,
-      ground_truth_w, ground_truth_h, total_padding);
-
-  // read & compare results
-  std::vector<float> results(algo_size);
-  _context->read_buffer(gpu_buf_out, (void *)&results[0], true, &finish_token,
-                        1);
-  for (size_t i = 0; i < algo_size; i++) {
-    auto expected = cpu_expected[i];
-    auto read_val = results[i];
-    // std::cout << "[" << i << "] expected: " << expected << "\tgot: " <<
-    // read_val << std::endl;
-    assert_equals(expected, read_val);
-  }
+  pipeline->last_layer_delta(gpu_buf_ground_truth, gpu_buf_algo_res,
+                             gpu_buf_out, _impl->weight_decay, ground_truth_w,
+                             ground_truth_h, total_padding);
+  assert_equals(pipeline, cpu_expected, gpu_buf_out);
   return true;
 }
 

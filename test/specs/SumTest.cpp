@@ -1,6 +1,5 @@
 #include "TestSpecsDeclarations.hpp"
 
-#include "../../src/opencl/UtilsOpenCL.hpp"
 #include "../../src/DataPipeline.hpp"
 
 namespace test {

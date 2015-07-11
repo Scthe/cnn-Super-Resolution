@@ -7,7 +7,6 @@
 
 #include "json/gason.h"
 
-#include "../../src/opencl/UtilsOpenCL.hpp"
 #include "../../src/DataPipeline.hpp"
 #include "../../src/LayerData.hpp"
 #include "../../src/Utils.hpp"
@@ -116,7 +115,6 @@ bool LayerTest::operator()(size_t data_set_id,
 
   size_t out_dim[2];
   layer_data.get_output_dimensions(out_dim, data->input_w, data->input_h);
-  size_t out_count = out_dim[0] * out_dim[1] * data->current_filter_count;
 
   // pre run fixes
   if (data->preproces_mean) {
@@ -135,22 +133,9 @@ bool LayerTest::operator()(size_t data_set_id,
   // create kernel & run
   auto kernel =
       pipeline->create_layer_kernel(layer_data, data->result_multiply);
-  cl_event finish_token = pipeline->execute_layer(
-      *kernel, layer_data, gpu_alloc, gpu_buf_in, data->input_w, data->input_h);
-
-  // read results
-  std::vector<float> cpu_buf(out_count);
-  _context->read_buffer(gpu_alloc.output, (void*)&cpu_buf[0], true,
-                        &finish_token, 1);
-
-  // compare results
-  for (size_t i = 0; i < out_count; i++) {
-    float expected = data->output[i];
-    float result = cpu_buf[i];  // straight from gpu
-    // std::cout << (i + 1) << "  expected: " << expected << "\tgot: " << result
-    // << std::endl;
-    assert_equals(expected, result);
-  }
+  pipeline->execute_layer(*kernel, layer_data, gpu_alloc, gpu_buf_in,
+                          data->input_w, data->input_h);
+  assert_equals(pipeline, data->output, gpu_alloc.output);
 
   return true;
 }

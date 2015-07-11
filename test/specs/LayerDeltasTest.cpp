@@ -1,6 +1,5 @@
 #include "TestSpecsDeclarations.hpp"
 
-#include "../../src/opencl/UtilsOpenCL.hpp"
 #include "../../src/DataPipeline.hpp"
 #include "../../src/LayerData.hpp"
 
@@ -98,7 +97,7 @@ float weights[WEIGHTS_SIZE] = {
                                0.021, 0.136, 0.062,   // row 3, col 2
                                0.066, 0.165, 0.176};  // row 3, col 3
 
-  float expected_output[INPUT_SIZE] = {
+  std::vector<float> expected_output = {
       0.00263473,    -0.0025028,   // row 1
       -1.48462e-005, -0.00212133,  //
       -0.00452561,   -0.0102287,   //
@@ -179,23 +178,11 @@ bool LayerDeltasTest::operator()(size_t, cnn_sr::DataPipeline *const pipeline) {
 
   // create kernel & run
   auto kernel = pipeline->create_deltas_kernel(curr_data);
-  cl_event finish_token =
-      pipeline->calculate_deltas(*kernel,                     //
-                                 prev_data, curr_data,        //
-                                 prev_gpu_buf, curr_gpu_buf,  //
-                                 output_dim[0], output_dim[1]);
-
-  // read results
-  float results[INPUT_SIZE];
-  context->read_buffer(prev_gpu_buf.deltas, 0, sizeof(cl_float) * INPUT_SIZE,
-                       (void *)results, true, &finish_token, 1);
-  for (size_t i = 0; i < INPUT_SIZE; i++) {
-    float r = results[i];
-    float expected = _impl->expected_output[i];
-    // std::cout << "[" << i << "] expected >\t" << expected << "\tgot> " << r
-    // << std::endl;
-    assert_equals(expected, r);
-  }
+  pipeline->calculate_deltas(*kernel,                     //
+                             prev_data, curr_data,        //
+                             prev_gpu_buf, curr_gpu_buf,  //
+                             output_dim[0], output_dim[1]);
+  assert_equals(pipeline, _impl->expected_output, prev_gpu_buf.deltas);
 
   return true;
 }

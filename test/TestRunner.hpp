@@ -6,6 +6,7 @@
 ///
 
 #include <string>
+#include <vector>
 
 ///
 /// macro - utils
@@ -18,6 +19,9 @@
 
 namespace cnn_sr {
 class DataPipeline;
+}
+namespace opencl {
+typedef size_t MemoryHandle;
 }
 
 namespace test {
@@ -48,6 +52,11 @@ class TestCase {
 
  protected:
   void assert_equals(float expected, float result);
+  void assert_equals(const std::vector<float> &expected,
+                     const std::vector<float> &result, bool print = false);
+  void assert_equals(cnn_sr::DataPipeline *const,
+                     const std::vector<float> &expected, opencl::MemoryHandle,
+                     bool print = false);
   void assert_true(bool v, const char *msg);
   void assert_data_set_ok(size_t);
 

@@ -3,7 +3,6 @@
 #include <random>  // for std::mt19937
 #include <chrono>  // for random seed
 #
-#include "../../src/opencl/UtilsOpenCL.hpp"
 #include "../../src/DataPipeline.hpp"
 
 namespace test {

@@ -1,6 +1,5 @@
 #include "TestSpecsDeclarations.hpp"
 
-#include "../../src/opencl/UtilsOpenCL.hpp"
 #include "../../src/DataPipeline.hpp"
 #include "../../src/LayerData.hpp"
 
@@ -71,7 +70,7 @@ struct BackpropagationTestImpl {
                                0.066f, 0.165f, 0.176f};  // row 3, col 3
 #define WEIGHTS_SIZE 54
   /* clang-format off */
-  float expected_weights[WEIGHTS_SIZE] = {
+  const std::vector<float> expected_weights = {
      0.0438, -0.008,   0.0265,           -0.0203, -0.0072, -0.0328,
      0.0313, -0.049,   0.00872,          -0.0508, -0.096,  -0.0773,
      0.0157,  0.027,   0.0191,           -0.0623, -0.0533, -0.0526,
@@ -84,7 +83,7 @@ struct BackpropagationTestImpl {
   };
   /* clang-format on */
 
-  float expected_bias[3] = {0.650f, 0.948f, 0.915f};
+  const std::vector<float> expected_bias = {0.650f, 0.948f, 0.915f};
 };
 
 ///
@@ -124,39 +123,14 @@ bool BackpropagationTest::operator()(size_t,
 
   // create kernel & run
   auto kernel = pipeline->create_backpropagation_kernel(data);
-  auto finish_token =
-      pipeline->backpropagate(*kernel, data, gpu_buf_layer_input, gpu_buf,  //
-                              output_dim[0], output_dim[1]);
+  pipeline->backpropagate(*kernel, data, gpu_buf_layer_input, gpu_buf,  //
+                          output_dim[0], output_dim[1]);
 
-  // std::cout << "[Info] kernel set to run, blocking" << std::endl;
-  context->block();
-  // std::cout << "[Info] done" << std::endl;
-
-  // check results - weights
+  // check results
   std::cout << "checking weights" << std::endl;
-  float results_w[WEIGHTS_SIZE];
-  context->read_buffer(gpu_buf.grad_w, (void *)results_w, true, &finish_token,
-                       1);
-  for (size_t i = 0; i < WEIGHTS_SIZE; i++) {
-    float r = results_w[i];
-    float expected = _impl->expected_weights[i];
-    // std::cout << "w[" << i << "]\texpected > " << expected << "\tgot> " << r
-    // << std::endl;
-    assert_equals(expected, r);
-  }
-
-  // check results - bias
+  assert_equals(pipeline, _impl->expected_weights, gpu_buf.grad_w);
   std::cout << "checking bias" << std::endl;
-  float results_b[3] = {999.9f, 999.9f, 999.9f};
-  context->read_buffer(gpu_buf.grad_b, (void *)results_b, true, &finish_token,
-                       1);
-  for (size_t j = 0; j < data.bias_size(); j++) {
-    float r = results_b[j];
-    float expected = _impl->expected_bias[j];
-    // std::cout << "b[" << j << "] expected >\t" << expected << "\tgot> " << r
-    // << std::endl;
-    assert_equals(expected, r);
-  }
+  assert_equals(pipeline, _impl->expected_bias, gpu_buf.grad_b);
 
   return true;
 }
