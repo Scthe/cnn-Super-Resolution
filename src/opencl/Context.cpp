@@ -120,7 +120,7 @@ RawMemoryHandle* Context::raw_memory(MemoryHandle handle){
   return &_allocations[handle];
 }
 
-// execution
+// core: execution related
 
 void Context::block(){
   cl_int ciErr1;
@@ -197,6 +197,9 @@ Kernel* Context::create_kernel(char const *file_path,
   return kernel_ptr;
 }
 
+///
+/// Buffers: read/write/copy
+///
 cl_event Context::read_buffer(MemoryHandle gpu_buffer_handle,
                               size_t offset, size_t size, void *dst,
                               bool block,
@@ -257,14 +260,36 @@ cl_event Context::zeros_float(MemoryHandle gpu_buffer_handle, bool block,
                               cl_event* es, int event_count){
   auto gpu_buffer = raw_memory(gpu_buffer_handle);
   size_t len = gpu_buffer->size / sizeof(float);
-  std::vector<float> v;
-  v.reserve(len);
+  std::vector<float> v(len);
   for (size_t i = 0; i < len; i++) {
-    v.push_back(0.0f);
+    v[i] = 0.0f;
   }
   return this->write_buffer(gpu_buffer_handle, &v[0], block, es, event_count);
 }
 
+cl_event Context::copy_buffer(MemoryHandle src_buffer,
+                              MemoryHandle dst_buffer,
+                              cl_event* events_to_wait_for,
+                              int events_to_wait_for_count){
+  check_error(initialized, "Context was not initialized");
+  auto gpu_src = raw_memory(src_buffer);
+  auto gpu_dst = raw_memory(dst_buffer);
+  check_error(gpu_src->size == gpu_dst->size,
+    "When performing buffer copy, both buffers should have equal length");
+  cl_event finish_token;
+  cl_int ciErr1 = clEnqueueCopyBuffer(_clcommand_queue,
+                                      gpu_src->handle,
+                                      gpu_dst->handle,
+                                      0, 0, gpu_src->size,
+                                      events_to_wait_for_count, events_to_wait_for,
+                                      &finish_token);
+  check_error(ciErr1, "Error in copy buffer");
+  return finish_token;
+}
+
+///
+/// Images
+///
 MemoryHandle Context::create_image(cl_mem_flags flags,
                                    cl_channel_order image_channel_order,
                                    cl_channel_type image_channel_data_type,
@@ -312,7 +337,9 @@ cl_event Context::write_image(MemoryHandle gpu_buffer_handle,
   return finish_token;
 }
 
-// info
+///
+/// info
+///
 
 void Context::display_opencl_info() {
   cl_int ciErr1;

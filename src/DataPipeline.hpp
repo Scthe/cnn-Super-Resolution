@@ -31,6 +31,8 @@ struct CnnLayerGpuAllocationPool {
   opencl::MemoryHandle deltas = gpu_nullptr;
   opencl::MemoryHandle grad_w = gpu_nullptr;
   opencl::MemoryHandle grad_b = gpu_nullptr;
+  opencl::MemoryHandle previous_delta_w = gpu_nullptr;
+  opencl::MemoryHandle previous_delta_b = gpu_nullptr;
 };
 
 /**
@@ -96,6 +98,10 @@ class DataPipeline {
                      cnn_sr::CnnLayerGpuAllocationPool, float,
                      cl_event* ev = nullptr);
 
+  cl_event update_parameters(LayerData&, CnnLayerGpuAllocationPool&,
+                             float momentum, float learning_rate,
+                             cl_event* ev = nullptr);
+
   ///
   /// misc. kernels
   ///
@@ -120,7 +126,8 @@ class DataPipeline {
    * here, but we cannot allocate it with proper size since f.e. allocating
    * image is different then allocating normal buffer.
    * */
-  bool allocation_has_right_size(opencl::MemoryHandle, size_t);
+  bool allocation_has_right_size__(opencl::MemoryHandle, size_t,  //
+                                   size_t, const char*);
 
  private:
   void pre_execute_layer_validation(const LayerData&, opencl::MemoryHandle,
@@ -141,6 +148,7 @@ class DataPipeline {
   opencl::Kernel* _sum_squared_kernel = nullptr;
   opencl::Kernel* _subtract_from_all_kernel = nullptr;
   opencl::Kernel* _last_layer_delta_kernel = nullptr;
+  opencl::Kernel* _update_parameters_kernel = nullptr;
 };
 }
 

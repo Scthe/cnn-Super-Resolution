@@ -164,8 +164,18 @@ public:
    * @return                          opencl event object
    */
   cl_event zeros_float(MemoryHandle, bool block,
-                        cl_event* es=nullptr, int event_count=0);
+                       cl_event* es=nullptr, int event_count=0);
 
+  /**
+   * Copyt from source to destination
+   * @param  src_buffer               source
+   * @param  dst_buffer               destination
+   * @param  events_to_wait_for       [OPT]wait for other operations to finish
+   * @param  events_to_wait_for_count [OPT]
+   * @return                          opencl event object
+   */
+  cl_event copy_buffer(MemoryHandle, MemoryHandle,
+                       cl_event* es=nullptr, int event_count=0);
 
   /**
    * Allocate image

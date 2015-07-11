@@ -89,6 +89,7 @@ int main(int argc, char **argv) {
   ADD_TEST(BackpropagationTest);
   ADD_TEST(LastLayerDeltaTest);
   ADD_TEST(WeightDecayTest);
+  ADD_TEST(UpdateParametersTest);
 
   //
   //

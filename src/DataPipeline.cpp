@@ -18,8 +18,8 @@ const char *const sum_kernel_file = "src/kernel/sum.cl";
 const char *const deltas_kernel_file = "src/kernel/layer_deltas.cl";
 const char *const last_layer_delta_kernel_file = "src/kernel/last_layer_delta.cl";
 const char *const backpropagate_kernel_file = "src/kernel/backpropagate.cl";
-const char *const subtract_from_all_kernel_file =
-    "src/kernel/subtract_from_all.cl";
+const char *const subtract_from_all_kernel_file = "src/kernel/subtract_from_all.cl";
+const char *const update_parameters_kernel_file = "src/kernel/update_parameters.cl";
 /* clang-format on */
 
 namespace cnn_sr {
@@ -55,8 +55,15 @@ void DataPipeline::check_initialized(int kernel_load_flags) {
   this->load_kernels(kernel_load_flags);
 }
 
-bool DataPipeline::allocation_has_right_size(opencl::MemoryHandle alloc,
-                                             size_t size) {
+#define xstr(s) str(s)
+#define str(s) #s
+#define ALLOCATION_HAS_RIGHT_SIZE(ALLOC_VAR, ALLOC_SIZE)              \
+  (this->allocation_has_right_size__(ALLOC_VAR, ALLOC_SIZE, __LINE__, \
+                                     xstr(ALLOC_VAR)))
+
+bool DataPipeline::allocation_has_right_size__(opencl::MemoryHandle alloc,
+                                               size_t size, size_t line,
+                                               const char *variable_name) {
   if (alloc == gpu_nullptr) return false;
   auto raw_mem = _context->raw_memory(alloc);
   if (raw_mem->size == size) return true;
@@ -64,7 +71,8 @@ bool DataPipeline::allocation_has_right_size(opencl::MemoryHandle alloc,
   std::cout << "Was forced to realocate gpu buffer. This is not optimal and "
                "may be a bug. In many cases DataPipeline is able to allocate "
                "buffer of right size, so You only need to explictly set "
-               "MemoryHandle to gpu_nullptr." << std::endl;
+               "MemoryHandle to gpu_nullptr. Code line: " << line
+            << ", variable: '" << variable_name << "'" << std::endl;
   raw_mem->release();
   return false;
 }
@@ -104,9 +112,13 @@ void DataPipeline::load_kernels(int load_flags) {
           _context->create_kernel(sum_kernel_file, "-D SUM_SQUARED");
   }
 
-  if (load_back && !_last_layer_delta_kernel) {
-    _last_layer_delta_kernel =
-        _context->create_kernel(last_layer_delta_kernel_file);
+  if (load_back) {
+    if (!_last_layer_delta_kernel)
+      _last_layer_delta_kernel =
+          _context->create_kernel(last_layer_delta_kernel_file);
+    if (!_update_parameters_kernel)
+      _update_parameters_kernel =
+          _context->create_kernel(update_parameters_kernel_file);
   }
 }
 
@@ -166,12 +178,12 @@ cl_event DataPipeline::extract_luma(opencl::utils::ImageData &img_data,
             << local_work_size[1] << std::endl;
 
   // memory allocation
-  if (!allocation_has_right_size(gpu_buf_raw_img, out_pixel_count)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_raw_img, out_pixel_count)) {
     gpu_buf_raw_img = _context->create_image(
         CL_MEM_READ_WRITE, CL_RGBA, CL_UNSIGNED_INT8, img_data.w, img_data.h);
   }
   _context->write_image(gpu_buf_raw_img, img_data, true);
-  if (!allocation_has_right_size(gpu_buf_luma, out_pixel_count)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_luma, out_pixel_count)) {
     gpu_buf_luma = _context->allocate(CL_MEM_READ_WRITE,
                                       sizeof(cl_float) * out_pixel_count);
   }
@@ -216,7 +228,7 @@ float DataPipeline::sum(opencl::MemoryHandle data, bool squared,
   std::cout << "local work size: " << local_work_size[0] << std::endl;
 
   float result = 0;
-  if (!allocation_has_right_size(_tmp_gpu_float, sizeof(cl_float))) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(_tmp_gpu_float, sizeof(cl_float))) {
     _tmp_gpu_float = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float));
   }
   _context->write_buffer(_tmp_gpu_float, (void *)&result, true);  // zeroe
@@ -315,16 +327,16 @@ cl_event DataPipeline::execute_layer(
          bias_alloc_size = sizeof(cl_float) * data.bias_size(),
          out_alloc_size = sizeof(cl_float) * out_count;
 
-  if (!allocation_has_right_size(gpu_alloc.weights, weights_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.weights, weights_alloc_size)) {
     gpu_alloc.weights =
         _context->allocate(CL_MEM_READ_ONLY, weights_alloc_size);
     _context->write_buffer(gpu_alloc.weights, (void *)data.weights_ptr(), true);
   }
-  if (!allocation_has_right_size(gpu_alloc.bias, bias_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.bias, bias_alloc_size)) {
     gpu_alloc.bias = _context->allocate(CL_MEM_READ_ONLY, bias_alloc_size);
     _context->write_buffer(gpu_alloc.bias, (void *)data.bias_ptr(), true);
   }
-  if (!allocation_has_right_size(gpu_alloc.output, out_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.output, out_alloc_size)) {
     gpu_alloc.output = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
   }
   _context->zeros_float(gpu_alloc.output, true);
@@ -372,15 +384,15 @@ cl_event DataPipeline::mean_squared_error(
 
   // check allocations
   /* clang-format off */
-  if (!allocation_has_right_size(gpu_buf_ground_truth, sizeof(cl_float) * ground_truth_w * ground_truth_h)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_ground_truth, sizeof(cl_float) * ground_truth_w * ground_truth_h)) {
     throw std::runtime_error(
         "Provided ground_truth_w, ground_truth_h dimensions did not match "
         "allocated gpu_buf_ground_truth buffer size");
   }
-  if (!allocation_has_right_size(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
     throw std::runtime_error( "Allocated gpu_buf_algo_res buffer size did not match calculated size");
   }
-  if (!allocation_has_right_size(gpu_buf_target, sizeof(cl_float) * algo_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_target, sizeof(cl_float) * algo_size)) {
     gpu_buf_target = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float) * algo_size);
   }
   /* clang-format on */
@@ -420,15 +432,15 @@ cl_event DataPipeline::last_layer_delta(
 
   // check allocations
   /* clang-format off */
-  if (!allocation_has_right_size(gpu_buf_ground_truth, sizeof(cl_float) * ground_truth_w * ground_truth_h)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_ground_truth, sizeof(cl_float) * ground_truth_w * ground_truth_h)) {
     throw std::runtime_error(
         "Provided ground_truth_w, ground_truth_h dimensions did not match "
         "allocated gpu_buf_ground_truth buffer size");
   }
-  if (!allocation_has_right_size(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
     throw std::runtime_error( "Allocated gpu_buf_algo_res buffer size did not match calculated size");
   }
-  if (!allocation_has_right_size(gpu_buf_target, sizeof(cl_float) * algo_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_target, sizeof(cl_float) * algo_size)) {
     gpu_buf_target = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float) * algo_size);
   }
   /* clang-format on */
@@ -453,20 +465,20 @@ float DataPipeline::weight_decay(cnn_sr::CnnLayerGpuAllocationPool w_layer_1,
                                  cnn_sr::CnnLayerGpuAllocationPool w_layer_3,
                                  float weight_decay_parameter,
                                  cl_event *ev_to_wait_for) {
-  //
+  check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
   size_t w1_size = element_count(w_layer_1.weights, sizeof(cl_float)),
          w2_size = element_count(w_layer_2.weights, sizeof(cl_float)),
          w3_size = element_count(w_layer_3.weights, sizeof(cl_float));
 
   // check allocations & other memory stuff
   /* clang-format off */
-  if (!allocation_has_right_size(w_layer_1.weights, sizeof(cl_float) * w1_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(w_layer_1.weights, sizeof(cl_float) * w1_size)) {
     throw std::runtime_error("Could not calculate weight decay - weights for layer 1 are incorrect");
   }
-  if (!allocation_has_right_size(w_layer_2.weights, sizeof(cl_float) * w2_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(w_layer_2.weights, sizeof(cl_float) * w2_size)) {
     throw std::runtime_error("Could not calculate weight decay - weights for layer 2 are incorrect");
   }
-  if (!allocation_has_right_size(w_layer_3.weights, sizeof(cl_float) * w3_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(w_layer_3.weights, sizeof(cl_float) * w3_size)) {
     throw std::runtime_error("Could not calculate weight decay - weights for layer 3 are incorrect");
   }
   /* clang-format on */
@@ -509,20 +521,20 @@ cl_event DataPipeline::calculate_deltas(
   //   curr_gpu_alloc.weights
   //   prev_layer.output <- this is input for current layer (used for activation_func_derivative)
   //   prev_layer.deltas <- as target
-  if (!allocation_has_right_size(curr_gpu_alloc.deltas, out_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_gpu_alloc.deltas, out_alloc_size)) {
     throw std::runtime_error(
         "Tried to calculate deltas for previous layer, but deltas for current layer are not valid !");
   }
-  if (!allocation_has_right_size(curr_gpu_alloc.weights, weights_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_gpu_alloc.weights, weights_alloc_size)) {
     curr_gpu_alloc.weights = _context->allocate(CL_MEM_READ_ONLY, weights_alloc_size);
     _context->write_buffer(curr_gpu_alloc.weights, (void *)curr_layer.weights_ptr(), true);
   }
-  if (!allocation_has_right_size(prev_gpu_alloc.output, in_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(prev_gpu_alloc.output, in_alloc_size)) {
     throw std::runtime_error(
         "Tried to calculate deltas for previous layer, but there are no previous layer output values."
         "They are normally allocated during forward step.");
   }
-  if (!allocation_has_right_size(prev_gpu_alloc.deltas, in_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(prev_gpu_alloc.deltas, in_alloc_size)) {
     prev_gpu_alloc.deltas = _context->allocate(CL_MEM_READ_WRITE, in_alloc_size);
   }
   _context->zeros_float(prev_gpu_alloc.deltas, true);
@@ -561,6 +573,7 @@ cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,  //
                                      size_t layer_out_w, size_t layer_out_h,
                                      cl_event *ev_to_wait_for) {
   LayerData::validate(layer_data);
+  check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
 
   size_t input_w = layer_out_w + layer_data.f_spatial_size - 1,
          input_h = layer_out_h + layer_data.f_spatial_size - 1;
@@ -594,19 +607,19 @@ cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,  //
   /* clang-format on */
 
   /* clang-format off */
-  if (!allocation_has_right_size(gpu_alloc.deltas, out_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.deltas, out_alloc_size)) {
     throw std::runtime_error("Tried to calculate gradients, but deltas for current layer are not valid");
   }
-  if (!allocation_has_right_size(layer_input, in_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(layer_input, in_alloc_size)) {
     throw std::runtime_error(
         "Tried to calculate gradients, but there are no previous layer output values."
         "They are normally allocated during forward step.");
   }
   /* clang-format on */
-  if (!allocation_has_right_size(gpu_alloc.grad_w, grad_w_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_w, grad_w_size)) {
     gpu_alloc.grad_w = _context->allocate(CL_MEM_READ_WRITE, grad_w_size);
   }
-  if (!allocation_has_right_size(gpu_alloc.grad_b, grad_b_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_b, grad_b_size)) {
     gpu_alloc.grad_b = _context->allocate(CL_MEM_READ_WRITE, grad_b_size);
   }
   // this is actualy not needed, but if I'm mistaken it will panic
@@ -631,6 +644,76 @@ cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,  //
   int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
   return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
                         events_to_wait_for_count);
+}
+
+cl_event DataPipeline::update_parameters(LayerData &layer_data,  //
+                                         CnnLayerGpuAllocationPool &gpu_alloc,
+                                         float momentum, float learning_rate,
+                                         cl_event *ev_to_wait_for) {
+  LayerData::validate(layer_data);
+  check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
+
+  size_t weights_size = layer_data.weight_size(),
+         bias_size = layer_data.bias_size(),
+         weights_alloc_size = sizeof(cl_float) * weights_size,
+         bias_alloc_size = sizeof(cl_float) * bias_size;
+
+  // allocations
+  /* clang-format off */
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.weights, weights_alloc_size)) {
+    throw std::runtime_error("Tried to update weights, but old values are not valid. "
+                             "Impossible if forward pass was completed");
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.bias, bias_alloc_size)) {
+    throw std::runtime_error("Tried to update bias, but old values are not valid. "
+                             "Impossible if forward pass was completed");
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_w, weights_alloc_size)) {
+    throw std::runtime_error("Tried to update weights, but gradient values are not valid. "
+                             "Impossible if backpropagation was completed");
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_b, bias_alloc_size)) {
+    throw std::runtime_error("Tried to update bias, but gradient values are not valid. "
+                             "Impossible if backpropagation was completed");
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.previous_delta_w, weights_alloc_size)) {
+    gpu_alloc.previous_delta_w = _context->allocate(CL_MEM_READ_WRITE, weights_alloc_size);
+    _context->zeros_float(gpu_alloc.previous_delta_w, true);
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.previous_delta_b, bias_alloc_size)) {
+    gpu_alloc.previous_delta_b = _context->allocate(CL_MEM_READ_WRITE, bias_alloc_size);
+    _context->zeros_float(gpu_alloc.previous_delta_b, true);
+  }
+  /* clang-format on */
+
+  // args&parameters
+  size_t global_work_size[2];
+  size_t local_work_size[2];
+  opencl::utils::work_sizes(*_update_parameters_kernel, global_work_size,
+                            local_work_size, weights_size, 1);
+  global_work_size[0] *= global_work_size[1];
+  local_work_size[0] *= local_work_size[1];
+  std::cout << "global work size: " << global_work_size[0] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << std::endl;
+
+  _update_parameters_kernel->push_arg(gpu_alloc.weights);
+  _update_parameters_kernel->push_arg(gpu_alloc.bias);
+  _update_parameters_kernel->push_arg(gpu_alloc.grad_w);
+  _update_parameters_kernel->push_arg(gpu_alloc.grad_b);
+  _update_parameters_kernel->push_arg(gpu_alloc.previous_delta_w);
+  _update_parameters_kernel->push_arg(gpu_alloc.previous_delta_b);
+  _update_parameters_kernel->push_arg(sizeof(cl_float), (void *)&momentum);
+  _update_parameters_kernel->push_arg(sizeof(cl_float), (void *)&learning_rate);
+  _update_parameters_kernel->push_arg(sizeof(cl_uint), (void *)&weights_size);
+  _update_parameters_kernel->push_arg(sizeof(cl_uint), (void *)&bias_size);
+
+  // run
+  int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
+  return _update_parameters_kernel->execute(1, global_work_size,
+                                            local_work_size, ev_to_wait_for,
+                                            events_to_wait_for_count);
+  // finish_token = _context->copy_buffer(, , finish_token, 1);
+  // return _context->copy_buffer(, , finish_token, 1);
 }
 
 // end: namespace cnn_sr
