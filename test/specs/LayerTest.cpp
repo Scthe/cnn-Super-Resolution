@@ -110,8 +110,10 @@ bool LayerTest::operator()(size_t data_set_id,
 
   // convert layer test definition to cnn_sr::LayerData object
   cnn_sr::LayerData layer_data(data->n_prev_filter_cnt,
-                               data->current_filter_count, data->f_spatial_size,
-                               &data->weights[0], &data->bias[0]);
+                               data->current_filter_count,
+                               data->f_spatial_size);
+  layer_data.set_weights(&data->weights[0]);
+  layer_data.set_bias(&data->bias[0]);
 
   size_t out_dim[2];
   layer_data.get_output_dimensions(out_dim, data->input_w, data->input_h);

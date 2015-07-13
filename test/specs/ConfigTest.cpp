@@ -2,6 +2,7 @@
 
 #include <cstring>  // for strcmp
 #include "../../src/Config.hpp"
+#include "../../src/Utils.hpp"
 #include "../TestException.hpp"
 
 namespace test {
@@ -11,11 +12,15 @@ namespace specs {
 /// Data set
 ///
 struct ConfigDataSet : DataSet {
-  ConfigDataSet(std::string name, const char* cfg_file, bool expect_throw)
-      : DataSet(name), cfg_file(cfg_file), expect_throw(expect_throw) {}
+  ConfigDataSet(std::string name, const char* cfg_file, bool expect_io_error,
+                bool expect_invalid_val)
+      : DataSet(name),
+        cfg_file(cfg_file),
+        expect_io_error(expect_io_error),
+        expect_invalid_val(expect_invalid_val) {}
 
   const char* cfg_file;
-  bool expect_throw;
+  bool expect_io_error, expect_invalid_val;
 };
 
 ///
@@ -24,19 +29,23 @@ struct ConfigDataSet : DataSet {
 struct ConfigTestImpl {
   /* clang-format off */
   ConfigDataSet data_sets[4] = {
-      ConfigDataSet("ok", "test/data/config.json", false),
-      ConfigDataSet("invalid file", "test/data/config_non_parseable.json", true),
-      ConfigDataSet("invalid value", "test/data/config_invalid_val.json", true),
-      ConfigDataSet("file nonexistent", "test/data/NOPE.json", true)};
+      ConfigDataSet("ok", "test/data/config.json", false,false),
+      ConfigDataSet("invalid value", "test/data/config_invalid_val.json", false,true),
+      ConfigDataSet("invalid file", "test/data/config_non_parseable.json", true,false),
+      ConfigDataSet("file nonexistent", "test/data/NOPE.json", true,false)};
   /* clang-format on */
 
   cnn_sr::ParametersDistribution pd1 = {0.9, 0.9, 0.9, 0.9};
   cnn_sr::ParametersDistribution pd2 = {2.001, 2.001, 2.001, 2.001};
   cnn_sr::ParametersDistribution pd3 = {0.001, 0.001, 0.001, 0.001};
-  cnn_sr::Config correct_result = {32,                     16,  9,   1,
-                                   5,                      pd1, pd2, pd3,
-
-                                   "cnn-parameters-a.json"};
+  float learning_rates[3] = {12, 34, 56};
+  /* clang-format off */
+  cnn_sr::Config correct_result={32, 16,
+                                 9, 1, 5,
+                                 123.5f,0.1f, learning_rates,
+                                 pd1, pd2, pd3,
+                                 "cnn-parameters-a.json"};
+  /* clang-format on */
 };
 
 ///
@@ -68,7 +77,7 @@ bool ConfigTest::operator()(size_t data_set_id,
   auto data = _impl->data_sets[data_set_id];
   Config& c2 = _impl->correct_result;
 
-  bool thrown = false;
+  bool io_err = false, invalid_val = false;
   ConfigReader reader;
 
   try {
@@ -77,6 +86,13 @@ bool ConfigTest::operator()(size_t data_set_id,
                 "filter count does not match");
     assert_true(c1.f1 == c2.f1 && c1.f2 == c2.f2 && c1.f3 == c2.f3,
                 "filter spatial size does not match");
+    assert_true(c1.momentum == c2.momentum, "momentum does not match");
+    assert_true(c1.weight_decay_parameter == c2.weight_decay_parameter,
+                "weight decay parameter does not match");
+    assert_true(c1.learning_rate[0] == c2.learning_rate[0]         //
+                    && c1.learning_rate[1] == c2.learning_rate[1]  //
+                    && c1.learning_rate[2] == c2.learning_rate[2],
+                "learning rate does not match");
     // std::cout << c1.parameters_file << "'" << std::endl;
     // std::cout << c2.parameters_file << "'" << std::endl;
     assert_true(strcmp(c1.parameters_file, c2.parameters_file) == 0,
@@ -89,13 +105,17 @@ bool ConfigTest::operator()(size_t data_set_id,
                 "parameters distribution 3 does not match");
   } catch (TestException& e) {
     std::cout << e.what() << std::endl;
-    thrown = true;
-    // throw e;
-  } catch (...) {
-    thrown = true;
-  }
+    invalid_val = true;
+  } catch (IOException& e) {
+    std::cout << e.what() << std::endl;
+    io_err = true;
+  }/* catch (...) {
+    assert_true(false, "Unknown error");
+  }*/
 
-  assert_true(thrown == data.expect_throw, "Config was not parsed correctly");
+  assert_true(io_err == data.expect_io_error, "Expected IO error");
+  assert_true(invalid_val == data.expect_invalid_val,
+              "Expected values mismatch");
   return true;
 }
 

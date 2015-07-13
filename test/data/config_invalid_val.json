@@ -1,9 +1,12 @@
 {
-  "n1": 32,
+	"n1": 32,
 	"n2": 16,
 	"f1": 9,
 	"f2": 1,
 	"f3": 5,
+	"momentum": 123.5,
+	"weight_decay_parameter": 0.1,
+	"learning_rates": [12, 34, 56],
 	"parameters_file": "cnn-parameters-a.json",
 	"parameters_distribution_1": {
 		"mean_w": 0.9,

@@ -16,10 +16,6 @@ struct ExtractLumaDataSet : DataSet {
   bool normalize;
 };
 
-ExtractLumaDataSet data_sets[2] = {ExtractLumaDataSet(true, "normalized"),
-                                   ExtractLumaDataSet(false, "not normalized")};
-size_t ExtractLumaTest::data_set_count() { return 2; }
-
 ///
 /// PIMPL
 ///
@@ -30,6 +26,10 @@ struct ExtractLumaTestImpl {
                                      0.430f, 0.299f, 0.587f, 0.114f, 0.707f,  //
                                      0.670f, 0.745f, 0.853f, 0.745f, 0.299f,
                                      0.810f, 0.588f, 0.859f, 0.593f, 0.702f};
+
+  ExtractLumaDataSet data_sets[2] = {
+      ExtractLumaDataSet(true, "normalized"),
+      ExtractLumaDataSet(false, "not normalized")};
 };
 
 ///
@@ -40,16 +40,18 @@ TEST_SPEC_PIMPL(ExtractLumaTest)
 
 void ExtractLumaTest::init() {}
 
+size_t ExtractLumaTest::data_set_count() { return 2; }
+
 std::string ExtractLumaTest::name(size_t data_set_id) {
   assert_data_set_ok(data_set_id);
-  return "Extract luma test - " + data_sets[data_set_id].name;
+  return "Extract luma test - " + _impl->data_sets[data_set_id].name;
 }
 
 bool ExtractLumaTest::operator()(size_t data_set_id,
                                  cnn_sr::DataPipeline *const pipeline) {
   assert_not_null(pipeline);
   assert_data_set_ok(data_set_id);
-  bool normalize = data_sets[data_set_id].normalize;
+  bool normalize = _impl->data_sets[data_set_id].normalize;
 
   opencl::utils::ImageData data;
   load_image(test_image, data);

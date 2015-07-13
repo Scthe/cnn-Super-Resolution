@@ -19,6 +19,7 @@ struct ParametersDistribution {
 struct Config {
   Config(size_t, size_t,          //
          size_t, size_t, size_t,  //
+         float, float, float*,    //
          ParametersDistribution, ParametersDistribution, ParametersDistribution,
          const char* const = nullptr);
   ~Config();
@@ -26,8 +27,10 @@ struct Config {
   static void validate(Config&);
 
   // core parameters
-  const size_t n1 = 0, n2 = 0;
-  const size_t f1 = 0, f2 = 0, f3 = 0;
+  const size_t n1, n2;
+  const size_t f1, f2, f3;
+  const float momentum, weight_decay_parameter;
+  float learning_rate[3];
   char* parameters_file = nullptr;
 
   // random parameters(weights/biases)
