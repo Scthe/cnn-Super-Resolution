@@ -73,7 +73,19 @@ class DataPipeline {
                               size_t ground_truth_w, size_t ground_truth_h,
                               size_t total_padding, cl_event* ev = nullptr);
 
+  float weight_decay(cnn_sr::CnnLayerGpuAllocationPool,
+                     cnn_sr::CnnLayerGpuAllocationPool,
+                     cnn_sr::CnnLayerGpuAllocationPool, float,
+                     cl_event* ev = nullptr);
+
   /** deltas for previous layer based on current layer */
+  cl_event last_layer_delta(opencl::MemoryHandle gpu_buf_ground_truth,
+                            opencl::MemoryHandle gpu_buf_algo_res,
+                            opencl::MemoryHandle& gpu_buf_target,
+                            float weight_decay,  //
+                            size_t ground_truth_w, size_t ground_truth_h,
+                            size_t total_padding, cl_event* ev = nullptr);
+
   cl_event calculate_deltas(opencl::Kernel&, const LayerData&, const LayerData&,
                             cnn_sr::CnnLayerGpuAllocationPool&,
                             cnn_sr::CnnLayerGpuAllocationPool&,  //
@@ -86,17 +98,6 @@ class DataPipeline {
                          size_t layer_out_w, size_t layer_out_h,
                          cl_event* ev = nullptr);
 
-  cl_event last_layer_delta(opencl::MemoryHandle gpu_buf_ground_truth,
-                            opencl::MemoryHandle gpu_buf_algo_res,
-                            opencl::MemoryHandle& gpu_buf_target,
-                            float weight_decay,  //
-                            size_t ground_truth_w, size_t ground_truth_h,
-                            size_t total_padding, cl_event* ev = nullptr);
-
-  float weight_decay(cnn_sr::CnnLayerGpuAllocationPool,
-                     cnn_sr::CnnLayerGpuAllocationPool,
-                     cnn_sr::CnnLayerGpuAllocationPool, float,
-                     cl_event* ev = nullptr);
 
   cl_event update_parameters(LayerData&, CnnLayerGpuAllocationPool&,
                              float momentum, float learning_rate,

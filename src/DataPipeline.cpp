@@ -543,7 +543,7 @@ cl_event DataPipeline::calculate_deltas(
   // args
   kernel.push_arg(curr_gpu_alloc.deltas);
   kernel.push_arg(prev_gpu_alloc.output);
-  kernel.push_arg(prev_gpu_alloc.deltas);
+  kernel.push_arg(prev_gpu_alloc.deltas); // target
   kernel.push_arg(curr_gpu_alloc.weights);
   kernel.push_arg(sizeof(cl_uint), (void *)&prev_layer.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&curr_layer.f_spatial_size);

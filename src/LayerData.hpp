@@ -32,14 +32,8 @@ struct LayerData {
   /* clang-format on */
 
   LayerData(size_t n_prev_filter_cnt, size_t current_filter_count,
-            size_t f_spatial_size, float* weights = nullptr,
-            float* bias = nullptr);
+            size_t f_spatial_size);
 
-  static LayerData from_N_distribution(size_t n_prev_filter_cnt,
-                                       size_t current_filter_count,
-                                       size_t f_spatial_size,  //
-                                       float mean_w = 0.0f, float sd_w = 0.001f,
-                                       float mean_b = 0.0f, float sd_b = 0.0f);
   static void validate(const LayerData&);
 
   // setters
@@ -60,21 +54,6 @@ struct LayerData {
 
   std::vector<float> weights;
   std::vector<float> bias;
-};
-
-///
-/// LayerParametersReader
-/// TODO move to Config.hpp, or somewhere else, as long as it is not here
-///
-
-/**
- * Only parameters for layers are weights and bias
- */
-class LayerParametersIO {
- public:
-  void read(const char* const, std::vector<LayerData>&,
-            const char* const* layer_keys, size_t layer_key_count);
-  // bool write(const char* const, LayerData**, size_t);
 };
 }
 
