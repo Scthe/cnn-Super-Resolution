@@ -63,8 +63,8 @@ class TestCase {
   template <typename T>
   void assert_not_null(T *, const char *msg = nullptr);
 
- private:
-  char msg_buffer[255];
+  // private:
+  char msg_buffer[255];  // TODO remove
 };
 
 ///

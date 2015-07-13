@@ -15,7 +15,6 @@ namespace test {
 float sigmoid(float x) { return 1 / (1 + std::exp(-x)); }
 
 float mean(float *arr, size_t count) {
-  // TODO move to gpu
   float acc = 0;
   for (size_t i = 0; i < count; i++) {
     acc += arr[i];
@@ -23,6 +22,27 @@ float mean(float *arr, size_t count) {
   return acc / count;
 }
 
+///
+/// TestException
+///
+TestException::TestException() : runtime_error("TestException") {
+  // cnvt.str("");
+  cnvt << runtime_error::what() << ": Undefined error";
+}
+
+TestException::TestException(const char *msg) : runtime_error("TestException") {
+  // cnvt.str("");
+  cnvt << runtime_error::what() << ": " << msg;
+}
+
+TestException::TestException(const TestException &e)
+    : runtime_error("TestException"), cnvt(e.cnvt.str()) {}
+
+const char *TestException::what() const throw() { return cnvt.str().c_str(); }
+
+///
+/// TestCase
+///
 void TestCase::assert_equals(float expected, float result) {
   // (yeah, this are going to be totally arbitrary numbers)
   expected = std::abs(expected);
@@ -35,13 +55,13 @@ void TestCase::assert_equals(float expected, float result) {
   if (err > margin) {
     snprintf(msg_buffer, sizeof(msg_buffer),  //
              "Expected %f to be %f", result, expected);
-    throw TestException<float>(expected, result, msg_buffer);
+    throw TestException(msg_buffer);
   }
 }
 
 void TestCase::assert_true(bool v, const char *msg) {
   if (!v) {
-    throw TestException<float>(msg);
+    throw TestException(msg);
   }
 }
 
@@ -52,7 +72,7 @@ void TestCase::assert_equals(const std::vector<float> &expected,
              "Expected vector has %d elements, while result %d. This vectors "
              "are not equal",
              expected.size(), result.size());
-    throw TestException<float>(msg_buffer);
+    throw TestException(msg_buffer);
   }
 
   for (size_t i = 0; i < expected.size(); i++) {
@@ -75,7 +95,7 @@ void TestCase::assert_equals(cnn_sr::DataPipeline *const pipeline,
              "Expected vector has %d elements, while gpu memory holds %d. This "
              "vectors are not equal",
              expected.size(), len);
-    throw TestException<float>(msg_buffer);
+    throw TestException(msg_buffer);
   }
 
   context->block();
@@ -129,6 +149,7 @@ int main(int argc, char **argv) {
   ADD_TEST(LastLayerDeltaTest);
   ADD_TEST(WeightDecayTest);
   ADD_TEST(UpdateParametersTest);
+  ADD_TEST(ConfigTest);
 
   //
   //

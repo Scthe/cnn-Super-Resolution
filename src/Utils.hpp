@@ -5,6 +5,7 @@
 #include <cstring>
 #include <string>
 
+// TODO use dropbox/json11 since it allows for write too
 union JsonValue;
 class JsonAllocator;
 
@@ -33,6 +34,13 @@ inline bool is_even(T x) {
 #define IOException std::ios_base::failure
 
 #define NUM_ELEMS(x) (sizeof(x) / sizeof((x)[0]))
+
+// TODO change to: try_read_as_float(JsonNode& float&, string json_name)
+#define JSON_READ_FLOAT(NODE, LHS, PROP_NAME) \
+  if (strcmp(NODE->key, PROP_NAME) == 0 &&    \
+      NODE->value.getTag() == JSON_NUMBER) {  \
+    LHS = (float)NODE->value.toNumber();      \
+  }
 
 #define JSON_READ_UINT(NODE, OBJECT, PROP_NAME)              \
   if (strcmp(NODE->key, #PROP_NAME) == 0 &&                  \

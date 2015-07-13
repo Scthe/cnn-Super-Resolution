@@ -37,6 +37,7 @@ DECLARE_TEST_SPEC(LayerTest)
 DECLARE_TEST_SPEC(LastLayerDeltaTest)
 DECLARE_TEST_SPEC(WeightDecayTest)
 DECLARE_TEST_SPEC(UpdateParametersTest)
+DECLARE_TEST_SPEC(ConfigTest)
 
 }
 }
