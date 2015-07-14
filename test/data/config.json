@@ -1,0 +1,29 @@
+{
+  "n1": 32,
+	"n2": 16,
+	"f1": 9,
+	"f2": 1,
+	"f3": 5,
+  "momentum": 123.5,
+  "weight_decay_parameter": 0.1,
+  "learning_rates": [12, 34, 56],
+	"parameters_file": "cnn-parameters-a.json",
+	"parameters_distribution_1": {
+		"mean_w": 0.9,
+		"mean_b": 0.9,
+		"std_deviation_w": 0.9,
+		"std_deviation_b": 0.9
+	},
+	"parameters_distribution_2": {
+		"mean_w": 2.001,
+		"mean_b": 2.001,
+		"std_deviation_w": 2.001,
+		"std_deviation_b": 2.001
+	},
+	"parameters_distribution_3": {
+		"mean_w": 0.001,
+		"mean_b": 0.001,
+		"std_deviation_w": 0.001,
+		"std_deviation_b": 0.001
+	}
+}

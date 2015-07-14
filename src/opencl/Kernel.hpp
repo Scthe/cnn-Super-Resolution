@@ -1,18 +1,22 @@
-#ifndef __KERNEL_H
-#define __KERNEL_H
+#ifndef KERNEL_H
+#define KERNEL_H
 
 #include "CL/opencl.h"
+#include <iostream>  // for std::ostream& operator<<(..)
 
 namespace opencl {
 
 // forward declaration
 class Context;
-struct MemoryHandler;
+typedef size_t MemoryHandle;
 
 class Kernel {
  public:
-  void init(Context *, cl_kernel, cl_program, size_t max_work_group_size);
+  void init(Context *, cl_kernel, cl_program);
   void cleanup();
+  friend std::ostream &operator<<(std::ostream &os, opencl::Kernel &p);
+
+  size_t current_local_memory();
 
   /**
    * Set the next argument. To be used as a sequence of calls,
@@ -29,7 +33,7 @@ class Kernel {
    *
    * @param handle  gpu memory handler
    */
-  void push_arg(const MemoryHandler *);
+  void push_arg(MemoryHandle);
 
   /**
    * Execute the kernel with arguments that were pushed before this call.
@@ -71,11 +75,17 @@ class Kernel {
   cl_program program_id;
   Context *context;
   size_t max_work_group_size;
-  int arg_stack_size;
+  cl_ulong private_mem_size;
+  size_t pref_work_group_multiple;
+
+  size_t arg_stack_size;
+  size_t assigned_local_memory;  // by hand, since it does always work
   bool initialized = false;
 };
 
 //
 }
 
-#endif /* __KERNEL_H   */
+// std::ostream &operator<<(std::ostream &, opencl::Kernel &);
+
+#endif /* KERNEL_H   */

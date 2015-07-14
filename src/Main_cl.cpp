@@ -1,29 +1,100 @@
 #include <iostream>
 
-#include "opencl\Context.hpp"
-#include "opencl\Kernel.hpp"
-#include "opencl\UtilsOpenCL.hpp"
-
 #include "Config.hpp"
 #include "LayerData.hpp"
-#include "LayerExecutor.hpp"
+#include "ConfigBasedDataPipeline.hpp"
 #include "Utils.hpp"
+#include "opencl\Context.hpp"
+#include "opencl\UtilsOpenCL.hpp"
 
-// http://mmlab.ie.cuhk.edu.hk/projects/SRCNN.html
-// http://www.thebigblob.com/gaussian-blur-using-opencl-and-the-built-in-images-textures/
+using namespace opencl::utils;
+using namespace cnn_sr;
 
-void luma_extract(int argc, char **argv);
-void cfg_tests();
-void layerData_tests();
-void LayerExecutor_tests();
+struct GpuAllocationPool {
+  /** Raw 3 channel image loaded from hard drive */
+  opencl::MemoryHandle input_data = gpu_nullptr;
+  /** Single channel (luma) of size input_img_w*input_img_h */
+  opencl::MemoryHandle input_luma = gpu_nullptr;
 
-int main(int argc, char **argv) {
+  CnnLayerGpuAllocationPool layer_1;
+  CnnLayerGpuAllocationPool layer_2;
+  CnnLayerGpuAllocationPool layer_3;
+
+  /** Raw 3 channel image loaded from disc */
+  opencl::MemoryHandle expected_output_data = gpu_nullptr;
+  /** Used only during training */
+  opencl::MemoryHandle expected_output_luma = gpu_nullptr;
+};
+
+void prepare_image(DataPipeline* const pipeline, const char* const, ImageData&,
+                   opencl::MemoryHandle&, opencl::MemoryHandle&, bool);
+
+///
+/// main
+///
+int main(int argc, char** argv) {
+  const char* const cfg_file = "data\\config.json";
+  const char* const input_img_file = "data\\small.jpg";
+  const char* const expected_output_img_file = "data\\large.jpg";
+
   try {
-    // luma_extract(argc, argv);
-    // cfg_tests();
-    // layerData_tests();
-    LayerExecutor_tests();
-  } catch (const std::exception &e) {
+    // read config
+    ConfigReader reader;
+    Config cfg = reader.read(cfg_file);
+    std::cout << cfg << std::endl;
+
+    // opencl context
+    opencl::Context context(argc, argv);
+    context.init();
+
+    ConfigBasedDataPipeline data_pipeline(cfg, &context);
+    data_pipeline.init(/*DataPipeline::LOAD_KERNEL_NONE*/);
+    GpuAllocationPool gpu_alloc;  // memory handles
+
+    //
+    // read & prepare images
+    ImageData expected_output_img, input_img;
+    prepare_image(  // do not normalize, since cnn output is rescaled to 0..255
+        &data_pipeline, expected_output_img_file, expected_output_img,  //
+        gpu_alloc.expected_output_data, gpu_alloc.expected_output_luma, false);
+    prepare_image(&data_pipeline, input_img_file, input_img,
+                  gpu_alloc.input_data, gpu_alloc.input_luma, true);
+
+    context.block();
+
+    //
+    // process with layers
+    auto finish_token3 = data_pipeline.forward(gpu_alloc.layer_1,  //
+                                               gpu_alloc.layer_2,  //
+                                               gpu_alloc.layer_3,  //
+                                               gpu_alloc.input_luma,
+                                               input_img.w, input_img.h, true);
+
+    context.block();
+
+    //
+    // squared difference
+    // TODO luma is 0-1 or 0-255 ? (res:0-1)
+    // std::cout << "### Calcutating mean squared error" << std::endl;
+    // auto mse = data_pipeline.mean_squared_error(luma_result_buf_large,
+    // cnn_out, img_large.w, img_large.h, &finish_token3);
+    // std::cout << "error: " << mse << std::endl;
+
+    // exit(EXIT_SUCCESS);
+
+    //
+    // backpropagate
+    auto finish_token4 =
+        data_pipeline.backpropagate(gpu_alloc.layer_1,               //
+                                    gpu_alloc.layer_2,               //
+                                    gpu_alloc.layer_3,               //
+                                    gpu_alloc.input_luma,            //
+                                    gpu_alloc.expected_output_luma,  //
+                                    input_img.w,
+                                    input_img.h,  //
+                                    &finish_token3);
+
+  } catch (const std::exception& e) {
     std::cout << "[ERROR] " << e.what() << std::endl;
     exit(EXIT_FAILURE);
   }
@@ -32,162 +103,14 @@ int main(int argc, char **argv) {
   exit(EXIT_SUCCESS);
 }
 
-///
-///
-///
-
-void cfg_tests() {
-  using namespace cnn_sr;
-  ConfigReader reader;
-  // reader.read("non_exists.json");
-  // reader.read("tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___tooLong___.json");
-  // reader.read("data\\config_err.json");
-  Config cfg = reader.read("data\\config.json");
-
-  std::cout << cfg << std::endl;
-}
-
-///
-///
-///
-
-void layerData_tests() {
-  using namespace cnn_sr;
-  std::vector<LayerData> data;
-  data.push_back(LayerData(1, 3, 3));
-  data.push_back(LayerData(3, 2, 3));
-  data.push_back(LayerData(3, 3, 1));
-  data.push_back(LayerData(3, 1, 3));
-
-  // read from file
-  const char *const layer_keys[4] = {"layer_1", "layer_2_data_set_1",
-                                     "layer_2_data_set_2", "layer_3"};
-
-  LayerParametersIO param_reader;
-  std::cout << "reading" << std::endl;
-  param_reader.read("data/layer_data_example.json", data, layer_keys,
-                    NUM_ELEMS(layer_keys));
-
-  for (auto a : data) {
-    std::cout << a << std::endl;
-  }
-
-  std::cout << "from_N_distribution" << std::endl;
-  LayerData nn = LayerData::from_N_distribution(1, 3, 3);
-}
-
-///
-///
-///
-
-void LayerExecutor_tests() {
-  using namespace cnn_sr;
-  opencl::Kernel kernel;
-
-  LayerExecutor exec;
-  /*
-  size_t gws[2];
-  size_t lws[2];
-  exec.work_sizes(kernel, gws, lws, 16523, 5);
-  std::cout << "global: " << gws[0] << ", " << gws[1] << std::endl;
-  std::cout << "local: " << lws[0] << ", " << lws[1] << std::endl;
-  std::cout << "(global should be closes power2)" << std::endl;
-  std::cout << "(local[0]*local[1] should be < CONST)" << std::endl;
-  */
-}
-
-///
-///
-///
-
-#define OUT_CHANNELS 1
-
-void luma_extract(int argc, char **argv) {
-  using namespace opencl::utils;
-
-  const char *cSourceFile = "src/kernel/greyscale.cl";
-  const char *img_path = "data/cold_reflection_by_lildream.jpg";
-  const char *img_path2 = "data/cold_2.png";
-
-  ImageData data;
-  load_image(img_path, data);
-  std::cout << "img: " << data.w << "x" << data.h << "x" << data.bpp
-            << std::endl;
-
-  size_t global_work_size[2] = {512, 512};  // ceil
-  size_t local_work_size[2] = {32, 32};
-
-  //
-  // opencl context
-  opencl::Context context(argc, argv);
-  context.init();
-
-  // memory allocation - both CPU & GPU
-  size_t pixel_total = data.w * data.h,  //
-      data_total = pixel_total * OUT_CHANNELS;
-
-  cl_image_format pixel_format;
-  pixel_format.image_channel_order = CL_RGBA;
-  pixel_format.image_channel_data_type = CL_UNSIGNED_INT8;
-  auto gpu_image = context.create_image(CL_MEM_READ_WRITE,  //
-                                        data.w, data.h, &pixel_format);
-  context.write_image(gpu_image, data, true);
-
-  // TODO change last arg to be pointer to data, now it is unused
-  auto gpu_buf =
-      context.allocate(CL_MEM_WRITE_ONLY, sizeof(cl_uchar) * data_total);
-  std::cout << "cpu/gpu buffers pair allocated" << std::endl;
-  std::cout << "kernel create" << std::endl;
-
-  auto kernel = context.create_kernel(cSourceFile);
-
-  std::cout << "push args" << std::endl;
-
-  // kernel args
-  kernel->push_arg(sizeof(cl_mem), (void *)&gpu_image->handle);
-  kernel->push_arg(sizeof(cl_mem), (void *)&gpu_buf->handle);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data.w);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data.h);
-
-  std::cout << "execute" << std::endl;
-
-  // Launch kernel
-  cl_event finish_token = kernel->execute(2, global_work_size, local_work_size);
-
-  // Synchronous/blocking read of results
-  std::cout << "create result structure" << std::endl;
-  ImageData out;
-  out.w = data.w;
-  out.h = data.h;
-  out.bpp = OUT_CHANNELS;
-  out.data = new unsigned char[data_total];
-  std::cout << "read result" << std::endl;
-  context.read_buffer(gpu_buf,                                             //
-                      0, sizeof(cl_uchar) * data_total, (void *)out.data,  //
-                      true, &finish_token, 1);
-
-  /*
-  int base_row = 90, base_col = 85;
-  for (size_t i = 0; i < 2; i++) {
-    int base_r = (i + base_row) * 500;
-    for (size_t j = 0; j < 32; j++) {
-      size_t idx = base_r + base_col + j;
-      std::cout << (int)out.data[idx] << " ";
-    }
-    std::cout << std::endl;
-    for (size_t j = 0; j < 32; j++) {
-      size_t idx = base_r + base_col + j;
-      std::cout << (int)data.data[idx * 4 + 2] << " ";
-    }
-    std::cout << std::endl;
-    std::cout << std::endl;
-  }
-  */
-
-  std::cout << std::endl
-            << "--write--" << std::endl;
-  int res = opencl::utils::write_image(img_path2, out);
-
-  std::cout << "write status: " << res << std::endl
-            << "--end--" << std::endl;
+void prepare_image(DataPipeline* const pipeline, const char* const file_path,
+                   ImageData& img_data, opencl::MemoryHandle& gpu_data_handle,
+                   opencl::MemoryHandle& gpu_luma_handle, bool normalize_luma) {
+  std::cout << "loading image '" << file_path << "'" << std::endl;
+  opencl::utils::load_image(file_path, img_data);  // TODO should throw
+  std::cout << "    size: " << img_data.w << "x" << img_data.h << "x"
+            << img_data.bpp << std::endl;
+  // extract luma channel
+  cl_event finish_token1 = pipeline->extract_luma(
+      img_data, gpu_data_handle, gpu_luma_handle, normalize_luma);
 }

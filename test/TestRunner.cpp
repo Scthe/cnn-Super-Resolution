@@ -1,198 +1,116 @@
 #include <iostream>
-#include <memory>  // for std:unique_ptr
 #include <vector>
-#include <random>  // for std::mt19937
-#include <chrono>  // for random seed
+#include <cmath>   // std::exp
+#include <cstdio>  // snprintf
 
 #include "../src/opencl/Context.hpp"
-#include "../src/opencl/UtilsOpenCL.hpp"
-#include "../src/LayerData.hpp"
-#include "../src/LayerExecutor.hpp"
+#include "../src/DataPipeline.hpp"
 #include "TestRunner.hpp"
-#include "TestDataProvider.hpp"
+#include "specs/TestSpecsDeclarations.hpp"
+#include "TestException.hpp"
 
-using namespace test::data;
+namespace test {
 
-///
-/// ExtractLumaTest
-///
-DEFINE_TEST_STR(ExtractLumaTest, "Extract luma test", context) {
-  opencl::utils::ImageData data;
-  load_image("test/data/color_grid.png", data);
-  // std::cout << "img: " << data.w << "x" << data.h << "x" << data.bpp
-  // << std::endl;
+// utils functions
+float sigmoid(float x) { return 1 / (1 + std::exp(-x)); }
 
-  this->assert_true(
-      layer_1_input->size() >= (size_t)(data.w * data.h),
-      "Vector of 1st layer's input values should be at least as big as test"
-      " image");
-
-  cl_image_format pixel_format;
-  pixel_format.image_channel_order = CL_RGBA;
-  pixel_format.image_channel_data_type = CL_UNSIGNED_INT8;
-  auto gpu_image = _context->create_image(CL_MEM_READ_WRITE,  //
-                                          data.w, data.h, &pixel_format);
-  _context->write_image(gpu_image, data, true);
-
-  size_t data_total = sizeof(cl_float) * data.w * data.h;
-  auto gpu_buf = _context->allocate(CL_MEM_WRITE_ONLY, data_total);
-
-  auto kernel = _context->create_kernel("src/kernel/extract_luma.cl");
-  kernel->push_arg(gpu_image);
-  kernel->push_arg(gpu_buf);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data.w);
-  kernel->push_arg(sizeof(cl_uint), (void *)&data.h);
-
-  size_t global_work_size[2] = {16, 16};
-  size_t local_work_size[2] = {8, 8};
-  cl_event finish_token = kernel->execute(2, global_work_size, local_work_size);
-
-  std::unique_ptr<float[]> cpu_buf(new float[data.w * data.h]);
-  _context->read_buffer(gpu_buf,                               //
-                        0, data_total, (void *)cpu_buf.get(),  //
-                        true, &finish_token, 1);
-
-  for (int i = 0; i < data.w * data.h; i++) {
-    // std::cout << (i + 1) << ": " << cpu_buf[i] << "\t" << layer_1_input[i]
-    // << std::endl;
-    assert_equals((*layer_1_input)[i], cpu_buf[i]);
+float mean(float *arr, size_t count) {
+  float acc = 0;
+  for (size_t i = 0; i < count; i++) {
+    acc += arr[i];
   }
-
-  return true;
+  return acc / count;
 }
 
-void init(const std::vector<float> *layer_1_input) {
-  this->layer_1_input = layer_1_input;
+///
+/// TestException
+///
+TestException::TestException() : runtime_error("TestException") {
+  // cnvt.str("");
+  cnvt << runtime_error::what() << ": Undefined error";
 }
 
-private:
-const std::vector<float> *layer_1_input = nullptr;
-
-END_TEST
-
-///
-/// LayerTest
-///
-DEFINE_TEST(LayerTest, data->name.c_str(), context) {
-  // convert layer test definition to cnn_sr::LayerData object
-  // TODO remove layer test definition as is and merge with cnn_sr::LayerData
-  cnn_sr::LayerData layer_data(data->n_prev_filter_cnt,
-                               data->current_filter_count, data->f_spatial_size,
-                               &data->weights[0], &data->bias[0]);
-
-  // create kernel
-  std::stringstream kernel_compile_opts;
-  if (data->result_multiply) {
-    kernel_compile_opts << "-D RESULT_MULTIPLY=" << data->result_multiply;
-    std::cout << "RESULT_MULTIPLY=" << data->result_multiply << " (last layer)"
-              << std::endl;
-  } else {
-    kernel_compile_opts << "-D CURRENT_FILTER_COUNT="
-                        << data->current_filter_count;
-    std::cout << "CURRENT_FILTER_COUNT=" << data->current_filter_count
-              << " (layers 1,2)" << std::endl;
-  }
-  auto kernel = _context->create_kernel("src/kernel/layer_uber_kernel.cl",
-                                        kernel_compile_opts.str().c_str());
-
-  // pre run fixes
-  if (data->preproces_mean) {
-    float input_mean = mean(&data->input[0], data->input_w * data->input_h);
-    for (size_t i = 0; i < data->input_w * data->input_h; i++) {
-      data->input[i] -= input_mean;
-    }
-  }
-
-  // run
-  opencl::MemoryHandler *gpu_buf_out;
-  cnn_sr::LayerExecutor exec;
-  cl_event finish_token = exec(*kernel, layer_data, data->input, gpu_buf_out,
-                               data->input_w, data->input_h);
-
-  const size_t out_w = data->input_w - data->f_spatial_size + 1,
-               out_h = data->input_h - data->f_spatial_size + 1,
-               out_count = out_w * out_h * data->current_filter_count;
-
-  // read results
-  std::unique_ptr<float[]> cpu_buf(new float[out_count]);
-  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_float) * out_count,
-                        (void *)cpu_buf.get(), true, &finish_token, 1);
-
-  // compare results
-  for (size_t i = 0; i < out_count; i++) {
-    float expected = data->output[i];
-    float result = cpu_buf[i];  // straight from gpu
-    // std::cout << (i + 1) << "  expected: " << expected << "\tgot: " << result
-    // << std::endl;
-    assert_equals(expected, result);
-  }
-
-  return true;
+TestException::TestException(const char *msg) : runtime_error("TestException") {
+  // cnvt.str("");
+  cnvt << runtime_error::what() << ": " << msg;
 }
 
-void init(LayerData *data) { this->data = data; }
+TestException::TestException(const TestException &e)
+    : runtime_error("TestException"), cnvt(e.cnvt.str()) {}
 
-private:
-LayerData *data = nullptr;
-END_TEST
+const char *TestException::what() const throw() { return cnvt.str().c_str(); }
 
 ///
-/// SumSquaredTest
+/// TestCase
 ///
-DEFINE_TEST_STR(SumSquaredTest, "Mean squared error - sum squared", context) {
-  const size_t test_data_len = 10000;  // pixel count
-  const size_t global_work_size[1] = {16384};
-  const size_t local_work_size[1] = {512};  // (also the size of scrap buffer)
+void TestCase::assert_equals(float expected, float result) {
+  // (yeah, this are going to be totally arbitrary numbers)
+  expected = std::abs(expected);
+  float margin = 0.005f;
+  if (expected > 10) margin = 0.15f;
+  if (expected > 100) margin = 1;
+  if (expected > 1000) margin = expected / 10000;
+  float err = expected - std::abs(result);
 
-  unsigned seed1 = std::chrono::system_clock::now().time_since_epoch().count();
-  std::mt19937 generator(seed1);
-  std::vector<unsigned char> cpu_org_img(test_data_len);
-  std::vector<float> cpu_algo_res(test_data_len);
-  double expected = 0.0;
-  for (size_t i = 0; i < test_data_len; i++) {
-    cpu_org_img[i] = (unsigned char)(generator() & 0x15);
-    cpu_algo_res[i] = (generator() % 2560) / 10.0f;
-    double d = cpu_org_img[i] - cpu_algo_res[i];
-    expected += d * d;
+  if (err > margin) {
+    snprintf(msg_buffer, sizeof(msg_buffer),  //
+             "Expected %f to be %f", result, expected);
+    throw TestException(msg_buffer);
   }
-
-  /* clang-format off */
-  auto gpu_buf_org_img = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_uchar) * test_data_len);
-  _context->write_buffer(gpu_buf_org_img, (void *)&cpu_org_img[0], true);
-  auto gpu_buf_algo_res = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * test_data_len);
-  _context->write_buffer(gpu_buf_algo_res, (void *)&cpu_algo_res[0], true);
-
-  const unsigned __int64 out_init_val = 0;
-  auto gpu_buf_out = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_ulong));
-  _context->write_buffer(gpu_buf_out, (void *)&out_init_val, true);
-  /* clang-format on */
-
-  // kernel+args
-  auto kernel = _context->create_kernel("src/kernel/sum_squared.cl");
-  kernel->push_arg(gpu_buf_org_img);
-  kernel->push_arg(gpu_buf_algo_res);
-  kernel->push_arg(sizeof(cl_float) * local_work_size[0], nullptr);  // scrath
-  kernel->push_arg(gpu_buf_out);
-  kernel->push_arg(sizeof(cl_uint), (void *)&test_data_len);
-
-  // run
-  cl_event finish_token = kernel->execute(1, global_work_size, local_work_size);
-
-  // read (values may not be exactly the same since float->long data loss,
-  // but should be close enough)
-  unsigned __int64 read_val;
-  _context->read_buffer(gpu_buf_out, 0, sizeof(cl_ulong), (void *)&read_val,
-                        true, &finish_token, 1);
-  // std::cout << "expected: " << expected << "\tgot: " << read_val <<
-  // std::endl;
-  assert_equals(expected, read_val);
-
-  return true;
 }
 
-void init() {}
+void TestCase::assert_true(bool v, const char *msg) {
+  if (!v) {
+    throw TestException(msg);
+  }
+}
 
-END_TEST
+void TestCase::assert_equals(const std::vector<float> &expected,
+                             const std::vector<float> &result, bool print) {
+  if (expected.size() != result.size()) {
+    snprintf(msg_buffer, sizeof(msg_buffer),  //
+             "Expected vector has %d elements, while result %d. This vectors "
+             "are not equal",
+             expected.size(), result.size());
+    throw TestException(msg_buffer);
+  }
+
+  for (size_t i = 0; i < expected.size(); i++) {
+    float r = result[i];
+    float e = expected[i];
+    if (print)
+      std::cout << "[" << i << "] expected >\t" << e << "\tgot> " << r
+                << std::endl;
+    assert_equals(e, r);
+  }
+}
+void TestCase::assert_equals(cnn_sr::DataPipeline *const pipeline,
+                             const std::vector<float> &expected,
+                             opencl::MemoryHandle handle, bool print) {
+  auto context = pipeline->context();
+  auto raw_gpu_mem = context->raw_memory(handle);
+  size_t len = raw_gpu_mem->size / sizeof(cl_float);
+  if (expected.size() != len) {
+    snprintf(msg_buffer, sizeof(msg_buffer),  //
+             "Expected vector has %d elements, while gpu memory holds %d. This "
+             "vectors are not equal",
+             expected.size(), len);
+    throw TestException(msg_buffer);
+  }
+
+  context->block();
+  std::vector<float> gpu_read(len);
+  context->read_buffer(handle, (void *)&gpu_read[0], true);
+  assert_equals(expected, gpu_read, print);
+}
+
+void TestCase::assert_data_set_ok(size_t idx) {
+  snprintf(msg_buffer, sizeof(msg_buffer),  //
+           "Incorrect data set index(%d), there are only %d data sets", idx,
+           this->data_set_count());
+  assert_true(idx < this->data_set_count(), msg_buffer);
+}
+}
 
 ///
 /// Test runner main function
@@ -206,76 +124,92 @@ END_TEST
 int main(int argc, char **argv) {
   std::cout << "STARTING TESTS" << std::endl;
 
-  using namespace test::data;
+  using namespace test;
+  using namespace test::specs;
 
   std::vector<TestCase *> cases;
   std::vector<int> results;
 
-  TestDataProvider data_provider;
-  auto status = data_provider.read("test/data/test_cases.json");
-  if (!status) {
-    exit(EXIT_FAILURE);
-  }
-
-  //
-  //
-  //
-
-  ADD_TEST(ExtractLumaTest, &data_provider.layer1_data.input);
-  ADD_TEST(LayerTest, &data_provider.layer1_data);
-  ADD_TEST(LayerTest, &data_provider.layer2_data_set1);
-  ADD_TEST(LayerTest, &data_provider.layer2_data_set2);
-  ADD_TEST(LayerTest, &data_provider.layer3_data);
-  ADD_TEST(SumSquaredTest);
-
-  //
-  //
-  //
-  //
-
   opencl::Context context(argc, argv);
   context.init();
+  cnn_sr::DataPipeline pipeline(&context);
+  pipeline.init(cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
+
+  //
+  //
+  //
+
+  ADD_TEST(LayerTest);
+  ADD_TEST(ExtractLumaTest);
+  ADD_TEST(MeanSquaredErrorTest);
+  ADD_TEST(SubtractFromAllTest);
+  ADD_TEST(SumTest);
+  ADD_TEST(LayerDeltasTest);
+  ADD_TEST(BackpropagationTest);
+  ADD_TEST(LastLayerDeltaTest);
+  ADD_TEST(WeightDecayTest);
+  ADD_TEST(UpdateParametersTest);
+  ADD_TEST(ConfigTest);
+
+  //
+  //
+  //
+  //
 
   int failures = 0;
   for (auto i = begin(cases); i != end(cases); ++i) {
     TestCase *test = *i;
-    auto test_name = test->name();
-    bool passed = false;
-
-    std::cout << std::endl
-              << test_name << ":" << std::endl;
-
-    // run test
-    try {
-      passed = (*test)(&context);
-
-    } catch (const std::exception &ex) {
-      std::cout << ex.what() << std::endl;
-    } catch (...) {
-      std::cout << "Undefined exception" << std::endl;
+    size_t data_set_cnt = test->data_set_count();
+    if (data_set_cnt == 0) {
+      data_set_cnt = 1;
     }
-    results.push_back(passed ? 1 : 0);
+
+    // run test case with all data sets
+    for (size_t ds = 0; ds < data_set_cnt; ds++) {
+      auto test_name = test->name(ds);
+      bool passed = false;
+
+      std::cout << std::endl
+                << test_name << ":" << std::endl;
+      try {
+        passed = (*test)(ds, &pipeline);
+      } catch (const std::exception &ex) {
+        std::cout << "[ERROR] " << ex.what() << std::endl;
+      } catch (...) {
+        std::cout << "[ERROR] Undefined exception" << std::endl;
+      }
+      results.push_back(passed ? 1 : 0);
+    }
   }
 
   // print results
   std::cout << std::endl
             << "RESULTS:" << std::endl;
+  size_t test_case_it = 0;
   for (size_t i = 0; i < cases.size(); i++) {
-    auto test_name = cases[i]->name();
-    bool passed = results[i] != 0;
-    if (passed) {
-      std::cout << "\t  " << test_name << std::endl;
-    } else {
-      std::cout << "\t~ " << test_name << std::endl;
-      ++failures;
+    TestCase *test = cases[i];
+    size_t data_set_cnt = test->data_set_count();
+    if (data_set_cnt == 0) {
+      data_set_cnt = 1;
+    }
+    for (size_t ds = 0; ds < data_set_cnt; ds++) {
+      auto test_name = test->name(ds);
+      bool passed = results[test_case_it] != 0;
+      ++test_case_it;
+      if (passed) {
+        std::cout << "\t  " << test_name << std::endl;
+      } else {
+        std::cout << "\t~ " << test_name << std::endl;
+        ++failures;
+      }
     }
   }
 
   if (failures == 0) {
-    std::cout << cases.size() << " tests completed" << std::endl;
+    std::cout << results.size() << " tests completed" << std::endl;
     exit(EXIT_SUCCESS);
   } else {
-    std::cout << failures << " of " << cases.size() << " failed" << std::endl;
+    std::cout << failures << " of " << results.size() << " failed" << std::endl;
     exit(EXIT_FAILURE);
   }
 }

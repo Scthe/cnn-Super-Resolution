@@ -1,16 +1,15 @@
-#ifndef __TEST_CONST_H
-#define __TEST_CONST_H
+#ifndef TEST_RUNNER_H
+#define TEST_RUNNER_H
 
 ///
 /// This file contains various definitions to make tests more concise
 ///
 
-#include "TestException.hpp"
-#include <cmath>   // etd::exp
-#include <cstdio>  // snprintf
+#include <string>
+#include <vector>
 
 ///
-/// macros
+/// macro - utils
 ///
 #define STRINGIFY2(s) #s
 #define STRINGIFY(s) STRINGIFY2(s)
@@ -18,64 +17,65 @@
 #define CONCATENATE_DETAIL(x, y) x##y
 #define CONCATENATE(x, y) CONCATENATE_DETAIL(x, y)
 
-/** test definitions */
-#define DEFINE_TEST(X, DESC, CTX_VAR)              \
-  struct X : TestCase {                            \
-    const char *name() override { return DESC; }   \
-  bool operator()(opencl::Context * const _##CTX_VAR) override
+namespace cnn_sr {
+class DataPipeline;
+}
+namespace opencl {
+typedef size_t MemoryHandle;
+}
 
-#define DEFINE_TEST_STR(X, STR, CTX_VAR) DEFINE_TEST(X, STR, CTX_VAR)
-
-#define END_TEST \
-  }              \
-  ;
+namespace test {
 
 ///
 /// utils functions
 ///
-float sigmoid(float x) { return 1 / (1 + std::exp(-x)); }
+float sigmoid(float);
 
-float mean(float *arr, size_t count) {
-  // TODO move to gpu
-  float acc = 0;
-  for (size_t i = 0; i < count; i++) {
-    acc += arr[i];
-  }
-  return acc / count;
-}
+float mean(float *, size_t);
 
-///
-/// main test class to inherit from
-///
-struct TestCase {
-  virtual char const *name() = 0;
-  virtual bool operator()(opencl::Context *const) = 0;
-
- protected:
-  void assert_equals(float expected, float result) {
-#define ABS(x) x = (x) > 0 ? (x) : (-(x))
-    float margin = expected * 0.01f;
-    ABS(margin);
-    margin = margin < 0.01f ? 0.01f : margin;
-    float err = expected - result;
-    ABS(err);
-
-    if (err > margin) {
-      snprintf(msg_buffer, sizeof(msg_buffer),  //
-               "Expected %f to be %f", result, expected);
-      throw TestException<float>(expected, result, msg_buffer);
-    }
-#undef ABS
-  }
-
-  void assert_true(bool v, const char *msg) {
-    if (!v) {
-      throw TestException<float>(msg);
-    }
-  }
-
- private:
-  char msg_buffer[255];
+struct DataSet {
+  DataSet(std::string name) : name(name) {}
+  DataSet() {}
+  std::string name;
 };
 
-#endif /* __TEST_CONST_H   */
+/**
+ * main test class to inherit from
+ */
+class TestCase {
+ public:
+  ~TestCase() {}
+
+  virtual std::string name(size_t data_set_id) = 0;
+  virtual bool operator()(size_t data_set_id, cnn_sr::DataPipeline *const) = 0;
+  virtual size_t data_set_count() { return 1; }
+
+ protected:
+  void assert_equals(float expected, float result);
+  void assert_equals(const std::vector<float> &expected,
+                     const std::vector<float> &result, bool print = false);
+  void assert_equals(cnn_sr::DataPipeline *const,
+                     const std::vector<float> &expected, opencl::MemoryHandle,
+                     bool print = false);
+  void assert_true(bool v, const char *msg);
+  void assert_data_set_ok(size_t);
+
+  template <typename T>
+  void assert_not_null(T *, const char *msg = nullptr);
+
+ private:
+  char msg_buffer[255];  // TODO remove
+};
+
+///
+/// template implementations
+///
+
+template <typename T>
+void TestCase::assert_not_null(T *ptr, const char *msg) {
+  if (!msg) msg = "Null pointer";
+  assert_true(ptr != nullptr, msg);
+}
+}
+
+#endif /* TEST_RUNNER_H   */

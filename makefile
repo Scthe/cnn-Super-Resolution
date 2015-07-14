@@ -3,7 +3,7 @@
 # $< - first of dependencies
 
 CC = clang++
-VPATH = src/opencl src test libs/cpp
+VPATH = src/opencl src test test/specs libs/cpp
 IDIR = libs/include
 ODIR = obj
 BINDIR = bin
@@ -27,7 +27,8 @@ LFLAGS = -std=c++11 \
 
 __OBJ = Config.o \
 	LayerData.o \
-	LayerExecutor.o \
+	DataPipeline.o \
+	ConfigBasedDataPipeline.o \
 	Utils.o \
 	Context.o \
 	UtilsOpenCL.o \
@@ -37,7 +38,19 @@ __OBJ = Config.o \
 _OBJ = Main_cl.o $(__OBJ)
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ)) # append ODIR to each entry
 
-_TEST_OBJ = TestRunner.o $(__OBJ) TestDataProvider.o
+# _TEST_OBJ = TestRunner.o $(__OBJ) TestDataProvider.o LayerDeltasTest.o BackpropagationTest.o
+_TEST_OBJ = TestRunner.o $(__OBJ) \
+	ExtractLumaTest.o \
+	MeanSquaredErrorTest.o \
+	SubtractFromAllTest.o \
+	SumTest.o \
+	LayerDeltasTest.o \
+	BackpropagationTest.o \
+	LayerTest.o \
+	LastLayerDeltaTest.o \
+	WeightDecayTest.o \
+	UpdateParametersTest.o \
+	ConfigTest.o
 TEST_OBJ = $(patsubst %,$(ODIR)/%,$(_TEST_OBJ))
 
 

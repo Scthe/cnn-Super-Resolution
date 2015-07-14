@@ -1,13 +1,11 @@
 #ifndef OPENCL_CONTEXT_H_
 #define OPENCL_CONTEXT_H_
 
-#include <vector> // TODO remove vector import
-#include <iostream>  // TODO remove iostream import ?
+#include <vector>
+#include <iostream>  // for std::ostream& operator<<(..)
 #include "CL/opencl.h"
 #include "Kernel.hpp"
 
-#define MAX_KERNEL_COUNT 32
-#define MAX_ALLOCATIONS_COUNT 32
 #define MAX_INFO_STRING_LEN 256
 
 namespace opencl {
@@ -31,9 +29,13 @@ struct PlatformInfo{
  * base information about device
  */
 struct DeviceInfo{
+  cl_device_id device_id;
   cl_device_type type;
   char name[MAX_INFO_STRING_LEN];
+  cl_uint compute_units;
   cl_ulong global_mem_size;
+  cl_ulong local_mem_size;
+  cl_device_local_mem_type local_mem_type;
   cl_uint address_bits;
   size_t max_work_group_size;
   size_t work_items_for_dims[3];
@@ -43,8 +45,13 @@ struct DeviceInfo{
 /**
  * opencl memory handle
  */
-struct MemoryHandler{
-  MemoryHandler();
+typedef size_t MemoryHandle;
+
+/**
+ * represents gpu memory allocation. Should not be used
+ */
+struct RawMemoryHandle{
+  RawMemoryHandle();
   void release();
 
   cl_mem handle;
@@ -72,6 +79,8 @@ public:
   // execution
   //
 
+  void block();
+
   /**
    * Allocate memory on opencl device
    * https://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clCreateBuffer.html
@@ -80,7 +89,7 @@ public:
    * @param  size     bytest to allocate. Use f.e. sizeof(cl_char) * COUNT
    * @return          handler used by context
    */
-  MemoryHandler* allocate(cl_mem_flags, size_t);
+  MemoryHandle allocate(cl_mem_flags, size_t);
 
   /**
    * Create kernel from file
@@ -105,7 +114,7 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event read_buffer(MemoryHandler*, size_t offset, size_t size, void *dst,
+  cl_event read_buffer(MemoryHandle, size_t offset, size_t size, void *dst,
                        bool block, cl_event* es=nullptr, int event_count=0);
 
   /**
@@ -118,7 +127,7 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event read_buffer(MemoryHandler*, void *dst, bool block,
+  cl_event read_buffer(MemoryHandle, void *dst, bool block,
                        cl_event* es=nullptr, int event_count=0);
 
  /**
@@ -133,7 +142,7 @@ public:
   * @param  events_to_wait_for_count [OPT]
   * @return                          opencl event object
   */
-  cl_event write_buffer(MemoryHandler*, size_t offset, size_t size, void *src,
+  cl_event write_buffer(MemoryHandle, size_t offset, size_t size, void *src,
                       bool block, cl_event* es=nullptr, int event_count=0);
 
   /**
@@ -146,7 +155,7 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event write_buffer(MemoryHandler*, void *src, bool block,
+  cl_event write_buffer(MemoryHandle, void *src, bool block,
                         cl_event* es=nullptr, int event_count=0);
 
   /**
@@ -158,9 +167,19 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event zeros_float(MemoryHandler*, bool block,
-                        cl_event* es=nullptr, int event_count=0);
+  cl_event zeros_float(MemoryHandle, bool block,
+                       cl_event* es=nullptr, int event_count=0);
 
+  /**
+   * Copyt from source to destination
+   * @param  src_buffer               source
+   * @param  dst_buffer               destination
+   * @param  events_to_wait_for       [OPT]wait for other operations to finish
+   * @param  events_to_wait_for_count [OPT]
+   * @return                          opencl event object
+   */
+  cl_event copy_buffer(MemoryHandle, MemoryHandle,
+                       cl_event* es=nullptr, int event_count=0);
 
   /**
    * Allocate image
@@ -171,7 +190,9 @@ public:
    * @param  image_format
    * @return              handler used by context
    */
-  MemoryHandler* create_image(cl_mem_flags, size_t, size_t, const cl_image_format*);
+  MemoryHandle create_image(cl_mem_flags, cl_channel_order, cl_channel_type,
+                              size_t, size_t);
+
 
   /**
    * Write image data to buffer
@@ -183,7 +204,7 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event write_image(MemoryHandler*, utils::ImageData&,
+  cl_event write_image(MemoryHandle, utils::ImageData&,
                         bool block, cl_event* es=nullptr, int event_count=0);
 
   //
@@ -222,6 +243,8 @@ public:
    */
   cl_command_queue* command_queue(){ return &_clcommand_queue; }
 
+  RawMemoryHandle* raw_memory(MemoryHandle);
+
 private:
   void _cleanup();
   void platform_info(cl_platform_id platform_id, PlatformInfo& platform_info, std::vector<DeviceInfo>* devices=nullptr);
@@ -232,17 +255,14 @@ private:
   int argc;
   char **argv;
 
-  cl_device_id _cldevice;
   cl_context _clcontext;
   cl_command_queue _clcommand_queue;
 
   DeviceInfo _device;
   PlatformInfo _platform;
 
-  Kernel _kernels[MAX_KERNEL_COUNT];
-  size_t _kernel_count;
-  MemoryHandler _allocations[MAX_ALLOCATIONS_COUNT];
-  size_t _allocation_count;
+  std::vector<Kernel> _kernels;
+  std::vector<RawMemoryHandle> _allocations;
 };
 }
 
