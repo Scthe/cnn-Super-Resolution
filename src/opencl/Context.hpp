@@ -31,7 +31,10 @@ struct PlatformInfo{
 struct DeviceInfo{
   cl_device_type type;
   char name[MAX_INFO_STRING_LEN];
+  cl_uint compute_units;
   cl_ulong global_mem_size;
+  cl_ulong local_mem_size;
+  cl_device_local_mem_type local_mem_type;
   cl_uint address_bits;
   size_t max_work_group_size;
   size_t work_items_for_dims[3];

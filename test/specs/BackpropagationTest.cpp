@@ -15,6 +15,9 @@ using namespace cnn_sr;
 ///   'cratch_w[idx] = delta;'
 /// Also just use BackpropagationTest_script.py to calc the values.
 ///
+/// NOTE: data set 1 checks if kernel works, data set 2 checks if it does not
+/// crash when used with big number of data
+///
 
 namespace test {
 namespace specs {
@@ -94,43 +97,74 @@ TEST_SPEC_PIMPL(BackpropagationTest)
 
 void BackpropagationTest::init() {}
 
-std::string BackpropagationTest::name(size_t) { return "Backpropagation test"; }
+std::string BackpropagationTest::name(size_t data_set_id) {
+  return data_set_id == 0 ?                              //
+             "Backpropagation test - value correctness"  //
+                          : "Backpropagation test - big data";
+}
 
+// size_t BackpropagationTest::data_set_count() { return 2; }
 size_t BackpropagationTest::data_set_count() { return 1; }
 
-bool BackpropagationTest::operator()(size_t,
-                                     cnn_sr::DataPipeline *const pipeline) {
-  assert_not_null(pipeline);
+void execute(DataPipeline *pipeline, LayerData &data,     //
+             cnn_sr::CnnLayerGpuAllocationPool &gpu_buf,  //
+             float *deltas, float *input, size_t input_w, size_t input_h) {
   auto context = pipeline->context();
-
-  // data for layer, needs filled up weights&bias to pass validation
-  LayerData data(2, 3, 3);  // n_prev_filter_cnt/FILTER_CNT/f_spatial_size
-  float w[WEIGHTS_SIZE], bias[10];
-  data.set_bias(bias);
-  data.set_weights(w);
-
-  size_t output_dim[2] = {3, 3};
+  size_t output_dim[2];
+  data.get_output_dimensions(output_dim, input_w, input_h);
+  size_t deltas_size =
+             output_dim[0] * output_dim[1] * data.current_filter_count,
+         input_size = data.input_size(input_w, input_h);
 
   // gpu memory alloc
-  cnn_sr::CnnLayerGpuAllocationPool gpu_buf;
   opencl::MemoryHandle gpu_buf_layer_input;
   /* clang-format off */
-  gpu_buf.deltas = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * DELTAS_SIZE);
-  gpu_buf_layer_input = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * INPUT_SIZE);
+  gpu_buf.deltas = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * deltas_size);
+  gpu_buf_layer_input = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * input_size);
   /* clang-format on */
-  context->write_buffer(gpu_buf.deltas, (void *)_impl->deltas, true);
-  context->write_buffer(gpu_buf_layer_input, (void *)_impl->input, true);
+  context->write_buffer(gpu_buf.deltas, (void *)deltas, true);
+  context->write_buffer(gpu_buf_layer_input, (void *)input, true);
 
   // create kernel & run
   auto kernel = pipeline->create_backpropagation_kernel(data);
   pipeline->backpropagate(*kernel, data, gpu_buf_layer_input, gpu_buf,  //
                           output_dim[0], output_dim[1]);
+}
 
-  // check results
-  std::cout << "checking weights" << std::endl;
-  assert_equals(pipeline, _impl->expected_weights, gpu_buf.grad_w);
-  std::cout << "checking bias" << std::endl;
-  assert_equals(pipeline, _impl->expected_bias, gpu_buf.grad_b);
+bool BackpropagationTest::operator()(size_t data_set_id,
+                                     cnn_sr::DataPipeline *const pipeline) {
+  assert_not_null(pipeline);
+  auto context = pipeline->context();
+  cnn_sr::CnnLayerGpuAllocationPool gpu_buf;
+
+  data_set_id = 1;
+
+  if (data_set_id == 0) {
+    // data for layer, needs filled up weights&bias to pass validation
+    LayerData data(2, 3, 3);  // n_prev_filter_cnt/FILTER_CNT/f_spatial_size
+    float w[WEIGHTS_SIZE], bias[10];
+    data.set_bias(bias);
+    data.set_weights(w);
+    execute(pipeline, data, gpu_buf, _impl->deltas, _impl->input, 5, 5);
+    // check results
+    std::cout << "checking weights" << std::endl;
+    assert_equals(pipeline, _impl->expected_weights, gpu_buf.grad_w);
+    std::cout << "checking bias" << std::endl;
+    assert_equals(pipeline, _impl->expected_bias, gpu_buf.grad_b);
+  } else {
+    LayerData data(32, 16, 3);
+    float w[4608], bias[16];
+    data.set_bias(bias);
+    data.set_weights(w);
+    // (we dont care about values and sizes must only be at least enough)
+    const size_t input_w = 1024, input_h = 1024;
+    std::vector<float> deltas(input_w * input_h * data.current_filter_count),
+        input(input_w * input_h * data.n_prev_filter_cnt);
+    execute(pipeline, data, gpu_buf,  //
+            &deltas[0], &input[0], input_w, input_h);
+    context->block();
+    // didn't crash? then it's ok
+  }
 
   return true;
 }

@@ -142,8 +142,8 @@ const char *get_opencl_error_str(cl_int errorCode) {
     DECLARE_ERROR(CL_COMPILER_NOT_AVAILABLE);
     DECLARE_ERROR(CL_MEM_OBJECT_ALLOCATION_FAILURE);
     case CL_OUT_OF_RESOURCES:
-      return "CL_OUT_OF_RESOURCES - possible watchdog exception"
-             "see f.e "
+      return "CL_OUT_OF_RESOURCES - either running out of memory or possible "
+             "watchdog exception. See f.e "
              "https://devtalk.nvidia.com/default/topic/471020/"
              "driver-crashs-while-opencl-app-is-running/";
       DECLARE_ERROR(CL_OUT_OF_HOST_MEMORY);

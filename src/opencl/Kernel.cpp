@@ -6,15 +6,23 @@
 
 namespace opencl {
 
-void Kernel::init(Context *ctx, cl_kernel k, cl_program p,
-                  size_t max_work_group_size) {
+void Kernel::init(Context *ctx, cl_kernel k, cl_program p) {
   if (initialized) cleanup();
   this->context = ctx;
   this->kernel_id = k;
   this->program_id = p;
-  this->max_work_group_size = max_work_group_size;
   arg_stack_size = 0;
   initialized = true;
+  // read parameters
+  cl_int ciErr1;
+  ciErr1 = clGetKernelWorkGroupInfo(k, nullptr, CL_KERNEL_WORK_GROUP_SIZE, 1024,
+                                    &max_work_group_size, nullptr);
+  ciErr1 = clGetKernelWorkGroupInfo(k, nullptr, CL_KERNEL_PRIVATE_MEM_SIZE,
+                                    1024, &private_mem_size, nullptr);
+  ciErr1 = clGetKernelWorkGroupInfo(
+      k, nullptr, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, 1024,
+      &pref_work_group_multiple, nullptr);
+  context->check_error(ciErr1, "Could not get kernel informations");
 }
 
 void Kernel::cleanup() {
@@ -23,6 +31,15 @@ void Kernel::cleanup() {
 
   if (kernel_id) clReleaseKernel(kernel_id);
   if (program_id) clReleaseProgram(program_id);
+}
+
+cl_ulong Kernel::current_local_memory() {
+  cl_ulong loc_mem_size;
+  cl_int ciErr1 =
+      clGetKernelWorkGroupInfo(kernel_id, nullptr, CL_KERNEL_LOCAL_MEM_SIZE,
+                               1024, &loc_mem_size, nullptr);
+  context->check_error(ciErr1, "Could not get kernel's local memory usage");
+  return loc_mem_size;
 }
 
 void Kernel::push_arg(size_t arg_size, const void *arg_value) {
@@ -47,6 +64,11 @@ cl_event Kernel::execute(cl_uint work_dim,                //
   context->check_error(context->was_initialized(),
                        "Context was not initialized");
   check_work_parameters(work_dim, global_work_size, local_work_size);
+
+  // check used amount of local memory
+  context->check_error(
+      current_local_memory() <= context->device().local_mem_size,
+      "You are using too much local memory");
 
   // correct event parameters
   if (!events_to_wait_for) events_to_wait_for_count = 0;
@@ -129,5 +151,15 @@ void Kernel::check_work_parameters(cl_uint work_dim,  //
              this->max_work_group_size);
     context->check_error(false, msg_buffer);
   }
+}
+
+std::ostream &operator<<(std::ostream &os, opencl::Kernel &k) {
+  os << "program id: " << k.program_id                                //
+     << ", kernel id: " << k.kernel_id                                //
+     << ", max_work_group_size: " << k.max_work_group_size            //
+     << ", private_mem_size: " << k.private_mem_size                  //
+     << ", pref_work_group_multiple: " << k.pref_work_group_multiple  //
+     << ", allocated local memory: " << (k.current_local_memory());     //
+  return os;
 }
 }

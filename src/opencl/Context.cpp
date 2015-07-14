@@ -187,11 +187,8 @@ Kernel* Context::create_kernel(char const *file_path,
   // Create the kernel
   cl_kernel kernel_id = clCreateKernel(program_id, main_f, &ciErr1);
   check_error(ciErr1, "Error in clCreateKernel");
-  size_t max_work_group_size;
-  ciErr1 = clGetKernelWorkGroupInfo(kernel_id, _cldevice,
-     CL_KERNEL_WORK_GROUP_SIZE, 1024, &max_work_group_size, nullptr);
 
-  kernel_ptr->init(this, kernel_id, program_id, max_work_group_size);
+  kernel_ptr->init(this, kernel_id, program_id);
 
   // std::cout << "kernel created(f) :" <<k->kernel_id<<":"<<k->program_id<< std::endl;
   return kernel_ptr;
@@ -437,6 +434,12 @@ void Context::device_info(cl_device_id device_id, DeviceInfo& info) {
                             1024, &info.work_items_for_dims, nullptr);
   ciErr1 |= clGetDeviceInfo(device_id, CL_DEVICE_TYPE,
                             1024, &info.type, nullptr);
+  ciErr1 |= clGetDeviceInfo(device_id, CL_DEVICE_LOCAL_MEM_SIZE,
+                            1024, &info.local_mem_size, nullptr);
+  ciErr1 |= clGetDeviceInfo(device_id, CL_DEVICE_LOCAL_MEM_TYPE,
+                            1024, &info.local_mem_type, nullptr);
+  ciErr1 |= clGetDeviceInfo(device_id, CL_DEVICE_MAX_COMPUTE_UNITS,
+                            1024, &info.compute_units, nullptr);
   ciErr1 |= clGetDeviceInfo(device_id, CL_DEVICE_NAME,
                             sizeof(info.name), &info.name, &value_size);
   info.name[value_size] = '\0';
@@ -456,7 +459,10 @@ std::ostream& operator<< (std::ostream& os, const opencl::DeviceInfo& device){
   auto wifd = device.work_items_for_dims;
   os <<  opencl::utils::device_type_str[device.type]
      << "::" << device.name
-     << ", memory: " << (device.global_mem_size / 1024 / 1024) << "MB"
+     << ", compute units: " << device.compute_units
+     << ", global memory: " << (device.global_mem_size / 1024 / 1024) << "MB"
+     << ", max local memory: " << (device.local_mem_size / 1024) << "KB, local memory type: "
+          << (device.local_mem_type == CL_LOCAL ? "local" : "global")
      << ", address bits: " << device.address_bits
      << ", max work group size: " << device.max_work_group_size
      << ", work items: [" << wifd[0] << ", " << wifd[1] << ", " << wifd[2]
