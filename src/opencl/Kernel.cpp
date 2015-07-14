@@ -12,16 +12,20 @@ void Kernel::init(Context *ctx, cl_kernel k, cl_program p) {
   this->kernel_id = k;
   this->program_id = p;
   arg_stack_size = 0;
+  assigned_local_memory = 0;
   initialized = true;
   // read parameters
   cl_int ciErr1;
-  ciErr1 = clGetKernelWorkGroupInfo(k, nullptr, CL_KERNEL_WORK_GROUP_SIZE, 1024,
+  ciErr1 = clGetKernelWorkGroupInfo(k, context->device().device_id,
+                                    CL_KERNEL_WORK_GROUP_SIZE, 1024,
                                     &max_work_group_size, nullptr);
-  ciErr1 = clGetKernelWorkGroupInfo(k, nullptr, CL_KERNEL_PRIVATE_MEM_SIZE,
-                                    1024, &private_mem_size, nullptr);
-  ciErr1 = clGetKernelWorkGroupInfo(
-      k, nullptr, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, 1024,
-      &pref_work_group_multiple, nullptr);
+  ciErr1 = clGetKernelWorkGroupInfo(k, context->device().device_id,
+                                    CL_KERNEL_PRIVATE_MEM_SIZE, 1024,
+                                    &private_mem_size, nullptr);
+  ciErr1 =
+      clGetKernelWorkGroupInfo(k, context->device().device_id,
+                               CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
+                               1024, &pref_work_group_multiple, nullptr);
   context->check_error(ciErr1, "Could not get kernel informations");
 }
 
@@ -33,13 +37,14 @@ void Kernel::cleanup() {
   if (program_id) clReleaseProgram(program_id);
 }
 
-cl_ulong Kernel::current_local_memory() {
+size_t Kernel::current_local_memory() {
   cl_ulong loc_mem_size;
-  cl_int ciErr1 =
-      clGetKernelWorkGroupInfo(kernel_id, nullptr, CL_KERNEL_LOCAL_MEM_SIZE,
-                               1024, &loc_mem_size, nullptr);
+  cl_int ciErr1 = clGetKernelWorkGroupInfo(
+      kernel_id, context->device().device_id, CL_KERNEL_LOCAL_MEM_SIZE, 1024,
+      &loc_mem_size, nullptr);
   context->check_error(ciErr1, "Could not get kernel's local memory usage");
-  return loc_mem_size;
+  return loc_mem_size > assigned_local_memory ? loc_mem_size
+                                              : assigned_local_memory;
 }
 
 void Kernel::push_arg(size_t arg_size, const void *arg_value) {
@@ -47,6 +52,8 @@ void Kernel::push_arg(size_t arg_size, const void *arg_value) {
       clSetKernelArg(kernel_id, arg_stack_size, arg_size, arg_value);
   context->check_error(ciErr1, "Could not push kernel argument");
   ++arg_stack_size;
+  // local memory
+  if (!arg_value) assigned_local_memory += arg_size;
 }
 
 void Kernel::push_arg(MemoryHandle gpu_buf) {
@@ -66,15 +73,21 @@ cl_event Kernel::execute(cl_uint work_dim,                //
   check_work_parameters(work_dim, global_work_size, local_work_size);
 
   // check used amount of local memory
-  context->check_error(
-      current_local_memory() <= context->device().local_mem_size,
-      "You are using too much local memory");
+  char msg_buffer[192];
+  auto used_loc_mem = current_local_memory();
+  if (used_loc_mem > context->device().local_mem_size) {
+    snprintf(msg_buffer, sizeof(msg_buffer),
+             "You are using too much local memory(%d), only %llu is available",
+             used_loc_mem, context->device().local_mem_size);
+    context->check_error(false, msg_buffer);
+  }
 
   // correct event parameters
   if (!events_to_wait_for) events_to_wait_for_count = 0;
   if (events_to_wait_for_count <= 0) events_to_wait_for = nullptr;
 
   arg_stack_size = 0;  // prepare for next invoke
+  assigned_local_memory = 0;
   cl_command_queue *cmd_queue = context->command_queue();
 
   cl_event finish_token;
@@ -159,7 +172,8 @@ std::ostream &operator<<(std::ostream &os, opencl::Kernel &k) {
      << ", max_work_group_size: " << k.max_work_group_size            //
      << ", private_mem_size: " << k.private_mem_size                  //
      << ", pref_work_group_multiple: " << k.pref_work_group_multiple  //
-     << ", allocated local memory: " << (k.current_local_memory());     //
+     << ", allocated local memory: " << (k.current_local_memory() / 1024)
+     << "KB";  //
   return os;
 }
 }

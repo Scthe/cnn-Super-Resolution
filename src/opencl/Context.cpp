@@ -62,17 +62,17 @@ void Context::init() {
 
   // Get the devices
   ciErr1 = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU,
-             1, &_cldevice, nullptr);
+             1, &_device.device_id, nullptr);
   check_error(ciErr1, "Error in clGetDeviceIDs");
-  device_info(_cldevice, this->_device);
+  device_info(_device.device_id, this->_device);
   std::cout << "DEVICE:" << _device << std::endl;
 
   // Create the context
-  _clcontext = clCreateContext(0, 1, &_cldevice, nullptr, nullptr, &ciErr1);
+  _clcontext = clCreateContext(0, 1, &_device.device_id, nullptr, nullptr, &ciErr1);
   check_error(ciErr1, "Error in clCreateContext");
 
   // Create a command-queue
-  _clcommand_queue = clCreateCommandQueue(_clcontext, _cldevice, 0, &ciErr1);
+  _clcommand_queue = clCreateCommandQueue(_clcontext, _device.device_id, 0, &ciErr1);
   check_error(ciErr1, "Error in clCreateCommandQueue");
 
   _kernels.reserve(max_resources_per_type);
@@ -171,11 +171,11 @@ Kernel* Context::create_kernel(char const *file_path,
   free(kernel_source);
 
   // build program
-  ciErr1 = clBuildProgram(program_id, 1, &_cldevice,
+  ciErr1 = clBuildProgram(program_id, 1, &_device.device_id,
                           cmp_opt, nullptr, nullptr);
   if (ciErr1 == CL_BUILD_PROGRAM_FAILURE) {
     char buffer[2048];
-    clGetProgramBuildInfo(program_id, _cldevice, CL_PROGRAM_BUILD_LOG,
+    clGetProgramBuildInfo(program_id, _device.device_id, CL_PROGRAM_BUILD_LOG,
                           sizeof(buffer), buffer, nullptr);
     std::cout << "******************************************" << std::endl
               << "            --- Build log ---" << std::endl << std::endl

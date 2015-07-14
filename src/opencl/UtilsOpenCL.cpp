@@ -126,6 +126,12 @@ void work_sizes(const opencl::Kernel &kernel, size_t *global_work_size,
   if (global_work_size[0] < local_work_size[0] ||
       global_work_size[1] < local_work_size[1] || local_work_size[0] == 0 ||
       local_work_size[1] == 0) {
+    char buf[255];
+    snprintf(buf, 255,
+             "Tried to create nonstandard work dimensions: global=[%d,%d,%d], "
+             "local=[%d,%d,%d]",
+             global_work_size[0], global_work_size[1], 1,  //
+             local_work_size[0], local_work_size[1], 1);
     throw std::runtime_error("Tried to create nonstandard work dimensions");
   }
 }

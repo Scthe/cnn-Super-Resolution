@@ -16,7 +16,7 @@ class Kernel {
   void cleanup();
   friend std::ostream &operator<<(std::ostream &os, opencl::Kernel &p);
 
-  cl_ulong current_local_memory();
+  size_t current_local_memory();
 
   /**
    * Set the next argument. To be used as a sequence of calls,
@@ -78,7 +78,8 @@ class Kernel {
   cl_ulong private_mem_size;
   size_t pref_work_group_multiple;
 
-  int arg_stack_size;
+  size_t arg_stack_size;
+  size_t assigned_local_memory;  // by hand, since it does always work
   bool initialized = false;
 };
 

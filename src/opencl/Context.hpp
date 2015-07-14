@@ -29,6 +29,7 @@ struct PlatformInfo{
  * base information about device
  */
 struct DeviceInfo{
+  cl_device_id device_id;
   cl_device_type type;
   char name[MAX_INFO_STRING_LEN];
   cl_uint compute_units;
@@ -254,7 +255,6 @@ private:
   int argc;
   char **argv;
 
-  cl_device_id _cldevice;
   cl_context _clcontext;
   cl_command_queue _clcommand_queue;
 
