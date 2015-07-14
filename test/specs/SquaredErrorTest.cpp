@@ -11,27 +11,25 @@ namespace specs {
 ///
 /// PIMPL
 ///
-struct MeanSquaredErrorTestImpl {
+struct SquaredErrorTestImpl {
   const size_t algo_w = 1000, algo_h = 2000;
   const size_t padding = 4;
 };
 
 ///
-/// MeanSquaredErrorTest
+/// SquaredErrorTest
 ///
 
-TEST_SPEC_PIMPL(MeanSquaredErrorTest)
+TEST_SPEC_PIMPL(SquaredErrorTest)
 
-void MeanSquaredErrorTest::init() {}
+void SquaredErrorTest::init() {}
 
-std::string MeanSquaredErrorTest::name(size_t) {
-  return "Mean squared error test";
-}
+std::string SquaredErrorTest::name(size_t) { return "Mean squared error test"; }
 
-size_t MeanSquaredErrorTest::data_set_count() { return 1; }
+size_t SquaredErrorTest::data_set_count() { return 1; }
 
-bool MeanSquaredErrorTest::operator()(size_t,
-                                      cnn_sr::DataPipeline *const pipeline) {
+bool SquaredErrorTest::operator()(size_t,
+                                  cnn_sr::DataPipeline *const pipeline) {
   assert_not_null(pipeline);
   auto _context = pipeline->context();
 
@@ -49,6 +47,7 @@ bool MeanSquaredErrorTest::operator()(size_t,
     cpu_ground_truth[i] = 99999.0f;
   }
 
+  float sum = 0.0f;
   unsigned seed1 = std::chrono::system_clock::now().time_since_epoch().count();
   std::mt19937 generator(seed1);
   for (size_t i = 0; i < algo_size; i++) {
@@ -59,7 +58,7 @@ bool MeanSquaredErrorTest::operator()(size_t,
     cpu_algo_res[i] = (generator() % 2560) / 10.0f;
     // fill expected buffer
     double d = cpu_ground_truth[g_t_idx] - cpu_algo_res[i];
-    cpu_expected[i] = d * d;
+    sum += d * d;
   }
 
   /* clang-format off */
@@ -68,13 +67,12 @@ bool MeanSquaredErrorTest::operator()(size_t,
   auto gpu_buf_algo_res = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * algo_size);
   _context->write_buffer(gpu_buf_algo_res, (void *)&cpu_algo_res[0], true);
   /* clang-format on */
-  opencl::MemoryHandle gpu_buf_out = gpu_nullptr;
 
   // exec
-  pipeline->mean_squared_error(gpu_buf_ground_truth, gpu_buf_algo_res,
-                               gpu_buf_out, ground_truth_w, ground_truth_h,
-                               total_padding);
-  assert_equals(pipeline, cpu_expected, gpu_buf_out);
+  float r =
+      pipeline->squared_error(gpu_buf_ground_truth, gpu_buf_algo_res,
+                              ground_truth_w, ground_truth_h, total_padding);
+  assert_equals(sum, r);
 
   return true;
 }

@@ -13,7 +13,7 @@
 /* clang-format off */
 const char *const luma_kernel_file = "src/kernel/extract_luma.cl";
 const char *const layer_kernel_file = "src/kernel/layer_uber_kernel.cl";
-const char *const mse_kernel_file = "src/kernel/mse.cl";
+const char *const squared_error_kernel_file = "src/kernel/squared_error.cl";
 const char *const sum_kernel_file = "src/kernel/sum.cl";
 const char *const deltas_kernel_file = "src/kernel/layer_deltas.cl";
 const char *const last_layer_delta_kernel_file = "src/kernel/last_layer_delta.cl";
@@ -103,7 +103,9 @@ void DataPipeline::load_kernels(int load_flags) {
   }
 
   if (load_misc) {
-    if (!_mse_kernel) _mse_kernel = _context->create_kernel(mse_kernel_file);
+    if (!_squared_error_kernel)
+      _squared_error_kernel =
+          _context->create_kernel(squared_error_kernel_file);
     if (!_sum_kernel) _sum_kernel = _context->create_kernel(sum_kernel_file);
     if (!_subtract_from_all_kernel)
       _subtract_from_all_kernel =
@@ -247,8 +249,6 @@ float DataPipeline::sum(opencl::MemoryHandle data, bool squared,
   cl_event finish_token =
       kernel->execute(1, global_work_size, local_work_size, ev_to_wait_for);
 
-  // read (values may not be exactly the same since float->long data loss,
-  // but should be close enough)
   _context->read_buffer(_tmp_gpu_float, (void *)&result, true, &finish_token,
                         1);
 
@@ -365,12 +365,11 @@ cl_event DataPipeline::execute_layer(
 /// backpropagation
 ///
 
-cl_event DataPipeline::mean_squared_error(
-    opencl::MemoryHandle gpu_buf_ground_truth,
-    opencl::MemoryHandle gpu_buf_algo_res,
-    opencl::MemoryHandle &gpu_buf_target,  //
-    size_t ground_truth_w, size_t ground_truth_h, size_t total_padding,
-    cl_event *ev_to_wait_for) {
+float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
+                                  opencl::MemoryHandle gpu_buf_algo_res,
+                                  size_t ground_truth_w, size_t ground_truth_h,
+                                  size_t total_padding,
+                                  cl_event *ev_to_wait_for) {
   //
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
   size_t algo_w = ground_truth_w - total_padding,
@@ -379,12 +378,12 @@ cl_event DataPipeline::mean_squared_error(
 
   size_t global_work_size[2];
   size_t local_work_size[2];
-  opencl::utils::work_sizes(*_mse_kernel, global_work_size, local_work_size,
-                            algo_w, algo_h);
-  global_work_size[0] *= global_work_size[1];
-  local_work_size[0] *= local_work_size[1];
-  std::cout << "global work size: " << global_work_size[0] << std::endl;
-  std::cout << "local work size: " << local_work_size[0] << std::endl;
+  opencl::utils::work_sizes(*_squared_error_kernel, global_work_size,
+                            local_work_size, algo_w, algo_h);
+  std::cout << "global work size: " << global_work_size[0] << ", "
+            << global_work_size[1] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << ", "
+            << local_work_size[1] << std::endl;
 
   // check allocations
   /* clang-format off */
@@ -396,23 +395,32 @@ cl_event DataPipeline::mean_squared_error(
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
     throw std::runtime_error( "Allocated gpu_buf_algo_res buffer size did not match calculated size");
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_target, sizeof(cl_float) * algo_size)) {
-    gpu_buf_target = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float) * algo_size);
+  float result = 0;
+  if (!ALLOCATION_HAS_RIGHT_SIZE(_tmp_gpu_float, sizeof(cl_float))) {
+    _tmp_gpu_float = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float));
   }
+  _context->write_buffer(_tmp_gpu_float, (void *)&result, true);  // zeroe
   /* clang-format on */
-  _context->zeros_float(gpu_buf_target, true);
 
   // kernel args
-  _mse_kernel->push_arg(gpu_buf_ground_truth);
-  _mse_kernel->push_arg(gpu_buf_algo_res);
-  _mse_kernel->push_arg(gpu_buf_target);
-  _mse_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
-  _mse_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
-  _mse_kernel->push_arg(sizeof(cl_uint), (void *)&algo_size);
+  size_t local_mem_size = local_work_size[0] * local_work_size[1];
+  _squared_error_kernel->push_arg(gpu_buf_ground_truth);
+  _squared_error_kernel->push_arg(gpu_buf_algo_res);
+  _squared_error_kernel->push_arg(_tmp_gpu_float);
+  _squared_error_kernel->push_arg(sizeof(cl_float) * local_mem_size,
+                                  nullptr);  // scratch
+  _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
+  _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
+  _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&algo_h);
 
   // run
-  return _mse_kernel->execute(1, global_work_size, local_work_size,
-                              ev_to_wait_for);
+  cl_event finish_token = _squared_error_kernel->execute(
+      2, global_work_size, local_work_size, ev_to_wait_for);
+
+  _context->read_buffer(_tmp_gpu_float, (void *)&result, true, &finish_token,
+                        1);
+
+  return result;
 }
 
 cl_event DataPipeline::last_layer_delta(
@@ -431,8 +439,10 @@ cl_event DataPipeline::last_layer_delta(
   size_t local_work_size[2];
   opencl::utils::work_sizes(*_last_layer_delta_kernel, global_work_size,
                             local_work_size, algo_w, algo_h);
-  std::cout << "global work size: " << global_work_size[0] << std::endl;
-  std::cout << "local work size: " << local_work_size[0] << std::endl;
+  std::cout << "global work size: " << global_work_size[0] << ", "
+            << global_work_size[1] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << ", "
+            << local_work_size[1] << std::endl;
 
   // check allocations
   /* clang-format off */

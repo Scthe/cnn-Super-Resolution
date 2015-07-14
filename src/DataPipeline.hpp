@@ -67,11 +67,10 @@ class DataPipeline {
    * @param  total_padding        difference in size between ground_truth image
    *                              and result. Should be equal to f1+f2+f3-3
    */
-  cl_event mean_squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
-                              opencl::MemoryHandle gpu_buf_algo_res,
-                              opencl::MemoryHandle& gpu_buf_target,
-                              size_t ground_truth_w, size_t ground_truth_h,
-                              size_t total_padding, cl_event* ev = nullptr);
+  float squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
+                      opencl::MemoryHandle gpu_buf_algo_res,
+                      size_t ground_truth_w, size_t ground_truth_h,
+                      size_t total_padding, cl_event* ev = nullptr);
 
   float weight_decay(cnn_sr::CnnLayerGpuAllocationPool,
                      cnn_sr::CnnLayerGpuAllocationPool,
@@ -148,7 +147,7 @@ class DataPipeline {
 
   opencl::Kernel* _luma_kernel_norm = nullptr;
   opencl::Kernel* _luma_kernel_raw = nullptr;
-  opencl::Kernel* _mse_kernel = nullptr;
+  opencl::Kernel* _squared_error_kernel = nullptr;
   opencl::Kernel* _sum_kernel = nullptr;
   opencl::Kernel* _sum_squared_kernel = nullptr;
   opencl::Kernel* _subtract_from_all_kernel = nullptr;

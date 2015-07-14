@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
 
   ADD_TEST(LayerTest);
   ADD_TEST(ExtractLumaTest);
-  ADD_TEST(MeanSquaredErrorTest);
+  ADD_TEST(SquaredErrorTest);
   ADD_TEST(SubtractFromAllTest);
   ADD_TEST(SumTest);
   ADD_TEST(LayerDeltasTest);

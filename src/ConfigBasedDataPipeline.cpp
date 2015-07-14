@@ -270,17 +270,16 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   return event4_3;
 }
 
-cl_event ConfigBasedDataPipeline::mean_squared_error(
+float ConfigBasedDataPipeline::squared_error(
     opencl::MemoryHandle gpu_buf_ground_truth,
-    opencl::MemoryHandle gpu_buf_algo_res,
-    opencl::MemoryHandle &gpu_buf_target,  //
-    size_t ground_truth_w, size_t ground_truth_h, cl_event *ev_to_wait_for) {
+    opencl::MemoryHandle gpu_buf_algo_res, size_t ground_truth_w,
+    size_t ground_truth_h, cl_event *ev_to_wait_for) {
   //
   size_t padding = layer_data_1.f_spatial_size + layer_data_2.f_spatial_size +
                    layer_data_3.f_spatial_size - 3;
-  return DataPipeline::mean_squared_error(
-      gpu_buf_ground_truth, gpu_buf_algo_res, gpu_buf_target, ground_truth_w,
-      ground_truth_h, padding, ev_to_wait_for);
+  return DataPipeline::squared_error(gpu_buf_ground_truth, gpu_buf_algo_res,
+                                     ground_truth_w, ground_truth_h, padding,
+                                     ev_to_wait_for);
 }
 
 cl_event ConfigBasedDataPipeline::last_layer_delta(

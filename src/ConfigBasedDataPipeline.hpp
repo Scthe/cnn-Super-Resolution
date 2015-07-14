@@ -20,12 +20,10 @@ class ConfigBasedDataPipeline : public DataPipeline {
                    opencl::MemoryHandle, size_t, size_t, bool,
                    cl_event* ev = nullptr);
 
-  // TODO just return float
-  cl_event mean_squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
-                              opencl::MemoryHandle gpu_buf_algo_res,
-                              opencl::MemoryHandle& gpu_buf_target,
-                              size_t ground_truth_w, size_t ground_truth_h,
-                              cl_event* ev = nullptr);
+  float squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
+                      opencl::MemoryHandle gpu_buf_algo_res,
+                      size_t ground_truth_w, size_t ground_truth_h,
+                      cl_event* ev = nullptr);
 
   /* clang-format off */
   /**
