@@ -20,6 +20,7 @@ const char *const last_layer_delta_kernel_file = "src/kernel/last_layer_delta.cl
 const char *const backpropagate_kernel_file = "src/kernel/backpropagate.cl";
 const char *const subtract_from_all_kernel_file = "src/kernel/subtract_from_all.cl";
 const char *const update_parameters_kernel_file = "src/kernel/update_parameters.cl";
+const char *const backpropagate2_kernel_file = "src/kernel/backpropagate2.cl";
 /* clang-format on */
 
 namespace cnn_sr {
@@ -119,6 +120,9 @@ void DataPipeline::load_kernels(int load_flags) {
     if (!_update_parameters_kernel)
       _update_parameters_kernel =
           _context->create_kernel(update_parameters_kernel_file);
+    if (!_backpropagate2_kernel)
+      _backpropagate2_kernel =
+          _context->create_kernel(backpropagate2_kernel_file);
   }
 }
 
@@ -543,7 +547,7 @@ cl_event DataPipeline::calculate_deltas(
   // args
   kernel.push_arg(curr_gpu_alloc.deltas);
   kernel.push_arg(prev_gpu_alloc.output);
-  kernel.push_arg(prev_gpu_alloc.deltas); // target
+  kernel.push_arg(prev_gpu_alloc.deltas);  // target
   kernel.push_arg(curr_gpu_alloc.weights);
   kernel.push_arg(sizeof(cl_uint), (void *)&prev_layer.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&curr_layer.f_spatial_size);
@@ -603,7 +607,7 @@ cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,  //
          grad_w_size = sizeof(cl_float) * layer_data.weight_size(),
          grad_b_size = sizeof(cl_float) * layer_data.bias_size(),
          scratch_w_size = sizeof(cl_float) * local_size * per_filter_size,
-         scratch_b_size = sizeof(cl_float) * local_size * layer_data.current_filter_count;
+         scratch_b_size = sizeof(cl_float) * local_size * layer_data.bias_size();
   /* clang-format on */
 
   /* clang-format off */
@@ -622,7 +626,6 @@ cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,  //
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_b, grad_b_size)) {
     gpu_alloc.grad_b = _context->allocate(CL_MEM_READ_WRITE, grad_b_size);
   }
-  // this is actualy not needed, but if I'm mistaken it will panic
   _context->zeros_float(gpu_alloc.grad_w, true);
   _context->zeros_float(gpu_alloc.grad_b, true);
 
@@ -633,6 +636,76 @@ cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,  //
   kernel.push_arg(gpu_alloc.grad_b);
   kernel.push_arg(scratch_w_size, nullptr);  // scratch buffer
   kernel.push_arg(scratch_b_size, nullptr);  // scratch buffer
+  kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.n_prev_filter_cnt);
+  kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.f_spatial_size);
+  kernel.push_arg(sizeof(cl_uint), (void *)&layer_out_w);
+  kernel.push_arg(sizeof(cl_uint), (void *)&layer_out_h);
+
+  _context->block();  // TODO remove
+
+  // run
+  int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
+  return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
+                        events_to_wait_for_count);
+}
+
+cl_event DataPipeline::backpropagate2(LayerData &layer_data,  //
+                                      opencl::MemoryHandle layer_input,
+                                      CnnLayerGpuAllocationPool &gpu_alloc,
+                                      size_t layer_out_w, size_t layer_out_h,
+                                      cl_event *ev_to_wait_for) {
+  LayerData::validate(layer_data);
+  check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
+  opencl::Kernel &kernel = *_backpropagate2_kernel;
+
+  size_t input_w = layer_out_w + layer_data.f_spatial_size - 1,
+         input_h = layer_out_h + layer_data.f_spatial_size - 1;
+  size_t out_count =
+             layer_out_w * layer_out_h * layer_data.current_filter_count,
+         in_count = input_w * input_h * layer_data.n_prev_filter_cnt;
+
+  size_t weights_size = layer_data.f_spatial_size * layer_data.f_spatial_size *
+                        layer_data.n_prev_filter_cnt *
+                        layer_data.current_filter_count;
+  size_t global_work_size[2], local_work_size[2];
+  opencl::utils::work_sizes(kernel, global_work_size, local_work_size,  //
+                            weights_size, 1);
+  global_work_size[0] *= global_work_size[1];
+  local_work_size[0] *= local_work_size[1];
+  std::cout << "weights_size: " << weights_size << std::endl;
+  std::cout << "global work size: " << global_work_size[0] << std::endl;
+  std::cout << "local work size: " << local_work_size[0] << std::endl;
+
+  // allocations
+  size_t in_alloc_size = sizeof(cl_float) * in_count,
+         out_alloc_size = sizeof(cl_float) * out_count,
+         grad_w_size = sizeof(cl_float) * layer_data.weight_size(),
+         grad_b_size = sizeof(cl_float) * layer_data.bias_size();
+  /* clang-format off */
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.deltas, out_alloc_size)) {
+    throw std::runtime_error("Tried to calculate gradients, but deltas for current layer are not valid");
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(layer_input, in_alloc_size)) {
+    throw std::runtime_error(
+        "Tried to calculate gradients, but there are no previous layer output values."
+        "They are normally allocated during forward step.");
+  }
+  /* clang-format on */
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_w, grad_w_size)) {
+    gpu_alloc.grad_w = _context->allocate(CL_MEM_READ_WRITE, grad_w_size);
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_b, grad_b_size)) {
+    gpu_alloc.grad_b = _context->allocate(CL_MEM_READ_WRITE, grad_b_size);
+  }
+  _context->zeros_float(gpu_alloc.grad_w, true);
+  _context->zeros_float(gpu_alloc.grad_b, true);
+
+  // args
+  kernel.push_arg(gpu_alloc.deltas);
+  kernel.push_arg(layer_input);
+  kernel.push_arg(gpu_alloc.grad_w);
+  kernel.push_arg(gpu_alloc.grad_b);
+  kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.current_filter_count);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.n_prev_filter_cnt);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_out_w);

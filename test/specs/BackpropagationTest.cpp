@@ -7,12 +7,12 @@ using namespace cnn_sr;
 
 ///
 /// NOTE: generating expected output is just checking if all inputs, deltas
-/// are read correctly. To this change following line:
+/// are read correctly. Change following line:
 ///   'scratch_w[idx] = delta * layer_input[prev_layer_idx + k];'
 /// to:
 ///   'scratch_w[idx] = layer_input[prev_layer_idx + k];'
 ///   OR
-///   'cratch_w[idx] = delta;'
+///   'scratch_w[idx] = delta;'
 /// Also just use BackpropagationTest_script.py to calc the values.
 ///
 /// NOTE: data set 1 checks if kernel works, data set 2 checks if it does not
@@ -103,8 +103,7 @@ std::string BackpropagationTest::name(size_t data_set_id) {
                           : "Backpropagation test - big data";
 }
 
-// size_t BackpropagationTest::data_set_count() { return 2; }
-size_t BackpropagationTest::data_set_count() { return 1; }
+size_t BackpropagationTest::data_set_count() { return 2; }
 
 void execute(DataPipeline *pipeline, LayerData &data,     //
              cnn_sr::CnnLayerGpuAllocationPool &gpu_buf,  //
@@ -125,10 +124,9 @@ void execute(DataPipeline *pipeline, LayerData &data,     //
   context->write_buffer(gpu_buf.deltas, (void *)deltas, true);
   context->write_buffer(gpu_buf_layer_input, (void *)input, true);
 
-  // create kernel & run
-  auto kernel = pipeline->create_backpropagation_kernel(data);
-  pipeline->backpropagate(*kernel, data, gpu_buf_layer_input, gpu_buf,  //
-                          output_dim[0], output_dim[1]);
+  // run
+  pipeline->backpropagate2(data, gpu_buf_layer_input, gpu_buf,  //
+                           output_dim[0], output_dim[1]);
 }
 
 bool BackpropagationTest::operator()(size_t data_set_id,
@@ -136,8 +134,6 @@ bool BackpropagationTest::operator()(size_t data_set_id,
   assert_not_null(pipeline);
   auto context = pipeline->context();
   cnn_sr::CnnLayerGpuAllocationPool gpu_buf;
-
-  data_set_id = 1;
 
   if (data_set_id == 0) {
     // data for layer, needs filled up weights&bias to pass validation

@@ -54,9 +54,9 @@ int main(int argc, char** argv) {
     //
     // read & prepare images
     ImageData expected_output_img, input_img;
-    prepare_image(
+    prepare_image(  // do not normalize, since cnn output is rescaled to 0..255
         &data_pipeline, expected_output_img_file, expected_output_img,  //
-        gpu_alloc.expected_output_data, gpu_alloc.expected_output_luma, true);
+        gpu_alloc.expected_output_data, gpu_alloc.expected_output_luma, false);
     prepare_image(&data_pipeline, input_img_file, input_img,
                   gpu_alloc.input_data, gpu_alloc.input_luma, true);
 

@@ -98,6 +98,10 @@ class DataPipeline {
                          size_t layer_out_w, size_t layer_out_h,
                          cl_event* ev = nullptr);
 
+  cl_event backpropagate2(LayerData&, opencl::MemoryHandle layer_input,
+                          CnnLayerGpuAllocationPool&,  //
+                          size_t layer_out_w, size_t layer_out_h,
+                          cl_event* ev = nullptr);
 
   cl_event update_parameters(LayerData&, CnnLayerGpuAllocationPool&,
                              float momentum, float learning_rate,
@@ -150,6 +154,7 @@ class DataPipeline {
   opencl::Kernel* _subtract_from_all_kernel = nullptr;
   opencl::Kernel* _last_layer_delta_kernel = nullptr;
   opencl::Kernel* _update_parameters_kernel = nullptr;
+  opencl::Kernel* _backpropagate2_kernel = nullptr;
 };
 }
 

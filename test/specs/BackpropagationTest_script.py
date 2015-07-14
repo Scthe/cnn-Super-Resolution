@@ -61,6 +61,13 @@ for i in range(9):
     print(', '.join(["{:>6.3}".format(x) for i,x in enumerate(xs)]))
 
 
+print('\n\nbias:')
+bias_res = [
+    sum([x for i,x in enumerate(deltas) if i%3==0]),
+    sum([x for i,x in enumerate(deltas) if i%3==1]),
+    sum([x for i,x in enumerate(deltas) if i%3==2])]
+print(', '.join(["{:>6.3}".format(x) for i,x in enumerate(bias_res)]))
+
 
 '''
 ONLY INPUT:
