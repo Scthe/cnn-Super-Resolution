@@ -147,7 +147,7 @@ opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d,
 
 opencl::Kernel *DataPipeline::create_deltas_kernel(const LayerData &d) {
   char buf[255];
-  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.n_prev_filter_cnt);
+  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.current_filter_count);
   return _context->create_kernel(deltas_kernel_file, buf);
 }
 
@@ -505,72 +505,71 @@ float DataPipeline::weight_decay(cnn_sr::CnnLayerGpuAllocationPool w_layer_1,
 }
 
 cl_event DataPipeline::calculate_deltas(
-    opencl::Kernel &kernel,       //
-    const LayerData &prev_layer,  //
-    const LayerData &curr_layer,  //
-    CnnLayerGpuAllocationPool &prev_gpu_alloc,
-    CnnLayerGpuAllocationPool &curr_gpu_alloc,  //
-    size_t curr_layer_out_w,
-    size_t curr_layer_out_h,  //
+    opencl::Kernel &kernel,  //
+    const LayerData &curr_layer, const LayerData &next_layer,
+    CnnLayerGpuAllocationPool &curr_gpu_alloc,
+    CnnLayerGpuAllocationPool &next_gpu_alloc,  //
+    size_t next_layer_out_w, size_t next_layer_out_h,
     cl_event *ev_to_wait_for) {
   //
   // @pre validation
-  LayerData::validate(curr_layer);
-  // TODO assert prev_layer.current_filter_count ==
-  // current_layer.n_previous_filter_count
+  LayerData::validate(next_layer);
+  if (curr_layer.current_filter_count != next_layer.n_prev_filter_cnt) {
+    throw std::runtime_error(
+        "When calculating deltas for layer it's filter count should be equal "
+        "to next layer's previous filter count");
+  }
 
-  size_t input_w = curr_layer_out_w + curr_layer.f_spatial_size - 1,
-         input_h = curr_layer_out_h + curr_layer.f_spatial_size - 1;
-  size_t out_count = curr_layer_out_w * curr_layer_out_h *
-                     curr_layer.current_filter_count,
-         in_count = input_w * input_h * curr_layer.n_prev_filter_cnt;
+  size_t out_w = next_layer_out_w + next_layer.f_spatial_size - 1,
+         out_h = next_layer_out_h + next_layer.f_spatial_size - 1;
+  size_t next_out_size = next_layer_out_w * next_layer_out_h *
+                         next_layer.current_filter_count,
+         out_size = out_w * out_h * next_layer.n_prev_filter_cnt;
   // gpu memory alloc sizes
-  size_t weights_alloc_size = sizeof(cl_float) * curr_layer.weight_size(),
-         in_alloc_size = sizeof(cl_float) * in_count,
-         out_alloc_size = sizeof(cl_float) * out_count;
+  size_t weights_alloc_size = sizeof(cl_float) * next_layer.weight_size(),
+         out_alloc_size = sizeof(cl_float) * out_size,
+         next_out_alloc_size = sizeof(cl_float) * next_out_size;
 
   /* clang-format off */
   // gpu memory allocation, used buffers:
-  //   curr_gpu_alloc.deltas
-  //   curr_gpu_alloc.weights
-  //   prev_layer.output <- this is input for current layer (used for activation_func_derivative)
-  //   prev_layer.deltas <- as target
-  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_gpu_alloc.deltas, out_alloc_size)) {
+  //   next_gpu_alloc.deltas
+  //   next_gpu_alloc.weights
+  //   curr_layer.output <- this is input for current layer (used for activation_func_derivative)
+  //   curr_layer.deltas <- as target
+  if (!ALLOCATION_HAS_RIGHT_SIZE(next_gpu_alloc.deltas, next_out_alloc_size)) {
     throw std::runtime_error(
         "Tried to calculate deltas for previous layer, but deltas for current layer are not valid !");
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_gpu_alloc.weights, weights_alloc_size)) {
-    curr_gpu_alloc.weights = _context->allocate(CL_MEM_READ_ONLY, weights_alloc_size);
-    _context->write_buffer(curr_gpu_alloc.weights, (void *)curr_layer.weights_ptr(), true);
+  if (!ALLOCATION_HAS_RIGHT_SIZE(next_gpu_alloc.weights, weights_alloc_size)) {
+    next_gpu_alloc.weights = _context->allocate(CL_MEM_READ_ONLY, weights_alloc_size);
+    _context->write_buffer(next_gpu_alloc.weights, (void *)next_layer.weights_ptr(), true);
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(prev_gpu_alloc.output, in_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_gpu_alloc.output, out_alloc_size)) {
     throw std::runtime_error(
         "Tried to calculate deltas for previous layer, but there are no previous layer output values."
         "They are normally allocated during forward step.");
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(prev_gpu_alloc.deltas, in_alloc_size)) {
-    prev_gpu_alloc.deltas = _context->allocate(CL_MEM_READ_WRITE, in_alloc_size);
+  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_gpu_alloc.deltas, out_alloc_size)) {
+    curr_gpu_alloc.deltas = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
   }
-  _context->zeros_float(prev_gpu_alloc.deltas, true);
+  _context->zeros_float(curr_gpu_alloc.deltas, true);
   /* clang-format on */
 
   // args
-  kernel.push_arg(curr_gpu_alloc.deltas);
-  kernel.push_arg(prev_gpu_alloc.output);
-  kernel.push_arg(prev_gpu_alloc.deltas);  // target
-  kernel.push_arg(curr_gpu_alloc.weights);
-  kernel.push_arg(sizeof(cl_uint), (void *)&prev_layer.f_spatial_size);
+  kernel.push_arg(next_gpu_alloc.deltas);
+  kernel.push_arg(curr_gpu_alloc.output);
+  kernel.push_arg(curr_gpu_alloc.deltas);  // target
+  kernel.push_arg(next_gpu_alloc.weights);
   kernel.push_arg(sizeof(cl_uint), (void *)&curr_layer.f_spatial_size);
-  kernel.push_arg(sizeof(cl_uint), (void *)&curr_layer.current_filter_count);
-  kernel.push_arg(sizeof(cl_uint), (void *)&input_w);
-  kernel.push_arg(sizeof(cl_uint), (void *)&input_h);
-
-  _context->block();  // TODO remove
+  kernel.push_arg(sizeof(cl_uint), (void *)&next_layer.f_spatial_size);
+  kernel.push_arg(sizeof(cl_uint), (void *)&next_layer.current_filter_count);
+  kernel.push_arg(sizeof(cl_uint), (void *)&out_w);
+  kernel.push_arg(sizeof(cl_uint), (void *)&out_h);
 
   // run
   size_t global_work_size[2], local_work_size[2];
   opencl::utils::work_sizes(kernel, global_work_size, local_work_size,  //
-                            input_w, input_h);
+                            out_w, out_h);
   std::cout << "global work size: " << global_work_size[0] << ", "
             << global_work_size[1] << std::endl;
   std::cout << "local work size: " << local_work_size[0] << ", "

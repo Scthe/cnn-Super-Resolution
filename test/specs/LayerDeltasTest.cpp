@@ -177,7 +177,7 @@ bool LayerDeltasTest::operator()(size_t, cnn_sr::DataPipeline *const pipeline) {
   context->write_buffer(prev_gpu_buf.output, (void *)output, true);
 
   // create kernel & run
-  auto kernel = pipeline->create_deltas_kernel(curr_data);
+  auto kernel = pipeline->create_deltas_kernel(prev_data);
   pipeline->calculate_deltas(*kernel,                     //
                              prev_data, curr_data,        //
                              prev_gpu_buf, curr_gpu_buf,  //

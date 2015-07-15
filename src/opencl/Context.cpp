@@ -114,6 +114,7 @@ RawMemoryHandle* Context::raw_memory(MemoryHandle handle) {
 void Context::print_app_memory_usage() {
   size_t image_memory = 0, buffer_memory = 0;
   for (const RawMemoryHandle& mem : _allocations) {
+    if (!mem.is_usable()) continue;
     if (mem.is_image()) {
       image_memory += mem.size;
     } else {
@@ -123,8 +124,8 @@ void Context::print_app_memory_usage() {
   const size_t unit = 1024 * 1024;
   std::cout << "Memory usage: " << (image_memory + buffer_memory) / unit  //
             << "/" << _device.global_mem_size / unit << " MB ("           //
-            << (image_memory + buffer_memory) / _device.global_mem_size   //
-            << "%%), " << buffer_memory / unit                            //
+            << (image_memory + buffer_memory) * 100.0 / _device.global_mem_size
+            << "%), " << buffer_memory / unit  //
             << "MB of raw buffers and " << image_memory / unit
             << "MB for images" << std::endl;
 }
