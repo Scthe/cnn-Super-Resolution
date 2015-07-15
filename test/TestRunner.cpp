@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
   std::vector<TestCase *> cases;
   std::vector<int> results;
 
-  opencl::Context context(argc, argv);
+  opencl::Context context;
   context.init();
   cnn_sr::DataPipeline pipeline(&context);
   pipeline.init(cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
