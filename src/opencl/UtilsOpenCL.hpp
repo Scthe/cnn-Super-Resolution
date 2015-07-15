@@ -1,5 +1,5 @@
-#ifndef __UTILS_OPENCL_H
-#define __UTILS_OPENCL_H
+#ifndef UTILS_OPENCL_H
+#define UTILS_OPENCL_H
 
 #include "CL/opencl.h"
 
@@ -57,16 +57,19 @@ int write_image(const char*, ImageData&);
 /**
  * Due too different possible resolutions we may have to recalculate this each
  * time.
- * Implementation note: we assume that device's address_bits can hold the
- * number of range w*h. For example if address_bits==32 then we would need
- * image bigger then 2^16 in width and height for this condition to fail.
- * There is appropriate check in Kernel class.
  *
- * @param global_work_size float array of size 2
- * @param local_work_size float array of size 2
+ * NOTE: this solution tries to maximize work items per group, as most of
+ *kernels have some __local related optimizations
+ *
+ * @param kernel           kernel to execute
+ * @param dims             work dimensions: 1 for linear, 2 for 2D, 3 for 3D
+ * @param global_work_size to be filled size: dims
+ * @param local_work_size  to be filled size: dims
+ * @param work             real work size f.e. array length, image dimesions
+ *                         etc. size: dims
  */
-void work_sizes(const opencl::Kernel&, size_t* global_work_size,
-                size_t* local_work_size, size_t w, size_t h);
+void work_sizes(const opencl::Kernel&, size_t dims, size_t* global_work_size,
+                size_t* local_work_size, size_t* work, bool print = false);
 
 /**
  * convert error code to string
@@ -78,4 +81,4 @@ const char* get_opencl_error_str(cl_int);
 }
 }
 
-#endif /* __UTILS_OPENCL_H   */
+#endif /* UTILS_OPENCL_H   */
