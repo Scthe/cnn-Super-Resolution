@@ -5,6 +5,8 @@
 
 #include "UtilsOpenCL.hpp"
 
+bool print_info = false;
+
 /**
  * _kernels uses pointers, which makes the wrapper more lightweight.
  * As soon as vector that holds original instances is reloacted
@@ -161,8 +163,10 @@ Kernel* Context::create_kernel(char const* file_path, char const* cmp_opt,
   check_error(
       _kernels.size() < max_resources_per_type,
       "Kernel limit reached, increase max_resources_per_type in Context.cpp");
-  std::cout << "Reading kernel function from '" << file_path << "' with args: '"
-            << (cmp_opt ? cmp_opt : "") << "'" << std::endl;
+  if (print_info)
+    std::cout << "Reading kernel function from '" << file_path
+              << "' with args: '" << (cmp_opt ? cmp_opt : "") << "'"
+              << std::endl;
   cl_int ciErr1;
 
   _kernels.push_back(Kernel());
@@ -174,7 +178,7 @@ Kernel* Context::create_kernel(char const* file_path, char const* cmp_opt,
   // Read the OpenCL kernel from source file
   size_t kernel_len = 0;
   char* kernel_source = utils::load_file(file_path, "", &kernel_len);
-  std::cout << "Kernel length: " << kernel_len << std::endl;
+  if (print_info) std::cout << "Kernel length: " << kernel_len << std::endl;
   check_error(kernel_len > 0, "Could not read file");
 
   // create program

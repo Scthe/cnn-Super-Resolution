@@ -10,7 +10,7 @@
 
 // TODO check all CL_MEM_WRITE_ONLY
 
-const bool print_work_dimensions = true;
+const bool print_work_dimensions = false;
 
 /* clang-format off */
 const char *const luma_kernel_file = "src/kernel/extract_luma.cl";
@@ -208,10 +208,10 @@ cl_event DataPipeline::subtract_mean(opencl::MemoryHandle data,
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
   size_t len = element_count(data, sizeof(cl_float));
 
-  std::cout << "Calcutating mean from " << len << " elements" << std::endl;
+  // std::cout << "Calcutating mean from " << len << " elements" << std::endl;
   auto buf_sum = sum(data, ev_to_wait_for);
   float mean = ((float)buf_sum) / len;
-  std::cout << "Mean: " << mean << std::endl;
+  // std::cout << "Mean: " << mean << std::endl;
   // subtract
   return subtract_from_all(data, mean);
 }
@@ -300,8 +300,8 @@ cl_event DataPipeline::execute_layer(
   size_t out_size[2];
   data.get_output_dimensions(out_size, input_w, input_h);
   size_t out_count = out_size[0] * out_size[1] * data.current_filter_count;
-  std::cout << "out size: " << out_size[0] << "x" << out_size[1] << "x"
-            << data.current_filter_count << "=" << out_count << std::endl;
+  // std::cout << "out size: " << out_size[0] << "x" << out_size[1] << "x"
+            // << data.current_filter_count << "=" << out_count << std::endl;
 
   // buffers: W, B, out_target
   size_t weights_alloc_size = sizeof(cl_float) * data.weight_size(),
@@ -643,7 +643,7 @@ cl_event DataPipeline::backpropagate2(LayerData &layer_data,  //
   size_t weights_size = layer_data.f_spatial_size * layer_data.f_spatial_size *
                         layer_data.n_prev_filter_cnt *
                         layer_data.current_filter_count;
-  std::cout << "weights_size: " << weights_size << std::endl;
+  // std::cout << "weights_size: " << weights_size << std::endl;
 
   // allocations
   size_t in_alloc_size = sizeof(cl_float) * in_count,

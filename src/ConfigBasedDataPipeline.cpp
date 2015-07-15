@@ -8,6 +8,8 @@
 #include "Utils.hpp"
 #include "opencl/Context.hpp"
 
+auto print_steps = false, print_info2 = false;
+
 const char *const layer_parameters_key[3] = {"layer1", "layer2", "layer3"};
 
 namespace cnn_sr {
@@ -38,9 +40,9 @@ void ConfigBasedDataPipeline::init(int load_flags) {
   load_kernels(load_flags);
   _initialized = true;
 
-  std::cout << layer_data_1 << std::endl;
-  std::cout << layer_data_2 << std::endl;
-  std::cout << layer_data_3 << std::endl;
+  if (print_info2) std::cout << layer_data_1 << std::endl;
+  if (print_info2) std::cout << layer_data_2 << std::endl;
+  if (print_info2) std::cout << layer_data_3 << std::endl;
   LayerData::validate(layer_data_1);
   LayerData::validate(layer_data_2);
   LayerData::validate(layer_data_3);
@@ -142,7 +144,8 @@ cl_event ConfigBasedDataPipeline::forward(
 
   cl_event ev;
   if (subtract_input_mean) {
-    std::cout << "### Subtracting mean from input" << std::endl;
+    if (print_steps)
+      std::cout << "### Subtracting mean from input" << std::endl;
     ev = this->subtract_mean(input, ev_to_wait_for);
     ev_to_wait_for = &ev;
   }
@@ -150,7 +153,7 @@ cl_event ConfigBasedDataPipeline::forward(
   _context->block();
 
   // layer 1
-  std::cout << "### Executing layer 1" << std::endl;
+  if (print_steps) std::cout << "### Executing layer 1" << std::endl;
   cl_event finish_token1 =
       execute_layer(*_layer_1_kernel, layer_data_1, layer_1_alloc,  // layer cfg
                     input, input_w, input_h,                        // input
@@ -158,7 +161,7 @@ cl_event ConfigBasedDataPipeline::forward(
   _context->block();
 
   // layer 2
-  std::cout << "### Executing layer 2" << std::endl;
+  if (print_steps) std::cout << "### Executing layer 2" << std::endl;
   cl_event finish_token2 = execute_layer(
       *_layer_2_kernel, layer_data_2, layer_2_alloc,             // layer cfg
       layer_1_alloc.output, l1_output_dim[0], l1_output_dim[1],  // input
@@ -166,7 +169,7 @@ cl_event ConfigBasedDataPipeline::forward(
   _context->block();
 
   // layer 3
-  std::cout << "### Executing layer 3" << std::endl;
+  if (print_steps) std::cout << "### Executing layer 3" << std::endl;
   cl_event finish_token3 = execute_layer(
       *_layer_3_kernel, layer_data_3, layer_3_alloc,             // layer cfg
       layer_2_alloc.output, l2_output_dim[0], l2_output_dim[1],  // input
@@ -193,27 +196,30 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                      layer_2_out_dim[0], layer_2_out_dim[1]);
 
   // step 1 weight decay
-  std::cout << "### Calculating weight decay" << std::endl;
+  if (print_steps) std::cout << "### Calculating weight decay" << std::endl;
   auto weight_decay_value =
       weight_decay(layer_1_alloc, layer_2_alloc, layer_3_alloc,
                    _config->weight_decay_parameter, ev_to_wait_for);
 
   // step 2 deltas
-  std::cout << "### Calculating deltas for last layer" << std::endl;
+  if (print_steps)
+    std::cout << "### Calculating deltas for last layer" << std::endl;
   auto event2_1 = last_layer_delta(gpu_buf_ground_truth,  //
                                    layer_3_alloc.output,  //
                                    layer_3_alloc.deltas,  //
                                    weight_decay_value,    //
                                    ground_truth_w, ground_truth_h);
 
-  std::cout << "### Calculating deltas for 2nd layer" << std::endl;
+  if (print_steps)
+    std::cout << "### Calculating deltas for 2nd layer" << std::endl;
   auto event2_2 = calculate_deltas(*_layer_2_deltas_kernel,                 //
                                    layer_data_2, layer_data_3,              //
                                    layer_2_alloc, layer_3_alloc,            //
                                    layer_3_out_dim[0], layer_3_out_dim[1],  //
                                    &event2_1);
 
-  std::cout << "### Calculating deltas for 1nd layer" << std::endl;
+  if (print_steps)
+    std::cout << "### Calculating deltas for 1nd layer" << std::endl;
   auto event2_3 = calculate_deltas(*_layer_1_deltas_kernel,                 //
                                    layer_data_1, layer_data_2,              //
                                    layer_1_alloc, layer_2_alloc,            //
@@ -224,23 +230,26 @@ cl_event ConfigBasedDataPipeline::backpropagate(
 
   // step 3 backpropagate: calculate gradient w, gradient b for all layers
   // TODO might as well run all in parallel
-  std::cout << "### Backpropagate(weights&bias gradients) - 3rd layer"
-            << std::endl;
+  if (print_steps)
+    std::cout << "### Backpropagate(weights&bias gradients) - 3rd layer"
+              << std::endl;
   auto event3_1 =
       DataPipeline::backpropagate2(layer_data_3,                            //
                                    layer_2_alloc.output, layer_3_alloc,     //
                                    layer_3_out_dim[0], layer_3_out_dim[1],  //
                                    &event2_3);
-  std::cout << "### Backpropagate(weights&bias gradients) - 2nd layer"
-            << std::endl;
+  if (print_steps)
+    std::cout << "### Backpropagate(weights&bias gradients) - 2nd layer"
+              << std::endl;
   auto event3_2 =
       DataPipeline::backpropagate2(layer_data_2,                            //
                                    layer_1_alloc.output, layer_2_alloc,     //
                                    layer_2_out_dim[0], layer_2_out_dim[1],  //
                                    &event3_1);
 
-  std::cout << "### Backpropagate(weights&bias gradients) - 1st layer"
-            << std::endl;
+  if (print_steps)
+    std::cout << "### Backpropagate(weights&bias gradients) - 1st layer"
+              << std::endl;
   auto event3_3 =
       DataPipeline::backpropagate2(layer_data_1,                            //
                                    cnn_input, layer_1_alloc,                //
@@ -251,17 +260,20 @@ cl_event ConfigBasedDataPipeline::backpropagate(
 
   // step 4 update weights and biases
   // TODO might as well run all in parallel
-  std::cout << "### Updating weights and biases - 3rd layer" << std::endl;
+  if (print_steps)
+    std::cout << "### Updating weights and biases - 3rd layer" << std::endl;
   auto event4_1 =
       update_parameters(layer_data_3, layer_3_alloc, _config->momentum,
                         _config->learning_rate[2], &event3_3);
 
-  std::cout << "### Updating weights and biases - 2nd layer" << std::endl;
+  if (print_steps)
+    std::cout << "### Updating weights and biases - 2nd layer" << std::endl;
   auto event4_2 =
       update_parameters(layer_data_2, layer_2_alloc, _config->momentum,
                         _config->learning_rate[1], &event4_1);
 
-  std::cout << "### Updating weights and biases - 1st layer" << std::endl;
+  if (print_steps)
+    std::cout << "### Updating weights and biases - 1st layer" << std::endl;
   auto event4_3 =
       update_parameters(layer_data_1, layer_1_alloc, _config->momentum,
                         _config->learning_rate[0], &event4_2);
