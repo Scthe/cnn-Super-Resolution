@@ -45,15 +45,7 @@ void print_buffer(opencl::Context& ctx, opencl::MemoryHandle mh,
 
   // print
   std::cout << name << ": [" << std::endl;
-  for (size_t i = 0; i < len / per_line; i++) {
-    std::cout << "[" << i << "] ";
-    for (size_t j = 0; j < per_line; j++) {
-      size_t idx = i * per_line + j;
-      if (idx < len) std::cout << data[idx];
-      if (j + 1 != per_line) std::cout << ", ";
-    }
-    if (i + 1 != len / per_line) std::cout << std::endl;
-  }
+  cnn_sr::utils::dump_vector(std::cout, data, "", per_line, true);
   std::cout << "]" << std::endl
             << std::endl
             << std::endl;
@@ -78,48 +70,18 @@ void dump_image(const char* const file_path, size_t w,
         float val = source[is_source_single_channel ? idx : idx + k] * val_mul;
         data[(row * w + col) * 3 + k] = (unsigned char)val;
       }
-      /*
-        */
     }
   }
 
   ImageData dd(w, h, sizeof(unsigned char) * 3, &data[0]);
   opencl::utils::write_image(file_path, dd);
 }
-/*
-void dump_weights(const char* const path, cnn_sr::LayerData& data,
-                  cnn_sr::CnnLayerGpuAllocationPool gpu_alloc) {
-  // read
-  auto ws = data.weights_size();
-  std::vector<float> w(ws);
-  context.read_buffer(gpu_alloc.weights, (void*)&w[0], true);
-  // dump
-  char name_buf[255];
-  std::vector<float> tmp(data.f_spatial_size * data.f_spatial_size);
-  for (size_t n = 0; n < data.current_filter_count; n++) {
-    for (size_t k = 0; k < data.n_prev_filter_cnt; k++) {
-      size_t i = 0;
-      for (size_t row = 0; row < data.f_spatial_size; row++) {
-        for (size_t col = 0; col < data.f_spatial_size; col++) {
-          size_t idx = ((row * data.f_spatial_size) + col) *
-                       data.current_filter_count * data.n_prev_filter_cnt;
-          idx += k * data.current_filter_count + n;
-          tmp[i] = ws[idx];
-          ++i;
-        }
-      }
-
-      snprintf(name_buf, 255, "%s__%d_%d.png", path, k, n);
-      dump_image(name_buf, data.f_spatial_size, tmp, true, 255.0f);
-    }
-  }
-}*/
 
 ///
 /// main
 ///
 int main(int argc, char** argv) {
-  const char* const cfg_file = "data\\config.json";
+  const char* const cfg_file = "data\\config_small.json";
   const char* const input_img_file = "data\\small.jpg";
   const char* const expected_output_img_file = "data\\large.jpg";
 
@@ -151,12 +113,14 @@ int main(int argc, char** argv) {
 
     // std::cout << "--- expected_output_img debug ---" << std::endl;
     // print_buffer(context, gpu_alloc.expected_output_luma,
-    //  "expected_output_luma", 16);
-    // std::vector<float> luma_data(expected_output_img.w * expected_output_img.h);
+                //  "expected_output_luma", 16);
+    // std::vector<float> luma_data(expected_output_img.w *
+    // expected_output_img.h);
     // context.read_buffer(gpu_alloc.expected_output_luma, (void*)&luma_data[0],
-                        // true);
-    // dump_image("data\\luma_extract.png", expected_output_img.w, luma_data, true,
-              //  255.0f);
+    // true);
+    // dump_image("data\\luma_extract.png", expected_output_img.w, luma_data,
+    // true,
+    //  255.0f);
     // exit(EXIT_SUCCESS);
 
     // const size_t iters = 1000;
@@ -170,7 +134,11 @@ int main(int argc, char** argv) {
           gpu_alloc.layer_3,  //
           gpu_alloc.input_luma, input_img.w, input_img.h, true);
 
-      context.block();
+      // context.block();
+      // data_pipeline.write_params_to_file("data\\params-file.json",
+                                        //  gpu_alloc.layer_1, gpu_alloc.layer_2,
+                                        //  gpu_alloc.layer_3);
+      // exit(EXIT_SUCCESS);
 
       //
       // squared difference

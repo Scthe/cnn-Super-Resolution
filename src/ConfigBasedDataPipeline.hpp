@@ -51,6 +51,11 @@ class ConfigBasedDataPipeline : public DataPipeline {
                          size_t, size_t, cl_event* ev_to_wait_for = nullptr);
   /* clang-format on */
 
+  void write_params_to_file(const char* const file_path,
+                            CnnLayerGpuAllocationPool,
+                            CnnLayerGpuAllocationPool,
+                            CnnLayerGpuAllocationPool);
+
  protected:
   void load_kernels(int load_flags);
 

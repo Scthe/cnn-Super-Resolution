@@ -1,7 +1,8 @@
 #include "ConfigBasedDataPipeline.hpp"
 
-#include <random>  // for std::mt19937
-#include <chrono>  // for random seed
+#include <random>   // for std::mt19937
+#include <chrono>   // for random seed
+#include <fstream>  // for parameters dump
 #include "json/gason.h"
 
 #include "Config.hpp"
@@ -48,55 +49,6 @@ void ConfigBasedDataPipeline::init(int load_flags) {
   LayerData::validate(layer_data_3);
 }
 
-void ConfigBasedDataPipeline::fill_random_parameters(
-    LayerData &data, ParametersDistribution &distr) {
-  unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-  std::default_random_engine generator(seed);
-  std::normal_distribution<float> rand_generator_w(distr.mean_w, distr.sd_w);
-  std::normal_distribution<float> rand_generator_b(distr.mean_b, distr.sd_b);
-
-  for (size_t i = 0; i < data.weight_size(); i++) {
-    data.weights.push_back(rand_generator_w(generator));
-  }
-  for (size_t i = 0; i < data.bias_size(); i++) {
-    data.bias.push_back(rand_generator_b(generator));
-  }
-}
-
-void load_layer_parameters(JsonNode *node, LayerData &data) {
-  for (auto subnode : node->value) {
-    JSON_READ_NUM_ARRAY(subnode, data, weights);
-    JSON_READ_NUM_ARRAY(subnode, data, bias);
-  }
-}
-
-void ConfigBasedDataPipeline::load_parameters_file(
-    const char *const file_path) {
-  JsonValue value;
-  JsonAllocator allocator;
-  std::string source;
-  utils::read_json_file(file_path, value, allocator, source, JSON_OBJECT);
-
-  for (auto node : value) {
-    auto key = node->key;
-    // std::cout << key << std::endl;
-
-    if (strcmp(key, layer_parameters_key[0]) == 0) {
-      load_layer_parameters(node, layer_data_1);
-    } else if (strcmp(key, layer_parameters_key[1]) == 0) {
-      load_layer_parameters(node, layer_data_2);
-    } else if (strcmp(key, layer_parameters_key[2]) == 0) {
-      load_layer_parameters(node, layer_data_3);
-    } else {
-      std::cout << "[Warning] Unknown key '" << key
-                << "' in parameters file, only: '"    //
-                << layer_parameters_key[0] << "', '"  //
-                << layer_parameters_key[1] << "', '"  //
-                << layer_parameters_key[2] << "' are allowed" << std::endl;
-    }
-  }
-}
-
 void ConfigBasedDataPipeline::load_kernels(int load_flags) {
   // call super
   DataPipeline::load_kernels(load_flags);
@@ -129,6 +81,9 @@ void ConfigBasedDataPipeline::load_kernels(int load_flags) {
   }
 }
 
+///
+/// Pipeline: forward/backward
+///
 cl_event ConfigBasedDataPipeline::forward(
     cnn_sr::CnnLayerGpuAllocationPool &layer_1_alloc,
     cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
@@ -308,4 +263,140 @@ cl_event ConfigBasedDataPipeline::last_layer_delta(
       gpu_buf_ground_truth, gpu_buf_algo_res, gpu_buf_target, weight_decay,
       ground_truth_w, ground_truth_h, padding, ev);
 }
+
+///
+/// Parameters read
+///
+void ConfigBasedDataPipeline::fill_random_parameters(
+    LayerData &data, ParametersDistribution &distr) {
+  unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+  std::default_random_engine generator(seed);
+  std::normal_distribution<float> rand_generator_w(distr.mean_w, distr.sd_w);
+  std::normal_distribution<float> rand_generator_b(distr.mean_b, distr.sd_b);
+
+  for (size_t i = 0; i < data.weight_size(); i++) {
+    data.weights.push_back(rand_generator_w(generator));
+  }
+  for (size_t i = 0; i < data.bias_size(); i++) {
+    data.bias.push_back(rand_generator_b(generator));
+  }
+}
+
+void load_layer_parameters(JsonNode *node, LayerData &data) {
+  for (auto subnode : node->value) {
+    JSON_READ_NUM_ARRAY(subnode, data, weights);
+    JSON_READ_NUM_ARRAY(subnode, data, bias);
+  }
+}
+
+void ConfigBasedDataPipeline::load_parameters_file(
+    const char *const file_path) {
+  JsonValue value;
+  JsonAllocator allocator;
+  std::string source;
+  utils::read_json_file(file_path, value, allocator, source, JSON_OBJECT);
+
+  for (auto node : value) {
+    auto key = node->key;
+    // std::cout << key << std::endl;
+
+    if (strcmp(key, layer_parameters_key[0]) == 0) {
+      load_layer_parameters(node, layer_data_1);
+    } else if (strcmp(key, layer_parameters_key[1]) == 0) {
+      load_layer_parameters(node, layer_data_2);
+    } else if (strcmp(key, layer_parameters_key[2]) == 0) {
+      load_layer_parameters(node, layer_data_3);
+    } else {
+      std::cout << "[Warning] Unknown key '" << key
+                << "' in parameters file, only: '"    //
+                << layer_parameters_key[0] << "', '"  //
+                << layer_parameters_key[1] << "', '"  //
+                << layer_parameters_key[2] << "' are allowed" << std::endl;
+    }
+  }
+}
+
+///
+/// Parameters write
+///
+void dump_layer_parameters(std::ostream &os, const char *const key,
+                           std::vector<float> &weights,
+                           std::vector<float> &bias) {
+  os << "  \"" << key << "\":{" << std::endl
+     << "    \"weights\": [";
+  cnn_sr::utils::dump_vector(os, weights);
+  os << "]," << std::endl
+     << "    \"bias\": [";
+  cnn_sr::utils::dump_vector(os, bias);
+  os << "]" << std::endl
+     << "  }";
+}
+
+void ConfigBasedDataPipeline::write_params_to_file(
+    const char *const file_path,  //
+    CnnLayerGpuAllocationPool gpu_alloc_layer_1,
+    CnnLayerGpuAllocationPool gpu_alloc_layer_2,
+    CnnLayerGpuAllocationPool gpu_alloc_layer_3) {
+  //
+  std::cout << "Saving parameters to: '" << file_path << "'" << std::endl;
+  _context->block();
+
+  // transfer data from GPU
+  std::vector<float> weights_1(layer_data_1.weight_size()),
+      weights_2(layer_data_2.weight_size()),
+      weights_3(layer_data_3.weight_size()), bias_1(layer_data_1.bias_size()),
+      bias_2(layer_data_2.bias_size()), bias_3(layer_data_3.bias_size());
+  _context->read_buffer(gpu_alloc_layer_1.weights, (void *)&weights_1[0], true);
+  _context->read_buffer(gpu_alloc_layer_2.weights, (void *)&weights_2[0], true);
+  _context->read_buffer(gpu_alloc_layer_3.weights, (void *)&weights_3[0], true);
+  _context->read_buffer(gpu_alloc_layer_1.bias, (void *)&bias_1[0], true);
+  _context->read_buffer(gpu_alloc_layer_2.bias, (void *)&bias_2[0], true);
+  _context->read_buffer(gpu_alloc_layer_3.bias, (void *)&bias_3[0], true);
+
+  // write to file
+  std::ofstream params_file;
+  params_file.open(file_path);
+  params_file << "{" << std::endl;
+  dump_layer_parameters(params_file, layer_parameters_key[0], weights_1,
+                        bias_1);
+  params_file << "," << std::endl;
+  dump_layer_parameters(params_file, layer_parameters_key[1], weights_2,
+                        bias_2);
+  params_file << "," << std::endl;
+  dump_layer_parameters(params_file, layer_parameters_key[2], weights_3,
+                        bias_3);
+  params_file << std::endl
+              << "}";
+}
+
+/*
+void ConfigBasedDataPipeline::dump_filters(
+    const char *const path, size_t layer_id,
+    cnn_sr::CnnLayerGpuAllocationPool gpu_alloc) {
+  // read
+  auto ws = data.weights_size();
+  std::vector<float> w(ws);
+  context.read_buffer(gpu_alloc.weights, (void *)&w[0], true);
+  // dump
+  char name_buf[255];
+  std::vector<float> tmp(data.f_spatial_size * data.f_spatial_size);
+  for (size_t n = 0; n < data.current_filter_count; n++) {
+    for (size_t k = 0; k < data.n_prev_filter_cnt; k++) {
+      size_t i = 0;
+      for (size_t row = 0; row < data.f_spatial_size; row++) {
+        for (size_t col = 0; col < data.f_spatial_size; col++) {
+          size_t idx = ((row * data.f_spatial_size) + col) *
+                       data.current_filter_count * data.n_prev_filter_cnt;
+          idx += k * data.current_filter_count + n;
+          tmp[i] = ws[idx];
+          ++i;
+        }
+      }
+
+      snprintf(name_buf, 255, "%s__%d_%d.png", path, k, n);
+      dump_image(name_buf, data.f_spatial_size, tmp, true, 255.0f);
+    }
+  }
+}
+*/
 }

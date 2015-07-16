@@ -4,6 +4,7 @@
 #include <sstream>
 #include <cstring>
 #include <string>
+#include <vector>
 
 // TODO use dropbox/json11 since it allows for write too
 union JsonValue;
@@ -16,6 +17,10 @@ void get_file_content(const char* const, std::stringstream&);
 
 void read_json_file(const char* const, JsonValue&, JsonAllocator&,
                     std::string& file_content, int root_type);
+
+void dump_vector(std::ostream&, std::vector<float>&,
+                 const char* line_prefix = nullptr, size_t per_line = 0,
+                 bool add_line_numbers = false);
 
 template <typename T>
 inline bool is_odd(T x) {
