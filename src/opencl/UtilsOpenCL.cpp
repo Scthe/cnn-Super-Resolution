@@ -78,8 +78,11 @@ char *load_file(const char *cFilename, const char *cPreamble,
 
 ImageData::ImageData() : w(0), h(0), bpp(0), data(nullptr) {}
 
+ImageData::ImageData(int w, int h, int bpp, unsigned char *data)
+    : w(w), h(h), bpp(bpp), data(data), read_from_file(false) {}
+
 ImageData::~ImageData() {
-  if (data) stbi_image_free(data);
+  if (data && read_from_file) stbi_image_free(data);
 }
 
 void load_image(const char *filename, ImageData &data) {

@@ -26,12 +26,15 @@ namespace utils {
  */
 struct ImageData {
   ImageData();
+  ImageData(int,int,int,unsigned char*);
   ~ImageData();
   // TODO do not allow copy !!!
 
   int w, h;
   int bpp;  // bytes per pixel
   unsigned char* data;
+private:
+  bool read_from_file = true;
 };
 
 /**

@@ -37,6 +37,8 @@ __kernel void main(__read_only __global float* ground_truth_image,
     float y = algo_result[idx];
     float d = y - t;
     // sigmoid
+    // NOTE y/(1-y) is > 0 iff. y in (0,1)
+    // taking log of number < 0 ends up badly
     float x = log(y / (1 - y));  // reverse sigmoid(log==ln)
     float sigm_deriv = x * (1 - x);
     // write result
