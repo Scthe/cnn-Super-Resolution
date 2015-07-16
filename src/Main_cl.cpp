@@ -10,6 +10,26 @@
 using namespace opencl::utils;
 using namespace cnn_sr;
 
+// SNIPPET -- PARAMETER WRITE:
+// context.block();
+// data_pipeline.write_params_to_file("data\\params-file.json",
+//  gpu_alloc.layer_1, gpu_alloc.layer_2,
+//  gpu_alloc.layer_3);
+// exit(EXIT_SUCCESS);
+
+// SNIPPET -- LUMA WRITE:
+// std::cout << "--- expected_output_img debug ---" << std::endl;
+// data_pipeline.print_buffer(gpu_alloc.expected_output_luma,
+//  "expected_output_luma", 16);
+// std::vector<float> luma_data(expected_output_img.w *
+// expected_output_img.h);
+// context.read_buffer(gpu_alloc.expected_output_luma, (void*)&luma_data[0],
+// true);
+// dump_image("data\\luma_extract.png", expected_output_img.w, luma_data,
+// true,
+//  255.0f);
+// exit(EXIT_SUCCESS);
+
 // const char* const input_img_file = "data\\small.jpg";
 // const char* const expected_output_img_file = "data\\large.jpg";
 const char* train_samples[24] = {"data\\train_samples\\sample_0_large.jpg",
@@ -36,7 +56,7 @@ const char* train_samples[24] = {"data\\train_samples\\sample_0_large.jpg",
                                  "data\\train_samples\\sample_11_small.jpg",
                                  "data\\train_samples\\sample_12_large.jpg",
                                  "data\\train_samples\\sample_12_small.jpg"};
-const size_t train_samples_count = 12;
+const size_t train_samples_count = 1;
 
 struct PerSampleAllocationPool {
   /** Raw 3 channel image loaded from hard drive */
@@ -66,8 +86,6 @@ void prepare_image(DataPipeline* const pipeline, const char* const, ImageData&,
                    opencl::MemoryHandle&, opencl::MemoryHandle&, bool, bool);
 void dump_image(const char* const, size_t w, std::vector<float>&, bool,
                 float val_mul = 1.0f);
-void print_buffer(opencl::Context&, opencl::MemoryHandle, const char* const,
-                  size_t);
 
 ///
 /// main
@@ -107,31 +125,21 @@ int main(int argc, char** argv) {
       sample_alloc_pool.w = (size_t)input_img.w;
       sample_alloc_pool.h = (size_t)input_img.h;
       context.block();
-      context.raw_memory(sample_alloc_pool.input_data)
-          ->release();  // not needed
+      context.raw_memory(sample_alloc_pool.input_data)->release();
     }
-    // exit(EXIT_SUCCESS);
 
-    // std::cout << "--- expected_output_img debug ---" << std::endl;
-    // print_buffer(context, gpu_alloc.expected_output_luma,
-    //  "expected_output_luma", 16);
-    // std::vector<float> luma_data(expected_output_img.w *
-    // expected_output_img.h);
-    // context.read_buffer(gpu_alloc.expected_output_luma, (void*)&luma_data[0],
-    // true);
-    // dump_image("data\\luma_extract.png", expected_output_img.w, luma_data,
-    // true,
-    //  255.0f);
-    // exit(EXIT_SUCCESS);
+    size_t l1_out_rows = 32 - cfg.f1 + 1,        //
+        l2_out_rows = l1_out_rows - cfg.f2 + 1,  //
+        l3_out_rows = l2_out_rows - cfg.f3 + 1;
 
-    const size_t iters = 100;
+    const size_t iters = 900;
     for (size_t iter = 0; iter < iters; iter++) {
+      // std::cout << "------------ " << iter << " ------------" << std::endl;
+      context.block();
       PerSampleAllocationPool& sample_alloc_pool = gpu_alloc.samples[0];
       const size_t w = sample_alloc_pool.w, h = sample_alloc_pool.h;
-
-      // bool debug = iter == 97;
-      // bool debug = iter == 96;
       bool debug = true;
+
       //
       // process with layers
       auto finish_token3 =
@@ -139,26 +147,18 @@ int main(int argc, char** argv) {
                                 gpu_alloc.layer_2,             //
                                 gpu_alloc.layer_3,             //
                                 sample_alloc_pool.input_luma,  //
-                                w, h, true);
-
-      // context.block();
-      // data_pipeline.write_params_to_file("data\\params-file.json",
-      //  gpu_alloc.layer_1, gpu_alloc.layer_2,
-      //  gpu_alloc.layer_3);
-      // exit(EXIT_SUCCESS);
+                                w, h, iter == 0);
 
       //
       // squared difference
       auto squared_error =
           data_pipeline.squared_error(sample_alloc_pool.input_luma,  //
                                       gpu_alloc.layer_3.output,      //
-                                      w, h,                          //
-                                      &finish_token3);
+                                      w, h, &finish_token3);
       if (debug)
         std::cout << "[" << iter << "] Squared error: " << squared_error
                   << ", squared error per pixel: " << (squared_error / (w * h))
                   << std::endl;
-      // if (squared_error < 15) break;
 
       //
       // backpropagate
@@ -174,21 +174,25 @@ int main(int argc, char** argv) {
       // print buffers
       if (debug) {
         /* clang-format off */
-        // print_buffer(context, gpu_alloc.layer_1.bias, "layer 1 bias", 1);
-        // print_buffer(context, gpu_alloc.layer_2.bias, "layer 2 bias", 1);
-        // print_buffer(context, gpu_alloc.layer_3.bias, "layer 3 bias", 1);
+        // data_pipeline.print_buffer(gpu_alloc.layer_1.bias, "layer 1 bias", 1);
+        // data_pipeline.print_buffer(gpu_alloc.layer_2.bias, "layer 2 bias", 1);
+        // data_pipeline.print_buffer(gpu_alloc.layer_3.bias, "layer 3 bias", 1);
 
-        // print_buffer(context, gpu_alloc.layer_1.weights, "layer 1 weights", 9);
-        // print_buffer(context, gpu_alloc.layer_2.weights, "layer 2 weights", 1);
-        // print_buffer(context, gpu_alloc.layer_3.weights, "layer 3 weights", 9);
+        // data_pipeline.print_buffer(gpu_alloc.layer_1.weights, "layer 1 weights", cfg.f1*cfg.f1);
+        // data_pipeline.print_buffer(gpu_alloc.layer_2.weights, "layer 2 weights", cfg.f2*cfg.f2);
+        // data_pipeline.print_buffer(gpu_alloc.layer_3.weights, "layer 3 weights", cfg.f3*cfg.f3);
 
-        // print_buffer(context, gpu_alloc.layer_1.output, "layer 1 out", 14);
-        // print_buffer(context, gpu_alloc.layer_2.output, "layer 2 out", 14);
-        // print_buffer(context, gpu_alloc.layer_3.output, "layer 3 out", 12);
+        // data_pipeline.print_buffer(gpu_alloc.layer_1.grad_w, "layer 1 weight gradients", cfg.f1*cfg.f1);
+        // data_pipeline.print_buffer(gpu_alloc.layer_2.grad_w, "layer 2 weight gradients", cfg.f2*cfg.f2);
+        // data_pipeline.print_buffer(gpu_alloc.layer_3.grad_w, "layer 3 weight gradients", cfg.f3*cfg.f3);
 
-        // print_buffer(context, gpu_alloc.layer_1.deltas, "layer 1 deltas", 12);
-        // print_buffer(context, gpu_alloc.layer_2.deltas, "layer 2 deltas", 12);
-        // print_buffer(context, gpu_alloc.layer_3.deltas, "layer 3 deltas", 12);
+        // data_pipeline.print_buffer(gpu_alloc.layer_1.output, "layer 1 out", l1_out_rows);
+        // data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2 out", l2_out_rows);
+        // data_pipeline.print_buffer(gpu_alloc.layer_3.output, "layer 3 out", l3_out_rows);
+
+        // data_pipeline.print_buffer(gpu_alloc.layer_1.deltas, "layer 1 deltas", l1_out_rows);
+        // data_pipeline.print_buffer(gpu_alloc.layer_2.deltas, "layer 2 deltas", l2_out_rows);
+        // data_pipeline.print_buffer(gpu_alloc.layer_3.deltas, "layer 3 deltas", l3_out_rows);
         /* clang-format on */
       }
 
@@ -219,25 +223,6 @@ void prepare_image(DataPipeline* const pipeline, const char* const file_path,
   // extract luma channel
   cl_event finish_token1 = pipeline->extract_luma(
       img_data, gpu_data_handle, gpu_luma_handle, normalize_luma);
-}
-
-void print_buffer(opencl::Context& ctx, opencl::MemoryHandle mh,
-                  const char* const name, size_t lines) {
-  auto raw = ctx.raw_memory(mh);
-  size_t len = raw->size / sizeof(cl_float);
-  // std::cout << "len:" << len << std::endl;
-
-  // read
-  std::vector<float> data(len);
-  ctx.block();
-  ctx.read_buffer(mh, &data[0], true);
-
-  // print
-  std::cout << name << ": [" << std::endl;
-  cnn_sr::utils::dump_vector(std::cout, data, "", len / lines, true);
-  std::cout << "]" << std::endl
-            << std::endl
-            << std::endl;
 }
 
 void dump_image(const char* const file_path, size_t w,

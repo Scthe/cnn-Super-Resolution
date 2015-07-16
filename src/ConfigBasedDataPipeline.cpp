@@ -60,7 +60,6 @@ void ConfigBasedDataPipeline::load_kernels(int load_flags) {
     /* clang-format off */
     if (!_layer_1_kernel) _layer_1_kernel = create_layer_kernel(layer_data_1);
     if (!_layer_2_kernel) _layer_2_kernel = create_layer_kernel(layer_data_2);
-    // if (!_layer_3_kernel) _layer_3_kernel = create_layer_kernel(layer_data_3, 255);
     // TODO as of now we are never normalizing forward results
     if (!_layer_3_kernel) _layer_3_kernel = create_layer_kernel(layer_data_3);
     /* clang-format on */
@@ -101,8 +100,8 @@ cl_event ConfigBasedDataPipeline::forward(
 
   cl_event ev;
   if (subtract_input_mean) {
-    if (print_steps)
-      std::cout << "### Subtracting mean from input" << std::endl;
+    // TODO move mean subtraction out of forward
+    std::cout << "### Subtracting mean from input" << std::endl;
     ev = this->subtract_mean(input, ev_to_wait_for);
     ev_to_wait_for = &ev;
   }
@@ -153,10 +152,12 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                      layer_2_out_dim[0], layer_2_out_dim[1]);
 
   // step 1 weight decay
+  // TODO move weight decay out of forward
   if (print_steps) std::cout << "### Calculating weight decay" << std::endl;
   auto weight_decay_value =
       weight_decay(layer_1_alloc, layer_2_alloc, layer_3_alloc,
                    _config->weight_decay_parameter, ev_to_wait_for);
+  // std::cout << "weight_decay_value: " << weight_decay_value << std::endl;
 
   // step 2 deltas
   if (print_steps)
@@ -195,6 +196,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                    layer_2_alloc.output, layer_3_alloc,     //
                                    layer_3_out_dim[0], layer_3_out_dim[1],  //
                                    &event2_3);
+
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 2nd layer"
               << std::endl;

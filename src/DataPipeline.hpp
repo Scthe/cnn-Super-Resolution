@@ -122,6 +122,11 @@ class DataPipeline {
   opencl::Kernel* create_deltas_kernel(const LayerData&);
   opencl::Kernel* create_backpropagation_kernel(const LayerData&);
 
+  ///
+  /// misc
+  ///
+  void print_buffer(opencl::MemoryHandle, const char* const, size_t);
+
  protected:
   void check_initialized(int kernel_load_flags);
   virtual void load_kernels(int load_flags);

@@ -7,8 +7,7 @@
 #include "LayerData.hpp"
 #include "opencl/Context.hpp"
 #include "opencl/UtilsOpenCL.hpp"
-
-// TODO check all CL_MEM_WRITE_ONLY
+#include "Utils.hpp"  // only for DataPipeline::print_buffer(..) ?
 
 const bool print_work_dimensions = false;
 
@@ -86,6 +85,28 @@ size_t DataPipeline::element_count(opencl::MemoryHandle alloc, size_t el_size) {
 }
 
 opencl::Context *DataPipeline::context() { return _context; }
+
+///
+/// misc
+///
+void DataPipeline::print_buffer(opencl::MemoryHandle mh, const char *const name,
+                                size_t lines) {
+  auto raw = _context->raw_memory(mh);
+  size_t len = raw->size / sizeof(cl_float);
+  // std::cout << "len:" << len << std::endl;
+
+  // read
+  std::vector<float> data(len);
+  _context->block();
+  _context->read_buffer(mh, &data[0], true);
+
+  // print
+  std::cout << name << ": [" << std::endl;
+  cnn_sr::utils::dump_vector(std::cout, data, "", len / lines, true);
+  std::cout << "]" << std::endl
+            << std::endl
+            << std::endl;
+}
 
 ///
 /// Kernel loading
@@ -224,7 +245,7 @@ float DataPipeline::sum(opencl::MemoryHandle data, bool squared,
 
   float result = 0;
   if (!ALLOCATION_HAS_RIGHT_SIZE(_tmp_gpu_float, sizeof(cl_float))) {
-    _tmp_gpu_float = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float));
+    _tmp_gpu_float = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float));
   }
   _context->write_buffer(_tmp_gpu_float, (void *)&result, true);  // zeroe
 
@@ -296,12 +317,13 @@ cl_event DataPipeline::execute_layer(
     opencl::MemoryHandle &gpu_buf_in, size_t input_w, size_t input_h,
     cl_event *ev_to_wait_for) {
   pre_execute_layer_validation(data, gpu_buf_in, input_w, input_h);
+  _context->block();
 
   size_t out_size[2];
   data.get_output_dimensions(out_size, input_w, input_h);
   size_t out_count = out_size[0] * out_size[1] * data.current_filter_count;
   // std::cout << "out size: " << out_size[0] << "x" << out_size[1] << "x"
-            // << data.current_filter_count << "=" << out_count << std::endl;
+  // << data.current_filter_count << "=" << out_count << std::endl;
 
   // buffers: W, B, out_target
   size_t weights_alloc_size = sizeof(cl_float) * data.weight_size(),
@@ -310,11 +332,11 @@ cl_event DataPipeline::execute_layer(
 
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.weights, weights_alloc_size)) {
     gpu_alloc.weights =
-        _context->allocate(CL_MEM_READ_ONLY, weights_alloc_size);
+        _context->allocate(CL_MEM_READ_WRITE, weights_alloc_size);
     _context->write_buffer(gpu_alloc.weights, (void *)data.weights_ptr(), true);
   }
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.bias, bias_alloc_size)) {
-    gpu_alloc.bias = _context->allocate(CL_MEM_READ_ONLY, bias_alloc_size);
+    gpu_alloc.bias = _context->allocate(CL_MEM_READ_WRITE, bias_alloc_size);
     _context->write_buffer(gpu_alloc.bias, (void *)data.bias_ptr(), true);
   }
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.output, out_alloc_size)) {
@@ -369,7 +391,7 @@ float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
   }
   float result = 0;
   if (!ALLOCATION_HAS_RIGHT_SIZE(_tmp_gpu_float, sizeof(cl_float))) {
-    _tmp_gpu_float = _context->allocate(CL_MEM_WRITE_ONLY, sizeof(cl_float));
+    _tmp_gpu_float = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float));
   }
   _context->write_buffer(_tmp_gpu_float, (void *)&result, true);  // zeroe
   /* clang-format on */
@@ -513,7 +535,7 @@ cl_event DataPipeline::calculate_deltas(
         "Tried to calculate deltas for previous layer, but deltas for current layer are not valid !");
   }
   if (!ALLOCATION_HAS_RIGHT_SIZE(next_gpu_alloc.weights, weights_alloc_size)) {
-    next_gpu_alloc.weights = _context->allocate(CL_MEM_READ_ONLY, weights_alloc_size);
+    next_gpu_alloc.weights = _context->allocate(CL_MEM_READ_WRITE, weights_alloc_size);
     _context->write_buffer(next_gpu_alloc.weights, (void *)next_layer.weights_ptr(), true);
   }
   if (!ALLOCATION_HAS_RIGHT_SIZE(curr_gpu_alloc.output, out_alloc_size)) {
