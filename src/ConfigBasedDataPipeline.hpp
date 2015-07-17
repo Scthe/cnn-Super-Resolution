@@ -17,7 +17,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
   cl_event forward(cnn_sr::CnnLayerGpuAllocationPool&,  //
                    cnn_sr::CnnLayerGpuAllocationPool&,  //
                    cnn_sr::CnnLayerGpuAllocationPool&,  //
-                   opencl::MemoryHandle, size_t, size_t, bool,
+                   opencl::MemoryHandle, size_t, size_t,
                    cl_event* ev = nullptr);
 
   float squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
@@ -41,6 +41,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
    * @param  gpu_buf_ground_truth expected result
    * @param  ground_truth_w       width of both cnn_input and gpu_buf_ground_truth
    * @param  ground_truth_h       height of both cnn_input and gpu_buf_ground_truth
+   * @param  weight_decay
    * @param  ev_to_wait_for       [description]
    * @return                      [description]
    */
@@ -48,7 +49,8 @@ class ConfigBasedDataPipeline : public DataPipeline {
                          cnn_sr::CnnLayerGpuAllocationPool&,
                          cnn_sr::CnnLayerGpuAllocationPool&,
                          opencl::MemoryHandle, opencl::MemoryHandle,
-                         size_t, size_t, cl_event* ev_to_wait_for = nullptr);
+                         size_t, size_t,//
+                         float, cl_event* ev_to_wait_for = nullptr);
   /* clang-format on */
 
   void write_params_to_file(const char* const file_path,

@@ -88,24 +88,13 @@ cl_event ConfigBasedDataPipeline::forward(
     cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
     cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc,
     opencl::MemoryHandle input, size_t input_w, size_t input_h,
-    bool subtract_input_mean, cl_event *ev_to_wait_for) {
+    cl_event *ev_to_wait_for) {
   //
   check_initialized(DataPipeline::LOAD_KERNEL_LAYERS);
   size_t l1_output_dim[2], l2_output_dim[2];
   layer_data_1.get_output_dimensions(l1_output_dim, input_w, input_h);
   layer_data_2.get_output_dimensions(l2_output_dim, l1_output_dim[0],
                                      l1_output_dim[1]);
-
-  _context->block();
-
-  cl_event ev;
-  if (subtract_input_mean) {
-    // TODO move mean subtraction out of forward
-    std::cout << "### Subtracting mean from input" << std::endl;
-    ev = this->subtract_mean(input, ev_to_wait_for);
-    ev_to_wait_for = &ev;
-  }
-
   _context->block();
 
   // layer 1
@@ -139,9 +128,9 @@ cl_event ConfigBasedDataPipeline::backpropagate(
     cnn_sr::CnnLayerGpuAllocationPool &layer_1_alloc,
     cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
     cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc,
-    opencl::MemoryHandle cnn_input,
-    opencl::MemoryHandle gpu_buf_ground_truth,  //
-    size_t ground_truth_w, size_t ground_truth_h, cl_event *ev_to_wait_for) {
+    opencl::MemoryHandle cnn_input, opencl::MemoryHandle gpu_buf_ground_truth,
+    size_t ground_truth_w, size_t ground_truth_h,  //
+    float weight_decay_value, cl_event *ev_to_wait_for) {
   // dimensions
   size_t layer_1_out_dim[2], layer_2_out_dim[2], layer_3_out_dim[2];
   layer_data_1.get_output_dimensions(layer_1_out_dim,  //
@@ -151,22 +140,15 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   layer_data_3.get_output_dimensions(layer_3_out_dim,  //
                                      layer_2_out_dim[0], layer_2_out_dim[1]);
 
-  // step 1 weight decay
-  // TODO move weight decay out of forward
-  if (print_steps) std::cout << "### Calculating weight decay" << std::endl;
-  auto weight_decay_value =
-      weight_decay(layer_1_alloc, layer_2_alloc, layer_3_alloc,
-                   _config->weight_decay_parameter, ev_to_wait_for);
-  // std::cout << "weight_decay_value: " << weight_decay_value << std::endl;
-
   // step 2 deltas
   if (print_steps)
     std::cout << "### Calculating deltas for last layer" << std::endl;
-  auto event2_1 = last_layer_delta(gpu_buf_ground_truth,  //
-                                   layer_3_alloc.output,  //
-                                   layer_3_alloc.deltas,  //
-                                   weight_decay_value,    //
-                                   ground_truth_w, ground_truth_h);
+  auto event2_1 =
+      last_layer_delta(gpu_buf_ground_truth,  //
+                       layer_3_alloc.output,  //
+                       layer_3_alloc.deltas,  //
+                       weight_decay_value,    //
+                       ground_truth_w, ground_truth_h, ev_to_wait_for);
 
   if (print_steps)
     std::cout << "### Calculating deltas for 2nd layer" << std::endl;
@@ -236,8 +218,6 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   auto event4_3 =
       update_parameters(layer_data_1, layer_1_alloc, _config->momentum,
                         _config->learning_rate[0], &event4_2);
-
-  _context->block();
   return event4_3;
 }
 

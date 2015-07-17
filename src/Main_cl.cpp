@@ -82,8 +82,9 @@ struct GpuAllocationPool {
 ///
 /// Forward decl.
 ///
-void prepare_image(DataPipeline* const pipeline, const char* const, ImageData&,
-                   opencl::MemoryHandle&, opencl::MemoryHandle&, bool, bool);
+cl_event prepare_image(DataPipeline* const pipeline, const char* const,
+                       ImageData&, opencl::MemoryHandle&, opencl::MemoryHandle&,
+                       bool, bool);
 void dump_image(const char* const, size_t w, std::vector<float>&, bool,
                 float val_mul = 1.0f);
 
@@ -119,9 +120,10 @@ int main(int argc, char** argv) {
       prepare_image(&data_pipeline, large_path, expected_output_img,  //
                     sample_alloc_pool.expected_output_data,
                     sample_alloc_pool.expected_output_luma, true, false);
-      prepare_image(&data_pipeline, small_path, input_img,
-                    sample_alloc_pool.input_data, sample_alloc_pool.input_luma,
-                    true, false);
+      auto ev1 = prepare_image(&data_pipeline, small_path, input_img,
+                               sample_alloc_pool.input_data,
+                               sample_alloc_pool.input_luma, true, false);
+      data_pipeline.subtract_mean(sample_alloc_pool.input_luma, &ev1);
       sample_alloc_pool.w = (size_t)input_img.w;
       sample_alloc_pool.h = (size_t)input_img.h;
       context.block();
@@ -143,11 +145,10 @@ int main(int argc, char** argv) {
       //
       // process with layers
       auto finish_token3 =
-          data_pipeline.forward(gpu_alloc.layer_1,             //
-                                gpu_alloc.layer_2,             //
-                                gpu_alloc.layer_3,             //
-                                sample_alloc_pool.input_luma,  //
-                                w, h, iter == 0);
+          data_pipeline.forward(gpu_alloc.layer_1,  //
+                                gpu_alloc.layer_2,  //
+                                gpu_alloc.layer_3,  //
+                                sample_alloc_pool.input_luma, w, h);
 
       //
       // squared difference
@@ -162,13 +163,17 @@ int main(int argc, char** argv) {
 
       //
       // backpropagate
+      auto weight_decay_value = data_pipeline.weight_decay(
+          gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
+          cfg.weight_decay_parameter, &finish_token3);
+      // std::cout << "weight_decay_value: " << weight_decay_value << std::endl;
       auto finish_token4 = data_pipeline.backpropagate(
           gpu_alloc.layer_1,                       //
           gpu_alloc.layer_2,                       //
           gpu_alloc.layer_3,                       //
           sample_alloc_pool.input_luma,            //
           sample_alloc_pool.expected_output_luma,  //
-          w, h, &finish_token3);
+          w, h, weight_decay_value, &finish_token3);
 
       //
       // print buffers
@@ -211,18 +216,19 @@ int main(int argc, char** argv) {
 ///
 /// Impl
 ///
-void prepare_image(DataPipeline* const pipeline, const char* const file_path,
-                   ImageData& img_data, opencl::MemoryHandle& gpu_data_handle,
-                   opencl::MemoryHandle& gpu_luma_handle, bool normalize_luma,
-                   bool print) {
+cl_event prepare_image(DataPipeline* const pipeline,
+                       const char* const file_path, ImageData& img_data,
+                       opencl::MemoryHandle& gpu_data_handle,
+                       opencl::MemoryHandle& gpu_luma_handle,
+                       bool normalize_luma, bool print) {
   if (print) std::cout << "loading image '" << file_path << "'" << std::endl;
   opencl::utils::load_image(file_path, img_data);  // TODO should throw
   if (print)
     std::cout << "    size: " << img_data.w << "x" << img_data.h << "x"
               << img_data.bpp << std::endl;
   // extract luma channel
-  cl_event finish_token1 = pipeline->extract_luma(
-      img_data, gpu_data_handle, gpu_luma_handle, normalize_luma);
+  return pipeline->extract_luma(img_data, gpu_data_handle, gpu_luma_handle,
+                                normalize_luma);
 }
 
 void dump_image(const char* const file_path, size_t w,
