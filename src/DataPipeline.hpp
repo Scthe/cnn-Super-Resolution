@@ -117,8 +117,7 @@ class DataPipeline {
   ///
   /// kernel creation - ones that are not created during standard init
   ///
-  opencl::Kernel* create_layer_kernel(const LayerData&,
-                                      int result_multiply = 0);
+  opencl::Kernel* create_layer_kernel(const LayerData&);
   opencl::Kernel* create_deltas_kernel(const LayerData&);
   opencl::Kernel* create_backpropagation_kernel(const LayerData&);
 

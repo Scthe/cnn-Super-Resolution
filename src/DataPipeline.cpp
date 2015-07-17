@@ -151,20 +151,11 @@ void DataPipeline::load_kernels(int load_flags) {
   }
 }
 
-opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d,
-                                                  int result_multiply) {
+opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d) {
+  // TODO current_filter_count=64 causes errors:
+  // CL_INVALID_COMMAND_QUEUE (maybe gpu memory alloc?)
   char buf[255];
-  if (result_multiply) {
-    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=1 -D RESULT_MULTIPLY=%d",
-             result_multiply);
-    std::cout << "RESULT_MULTIPLY=" << result_multiply << " (last layer)"
-              << std::endl;
-  } else {
-    // TODO current_filter_count=64 causes errors:
-    // CL_INVALID_COMMAND_QUEUE (maybe gpu memory alloc?)
-    snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.current_filter_count);
-  }
-
+  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.current_filter_count);
   return _context->create_kernel(layer_kernel_file, buf);
 }
 

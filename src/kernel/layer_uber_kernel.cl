@@ -17,8 +17,6 @@ float sigmoid(float x){
  *
  * macros:
  *   CURRENT_FILTER_COUNT      filter count for curent layer
- *   RESULT_MULTIPLY           if defined: sigmoid will not be aplied to the result,
- *                             result value will be multiplied instead
  *
  * @param input                output of previous layer, size:
  *                               * 1st layer: img_w * img_h
@@ -70,7 +68,6 @@ void main(__read_only __global float* input,
   // value range check
   if(pos.x >= 0 && pos.x <= out_size.x &&
      pos.y >= 0 && pos.y <= out_size.y){
-
       // apply weights & write to vals_by_filter
       for (size_t dy = 0; dy < f_spatial_size; dy++) {
         for (size_t dx = 0; dx < f_spatial_size; dx++) {
@@ -92,14 +89,7 @@ void main(__read_only __global float* input,
       // add bias and write cached results to target buffer
       for (size_t filter_id = 0; filter_id < CURRENT_FILTER_COUNT; filter_id++) {
         float result = vals_by_filter[filter_id] + B[filter_id];
-
-#ifndef RESULT_MULTIPLY
         target[out_idx + filter_id] = sigmoid(result);
-#else
-        target[out_idx + filter_id] = result * RESULT_MULTIPLY;
-#endif // RESULT_MULTIPLY
-
       }
-
   }
 }

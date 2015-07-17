@@ -26,7 +26,6 @@ auto test_data_file = "test/data/test_cases.json";
  *  f_spatial_size       := INT, spatial size, values: f1/f2/f3
  *  input_w              := INT, input dimensions
  *  input_h              := INT, input dimensions
- *  result_multiply      := INT, optional - multiply result by const instead of using ReLU
  *  input                := VECTOR[FLOAT], min size: input_w * input_h * n_prev_filter_cnt.
  *                           Each column for different filter(from 1 to n_prev_filter_cnt).
  *                           Each row for different point in range 0..input_w*input_h
@@ -62,9 +61,6 @@ struct LayerDataSet : DataSet {
   std::vector<float> output;
   std::vector<float> weights;
   std::vector<float> bias;
-  // optional:
-  int result_multiply = 0;
-  int preproces_mean = 0;  // subtract mean from input
 };
 
 ///
@@ -118,14 +114,6 @@ bool LayerTest::operator()(size_t data_set_id,
   size_t out_dim[2];
   layer_data.get_output_dimensions(out_dim, data->input_w, data->input_h);
 
-  // pre run fixes
-  if (data->preproces_mean) {
-    float input_mean = mean(&data->input[0], data->input.size());
-    for (size_t i = 0; i < data->input.size(); i++) {
-      data->input[i] -= input_mean;
-    }
-  }
-
   // alloc input
   cnn_sr::CnnLayerGpuAllocationPool gpu_alloc;
   auto gpu_buf_in = _context->allocate(CL_MEM_WRITE_ONLY,
@@ -134,7 +122,7 @@ bool LayerTest::operator()(size_t data_set_id,
 
   // create kernel & run
   auto kernel =
-      pipeline->create_layer_kernel(layer_data, data->result_multiply);
+      pipeline->create_layer_kernel(layer_data);
   pipeline->execute_layer(*kernel, layer_data, gpu_alloc, gpu_buf_in,
                           data->input_w, data->input_h);
   assert_equals(pipeline, data->output, gpu_alloc.output);
@@ -150,7 +138,6 @@ bool read_layer_data(const JsonValue& object, LayerDataSet& data) {
   // ASSERT(object.getTag() == JSON_TAG_OBJECT);
 
   for (auto node : object) {
-    JSON_READ_STR(node, data, name)
     JSON_READ_UINT(node, data, n_prev_filter_cnt)
     JSON_READ_UINT(node, data, f_spatial_size)
     JSON_READ_UINT(node, data, current_filter_count)
@@ -160,8 +147,6 @@ bool read_layer_data(const JsonValue& object, LayerDataSet& data) {
     JSON_READ_NUM_ARRAY(node, data, output)
     JSON_READ_NUM_ARRAY(node, data, weights)
     JSON_READ_NUM_ARRAY(node, data, bias)
-    JSON_READ_UINT(node, data, result_multiply)
-    JSON_READ_UINT(node, data, preproces_mean)
   }
 
   return true;
@@ -182,6 +167,7 @@ bool LayerTestImpl::read_test_data_from_file(char const* const file) {
       // std::cout << object->key << std::endl;
       data_sets.push_back(LayerDataSet());
       LayerDataSet* ptr = &data_sets[data_sets.size() - 1];
+      ptr->name = object->key;
       read_status &= read_layer_data(object->value, *ptr);
     }
   }

@@ -60,7 +60,6 @@ void ConfigBasedDataPipeline::load_kernels(int load_flags) {
     /* clang-format off */
     if (!_layer_1_kernel) _layer_1_kernel = create_layer_kernel(layer_data_1);
     if (!_layer_2_kernel) _layer_2_kernel = create_layer_kernel(layer_data_2);
-    // TODO as of now we are never normalizing forward results
     if (!_layer_3_kernel) _layer_3_kernel = create_layer_kernel(layer_data_3);
     /* clang-format on */
   }

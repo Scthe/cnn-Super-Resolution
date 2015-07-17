@@ -24,7 +24,7 @@ TEST_SPEC_PIMPL(SquaredErrorTest)
 
 void SquaredErrorTest::init() {}
 
-std::string SquaredErrorTest::name(size_t) { return "Mean squared error test"; }
+std::string SquaredErrorTest::name(size_t) { return "Squared error test"; }
 
 size_t SquaredErrorTest::data_set_count() { return 1; }
 
