@@ -23,8 +23,8 @@ namespace cnn_sr {
 struct LayerData;
 
 // TODO CnnLayerGpuAllocationPool is mouthful
+/* clang-format off */
 struct CnnLayerGpuAllocationPool {
-  /* clang-format off */
   /** Forward: weights, size: f*f*n*k */
   opencl::MemoryHandle weights = gpu_nullptr;
   /** Forward: bias, size: n */
@@ -34,12 +34,16 @@ struct CnnLayerGpuAllocationPool {
 
   /** Backpropagation: Deltas for this layer, size: out_w*out_h*n */
   opencl::MemoryHandle deltas = gpu_nullptr;
-  opencl::MemoryHandle grad_w = gpu_nullptr;
-  opencl::MemoryHandle grad_b = gpu_nullptr;
-  opencl::MemoryHandle previous_delta_w = gpu_nullptr;
-  opencl::MemoryHandle previous_delta_b = gpu_nullptr;
-  /* clang-format on */
+  /** Backpropagation: Through single batch execution we are going to acumulate grads, size: f*f*n*k */
+  opencl::MemoryHandle accumulating_grad_w = gpu_nullptr; // formely: grad_w
+  /** Backpropagation: Through single batch execution we are going to acumulate grads, size: f*f*n*k */
+  opencl::MemoryHandle accumulating_grad_b = gpu_nullptr; // formely: grad_b
+  /** Backpropagation: Deltas that we had after previous batch, size: f*f*n*k */
+  opencl::MemoryHandle previous_batch_delta_w = gpu_nullptr;
+  /** Backpropagation: Deltas that we had after previous batch, size: f*f*n*k */
+  opencl::MemoryHandle previous_batch_delta_b = gpu_nullptr;
 };
+/* clang-format on */
 
 /**
  * Class used to execute various pipeline methods f.e.:

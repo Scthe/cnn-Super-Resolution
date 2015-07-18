@@ -608,21 +608,21 @@ cl_event DataPipeline::backpropagate(opencl::Kernel &kernel,  //
         "Tried to calculate gradients, but there are no previous layer output values."
         "They are normally allocated during forward step.");
   }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.accumulating_grad_w, grad_w_size)) {
+    gpu_alloc.accumulating_grad_w = _context->allocate(CL_MEM_READ_WRITE, grad_w_size);
+    _context->zeros_float(gpu_alloc.accumulating_grad_w, true);
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.accumulating_grad_b, grad_b_size)) {
+    gpu_alloc.accumulating_grad_b = _context->allocate(CL_MEM_READ_WRITE, grad_b_size);
+    _context->zeros_float(gpu_alloc.accumulating_grad_b, true);
+  }
   /* clang-format on */
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_w, grad_w_size)) {
-    gpu_alloc.grad_w = _context->allocate(CL_MEM_READ_WRITE, grad_w_size);
-  }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_b, grad_b_size)) {
-    gpu_alloc.grad_b = _context->allocate(CL_MEM_READ_WRITE, grad_b_size);
-  }
-  _context->zeros_float(gpu_alloc.grad_w, true);
-  _context->zeros_float(gpu_alloc.grad_b, true);
 
   // args
   kernel.push_arg(gpu_alloc.deltas);
   kernel.push_arg(layer_input);
-  kernel.push_arg(gpu_alloc.grad_w);
-  kernel.push_arg(gpu_alloc.grad_b);
+  kernel.push_arg(gpu_alloc.accumulating_grad_w);
+  kernel.push_arg(gpu_alloc.accumulating_grad_b);
   kernel.push_arg(scratch_w_size, nullptr);  // scratch buffer
   kernel.push_arg(scratch_b_size, nullptr);  // scratch buffer
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.n_prev_filter_cnt);
@@ -672,21 +672,21 @@ cl_event DataPipeline::backpropagate2(LayerData &layer_data,  //
         "Tried to calculate gradients, but there are no previous layer output values."
         "They are normally allocated during forward step.");
   }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.accumulating_grad_w, grad_w_size)) {
+    gpu_alloc.accumulating_grad_w = _context->allocate(CL_MEM_READ_WRITE, grad_w_size);
+    _context->zeros_float(gpu_alloc.accumulating_grad_w, true);
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.accumulating_grad_b, grad_b_size)) {
+    gpu_alloc.accumulating_grad_b = _context->allocate(CL_MEM_READ_WRITE, grad_b_size);
+    _context->zeros_float(gpu_alloc.accumulating_grad_b, true);
+  }
   /* clang-format on */
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_w, grad_w_size)) {
-    gpu_alloc.grad_w = _context->allocate(CL_MEM_READ_WRITE, grad_w_size);
-    _context->zeros_float(gpu_alloc.grad_w, true);
-  }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_b, grad_b_size)) {
-    gpu_alloc.grad_b = _context->allocate(CL_MEM_READ_WRITE, grad_b_size);
-    _context->zeros_float(gpu_alloc.grad_b, true);
-  }
 
   // args
   kernel.push_arg(gpu_alloc.deltas);
   kernel.push_arg(layer_input);
-  kernel.push_arg(gpu_alloc.grad_w);
-  kernel.push_arg(gpu_alloc.grad_b);
+  kernel.push_arg(gpu_alloc.accumulating_grad_w);
+  kernel.push_arg(gpu_alloc.accumulating_grad_b);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.current_filter_count);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.n_prev_filter_cnt);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.f_spatial_size);
@@ -727,31 +727,31 @@ cl_event DataPipeline::update_parameters(LayerData &layer_data,  //
     throw std::runtime_error("Tried to update bias, but old values are not valid. "
                              "Impossible if forward pass was completed");
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_w, weights_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.accumulating_grad_w, weights_alloc_size)) {
     throw std::runtime_error("Tried to update weights, but gradient values are not valid. "
                              "Impossible if backpropagation was completed");
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_b, bias_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.accumulating_grad_b, bias_alloc_size)) {
     throw std::runtime_error("Tried to update bias, but gradient values are not valid. "
                              "Impossible if backpropagation was completed");
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.previous_delta_w, weights_alloc_size)) {
-    gpu_alloc.previous_delta_w = _context->allocate(CL_MEM_READ_WRITE, weights_alloc_size);
-    _context->zeros_float(gpu_alloc.previous_delta_w, true);
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.previous_batch_delta_w, weights_alloc_size)) {
+    gpu_alloc.previous_batch_delta_w = _context->allocate(CL_MEM_READ_WRITE, weights_alloc_size);
+    _context->zeros_float(gpu_alloc.previous_batch_delta_w, true);
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.previous_delta_b, bias_alloc_size)) {
-    gpu_alloc.previous_delta_b = _context->allocate(CL_MEM_READ_WRITE, bias_alloc_size);
-    _context->zeros_float(gpu_alloc.previous_delta_b, true);
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.previous_batch_delta_b, bias_alloc_size)) {
+    gpu_alloc.previous_batch_delta_b = _context->allocate(CL_MEM_READ_WRITE, bias_alloc_size);
+    _context->zeros_float(gpu_alloc.previous_batch_delta_b, true);
   }
   /* clang-format on */
 
   // args
   _update_parameters_kernel->push_arg(gpu_alloc.weights);
   _update_parameters_kernel->push_arg(gpu_alloc.bias);
-  _update_parameters_kernel->push_arg(gpu_alloc.grad_w);
-  _update_parameters_kernel->push_arg(gpu_alloc.grad_b);
-  _update_parameters_kernel->push_arg(gpu_alloc.previous_delta_w);
-  _update_parameters_kernel->push_arg(gpu_alloc.previous_delta_b);
+  _update_parameters_kernel->push_arg(gpu_alloc.accumulating_grad_w);
+  _update_parameters_kernel->push_arg(gpu_alloc.accumulating_grad_b);
+  _update_parameters_kernel->push_arg(gpu_alloc.previous_batch_delta_w);
+  _update_parameters_kernel->push_arg(gpu_alloc.previous_batch_delta_b);
   _update_parameters_kernel->push_arg(sizeof(cl_float), (void *)&momentum);
   _update_parameters_kernel->push_arg(sizeof(cl_float), (void *)&learning_rate);
   _update_parameters_kernel->push_arg(sizeof(cl_uint), (void *)&batch_size);
