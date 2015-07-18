@@ -27,12 +27,12 @@ class ConfigBasedDataPipeline : public DataPipeline {
 
   /* clang-format off */
   /**
-   * Steps:
-   *   - calculate weight decay
+   * General backpropagation steps:
+   *   - calculate weight decay (NOTE: value expected as a paramter)
    *   - calculate deltas for last layer
    *   - calculate deltas other layers in reverse order
    *   - backpropagate: calculate gradient w, gradient b for all layers
-   *   - update weights and biases
+   *   - update weights and biases (NOTE: requires explicit call to ConfigBasedDataPipeline::update_parameters(...))
    *
    * @param  layer_1_alloc        [description]
    * @param  layer_2_alloc        [description]
@@ -57,6 +57,13 @@ class ConfigBasedDataPipeline : public DataPipeline {
                             CnnLayerGpuAllocationPool,
                             CnnLayerGpuAllocationPool,
                             CnnLayerGpuAllocationPool);
+
+  /** update weights and biases*/
+  cl_event update_parameters(cnn_sr::CnnLayerGpuAllocationPool&,
+                             cnn_sr::CnnLayerGpuAllocationPool&,
+                             cnn_sr::CnnLayerGpuAllocationPool&,
+                             size_t batch_size,
+                             cl_event* ev_to_wait_for = nullptr);
 
  protected:
   void load_kernels(int load_flags);

@@ -139,7 +139,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   layer_data_3.get_output_dimensions(layer_3_out_dim,  //
                                      layer_2_out_dim[0], layer_2_out_dim[1]);
 
-  // step 2 deltas
+  // propagate deltas
   if (print_steps)
     std::cout << "### Calculating deltas for last layer" << std::endl;
   auto event2_1 =
@@ -167,7 +167,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
 
   _context->block();
 
-  // step 3 backpropagate: calculate gradient w, gradient b for all layers
+  // gradient w, gradient b for all layers
   // TODO might as well run all in parallel
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 3rd layer"
@@ -195,35 +195,39 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                    cnn_input, layer_1_alloc,                //
                                    layer_1_out_dim[0], layer_1_out_dim[1],  //
                                    &event3_2);
+  return event3_3;
+}
 
-  _context->block();
-
-  // step 4 update weights and biases
+cl_event ConfigBasedDataPipeline::update_parameters(
+    cnn_sr::CnnLayerGpuAllocationPool &layer_1_alloc,
+    cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
+    cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc, size_t batch_size,
+    cl_event *ev_to_wait_for) {
   // TODO might as well run all in parallel
   if (print_steps)
     std::cout << "### Updating weights and biases - 3rd layer" << std::endl;
-  auto event4_1 =
-      update_parameters(layer_data_3, layer_3_alloc, _config->momentum,
-                        _config->learning_rate[2], &event3_3);
+  auto event1 = DataPipeline::update_parameters(
+      layer_data_3, layer_3_alloc, batch_size, _config->momentum,
+      _config->learning_rate[2], ev_to_wait_for);
 
   if (print_steps)
     std::cout << "### Updating weights and biases - 2nd layer" << std::endl;
-  auto event4_2 =
-      update_parameters(layer_data_2, layer_2_alloc, _config->momentum,
-                        _config->learning_rate[1], &event4_1);
+  auto event2 = DataPipeline::update_parameters(
+      layer_data_2, layer_2_alloc, batch_size, _config->momentum,
+      _config->learning_rate[1], &event1);
 
   if (print_steps)
     std::cout << "### Updating weights and biases - 1st layer" << std::endl;
-  auto event4_3 =
-      update_parameters(layer_data_1, layer_1_alloc, _config->momentum,
-                        _config->learning_rate[0], &event4_2);
-  return event4_3;
+  auto event3 = DataPipeline::update_parameters(
+      layer_data_1, layer_1_alloc, batch_size, _config->momentum,
+      _config->learning_rate[0], &event2);
+  return event3;
 }
 
 float ConfigBasedDataPipeline::squared_error(
     opencl::MemoryHandle gpu_buf_ground_truth,
-    opencl::MemoryHandle gpu_buf_algo_res, size_t ground_truth_w,
-    size_t ground_truth_h, cl_event *ev_to_wait_for) {
+    opencl::MemoryHandle gpu_buf_algo_res,  //
+    size_t ground_truth_w, size_t ground_truth_h, cl_event *ev_to_wait_for) {
   //
   size_t padding = layer_data_1.f_spatial_size + layer_data_2.f_spatial_size +
                    layer_data_3.f_spatial_size - 3;

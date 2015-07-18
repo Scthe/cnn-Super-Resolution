@@ -104,7 +104,7 @@ __kernel void main(__read_only __global float* deltas,       //
 
     // write
     // NOTE: atomic_add_global is custom function, see beginning of the file
-    target_grad_w[id] = grad_w;
+    target_grad_w[id] += grad_w;
     if (k == 0 && dx == 0 && dy == 0)
       atomic_add_global(target_grad_b + n, grad_b);
   }

@@ -177,6 +177,19 @@ class Context {
                        cl_event* es = nullptr, int event_count = 0);
 
   /**
+   * Fill buffer
+   *
+   * @param  gpu_buffer               destination buffer
+   * @param  value                    value to fill with
+   * @param  block                    blocking/nonblocking operation switch
+   * @param  events_to_wait_for       [OPT]wait for other operations to finish
+   * @param  events_to_wait_for_count [OPT]
+   * @return                          opencl event object
+   */
+  cl_event fill_float(MemoryHandle, float, bool block,  //
+                      cl_event* es = nullptr, int event_count = 0);
+
+  /**
    * Copyt from source to destination
    * @param  src_buffer               source
    * @param  dst_buffer               destination

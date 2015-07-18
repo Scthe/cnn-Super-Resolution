@@ -675,12 +675,12 @@ cl_event DataPipeline::backpropagate2(LayerData &layer_data,  //
   /* clang-format on */
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_w, grad_w_size)) {
     gpu_alloc.grad_w = _context->allocate(CL_MEM_READ_WRITE, grad_w_size);
+    _context->zeros_float(gpu_alloc.grad_w, true);
   }
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.grad_b, grad_b_size)) {
     gpu_alloc.grad_b = _context->allocate(CL_MEM_READ_WRITE, grad_b_size);
+    _context->zeros_float(gpu_alloc.grad_b, true);
   }
-  _context->zeros_float(gpu_alloc.grad_w, true);
-  _context->zeros_float(gpu_alloc.grad_b, true);
 
   // args
   kernel.push_arg(gpu_alloc.deltas);
@@ -706,7 +706,8 @@ cl_event DataPipeline::backpropagate2(LayerData &layer_data,  //
 
 cl_event DataPipeline::update_parameters(LayerData &layer_data,  //
                                          CnnLayerGpuAllocationPool &gpu_alloc,
-                                         float momentum, float learning_rate,
+                                         size_t batch_size, float momentum,
+                                         float learning_rate,
                                          cl_event *ev_to_wait_for) {
   LayerData::validate(layer_data);
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
@@ -753,6 +754,7 @@ cl_event DataPipeline::update_parameters(LayerData &layer_data,  //
   _update_parameters_kernel->push_arg(gpu_alloc.previous_delta_b);
   _update_parameters_kernel->push_arg(sizeof(cl_float), (void *)&momentum);
   _update_parameters_kernel->push_arg(sizeof(cl_float), (void *)&learning_rate);
+  _update_parameters_kernel->push_arg(sizeof(cl_uint), (void *)&batch_size);
   _update_parameters_kernel->push_arg(sizeof(cl_uint), (void *)&weights_size);
   _update_parameters_kernel->push_arg(sizeof(cl_uint), (void *)&bias_size);
 

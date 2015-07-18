@@ -14,7 +14,7 @@ namespace specs {
 ///
 struct UpdateParametersTestImpl {
   const size_t n_prev_filter_cnt = 2, current_filter_count = 400,
-               f_spatial_size = 5;
+               f_spatial_size = 5, batch_size = 2;
   // const size_t n_prev_filter_cnt = 2, current_filter_count = 2,
   //  f_spatial_size = 3;
   const float momentum = 0.8f, learning_rate = 0.001;
@@ -33,7 +33,7 @@ struct UpdateParametersTestImpl {
       grad[i] = (generator() % 2560) / 100.0f;
       previous_delta[i] = (generator() % 2560) / 10.0f;
       deltas[i] = momentum * previous_delta[i] + learning_rate * grad[i];
-      expected[i] = current_vals[i] - deltas[i];
+      expected[i] = current_vals[i] - (deltas[i] / batch_size);
     }
 
     // alloc
@@ -93,8 +93,8 @@ bool UpdateParametersTest::operator()(size_t,
   layer_data.set_weights(&current_w[0]);
   layer_data.set_bias(&current_b[0]);
 
-  pipeline->update_parameters(layer_data, gpu_alloc, _impl->momentum,
-                              _impl->learning_rate);
+  pipeline->update_parameters(layer_data, gpu_alloc, _impl->batch_size,
+                              _impl->momentum, _impl->learning_rate);
 
   assert_equals(pipeline, expected_w, gpu_alloc.weights);
   assert_equals(pipeline, expected_b, gpu_alloc.bias);

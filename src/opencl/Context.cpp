@@ -273,11 +273,16 @@ cl_event Context::write_buffer(MemoryHandle gpu_buffer_handle, void* src,
 
 cl_event Context::zeros_float(MemoryHandle gpu_buffer_handle, bool block,
                               cl_event* es, int event_count) {
+  return fill_float(gpu_buffer_handle, 0.0f, block, es, event_count);
+}
+
+cl_event Context::fill_float(MemoryHandle gpu_buffer_handle, float val,
+                             bool block, cl_event* es, int event_count) {
   auto gpu_buffer = raw_memory(gpu_buffer_handle);
   size_t len = gpu_buffer->size / sizeof(float);
   std::vector<float> v(len);
   for (size_t i = 0; i < len; i++) {
-    v[i] = 0.0f;
+    v[i] = val;
   }
   return this->write_buffer(gpu_buffer_handle, &v[0], block, es, event_count);
 }
