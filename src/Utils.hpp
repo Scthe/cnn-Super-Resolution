@@ -1,5 +1,5 @@
-#ifndef __UTILS__H
-#define __UTILS__H
+#ifndef UTILS_H
+#define UTILS_H
 
 #include <sstream>
 #include <cstring>
@@ -14,6 +14,8 @@ namespace cnn_sr {
 namespace utils {
 
 void get_file_content(const char* const, std::stringstream&);
+
+void list_files(const char* const, std::vector<std::string>&);
 
 void read_json_file(const char* const, JsonValue&, JsonAllocator&,
                     std::string& file_content, int root_type);
@@ -70,4 +72,4 @@ inline bool is_even(T x) {
     OBJECT.PROP_NAME = NODE->value.toString(); \
   }
 
-#endif /* __UTILS__H   */
+#endif /* UTILS_H   */

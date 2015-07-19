@@ -70,5 +70,5 @@ if __name__ == '__main__':
   if not created_files:
     print('No files were created')
   else:
-    print('created files: ')
-    print('\n'.join([item.replace("\\","\\\\") for sublist in created_files for item in sublist]))
+    print('created {0:} files'.format(len(created_files)))
+    # print('\n'.join([item.replace("\\","\\\\") for sublist in created_files for item in sublist]))

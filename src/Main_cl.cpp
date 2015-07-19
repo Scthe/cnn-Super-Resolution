@@ -2,6 +2,8 @@
 #include <algorithm>  // for random_shuffle
 #include <stdexcept>  // for runtime_exception
 #include <ctime>      // random seed
+#include <utility>    // for std::pair
+#include <unordered_map>
 
 #include "Config.hpp"
 #include "LayerData.hpp"
@@ -12,54 +14,6 @@
 
 using namespace opencl::utils;
 using namespace cnn_sr;
-
-// SNIPPET -- PARAMETER WRITE:
-// context.block();
-// data_pipeline.write_params_to_file("data\\params-file.json",
-//  gpu_alloc.layer_1, gpu_alloc.layer_2,
-//  gpu_alloc.layer_3);
-// exit(EXIT_SUCCESS);
-
-// SNIPPET -- LUMA WRITE:
-// std::cout << "--- expected_output_img debug ---" << std::endl;
-// data_pipeline.print_buffer(gpu_alloc.expected_output_luma,
-//  "expected_output_luma", 16);
-// std::vector<float> luma_data(expected_output_img.w *
-// expected_output_img.h);
-// context.read_buffer(gpu_alloc.expected_output_luma, (void*)&luma_data[0],
-// true);
-// dump_image("data\\luma_extract.png", expected_output_img.w, luma_data,
-// true,
-//  255.0f);
-// exit(EXIT_SUCCESS);
-
-// const char* const input_img_file = "data\\small.jpg";
-// const char* const expected_output_img_file = "data\\large.jpg";
-const char* train_samples[24] = {"data\\train_samples\\sample_0_large.jpg",
-                                 "data\\train_samples\\sample_0_small.jpg",
-                                 "data\\train_samples\\sample_1_large.jpg",
-                                 "data\\train_samples\\sample_1_small.jpg",
-                                 "data\\train_samples\\sample_2_large.jpg",
-                                 "data\\train_samples\\sample_2_small.jpg",
-                                 "data\\train_samples\\sample_3_large.jpg",
-                                 "data\\train_samples\\sample_3_small.jpg",
-                                 "data\\train_samples\\sample_4_large.jpg",
-                                 "data\\train_samples\\sample_4_small.jpg",
-                                 "data\\train_samples\\sample_5_large.jpg",
-                                 "data\\train_samples\\sample_5_small.jpg",
-                                 "data\\train_samples\\sample_7_large.jpg",
-                                 "data\\train_samples\\sample_7_small.jpg",
-                                 "data\\train_samples\\sample_8_large.jpg",
-                                 "data\\train_samples\\sample_8_small.jpg",
-                                 "data\\train_samples\\sample_9_large.jpg",
-                                 "data\\train_samples\\sample_9_small.jpg",
-                                 "data\\train_samples\\sample_10_large.jpg",
-                                 "data\\train_samples\\sample_10_small.jpg",
-                                 "data\\train_samples\\sample_11_large.jpg",
-                                 "data\\train_samples\\sample_11_small.jpg",
-                                 "data\\train_samples\\sample_12_large.jpg",
-                                 "data\\train_samples\\sample_12_small.jpg"};
-const size_t train_samples_count = 12;
 
 struct PerSampleAllocationPool {
   /** Raw 3 channel image loaded from hard drive */
@@ -95,23 +49,33 @@ void divide_samples(size_t validation_set_size, GpuAllocationPool&,
                     std::vector<PerSampleAllocationPool>& train_set,
                     std::vector<PerSampleAllocationPool>& validation_set);
 
+typedef std::pair<std::string, std::string> TrainSampleFiles;
+
+void get_training_samples(std::string, std::vector<TrainSampleFiles>&);
+
 ///
 /// main
 ///
 int main(int argc, char** argv) {
   std::srand(std::time(0));
-  const char* const cfg_file = "data\\config_small.json";
+  // const char* const cfg_file = "data\\config_small.json";
+  const char* const cfg_file = "data\\config.json";
+  const char* const train_samples_dir = "data\\train_samples";
+  const size_t batches_count = 100;
+  const size_t validation_set_size = 3;  // TODO use percentage
+
+  std::vector<TrainSampleFiles> train_sample_files;
+  get_training_samples(train_samples_dir, train_sample_files);
+  if (validation_set_size >= train_sample_files.size()) {
+    throw std::runtime_error(
+        "Provide more training samples or decrease validation set size");
+  }
+
   try {
     // read config
     ConfigReader reader;
     Config cfg = reader.read(cfg_file);
     std::cout << cfg << std::endl;
-    const size_t batches_count = 100;
-    const size_t validation_set_size = 3;
-
-    if (validation_set_size >= train_samples_count)
-      throw std::runtime_error(
-          "Provide more training samples or decrease validation set size");
 
     // opencl context
     opencl::Context context;
@@ -122,16 +86,14 @@ int main(int argc, char** argv) {
 
     //
     // read & prepare images
-    for (size_t i = 0; i < train_samples_count; i++) {
+    for (auto& path_pair : train_sample_files) {
       ImageData expected_output_img, input_img;
       PerSampleAllocationPool sample_alloc_pool;
-      auto large_path = train_samples[2 * i],
-           small_path = train_samples[2 * i + 1];
-      prepare_image(&data_pipeline, large_path, expected_output_img,
-                    sample_alloc_pool.expected_output_data,
+      prepare_image(&data_pipeline, path_pair.first.c_str(),
+                    expected_output_img, sample_alloc_pool.expected_output_data,
                     sample_alloc_pool.expected_output_luma, true, false);
-      auto ev1 = prepare_image(&data_pipeline, small_path, input_img,
-                               sample_alloc_pool.input_data,
+      auto ev1 = prepare_image(&data_pipeline, path_pair.second.c_str(),
+                               input_img, sample_alloc_pool.input_data,
                                sample_alloc_pool.input_luma, true, false);
       data_pipeline.subtract_mean(sample_alloc_pool.input_luma, &ev1);
       sample_alloc_pool.w = (size_t)input_img.w;
@@ -141,13 +103,13 @@ int main(int argc, char** argv) {
       gpu_alloc.samples.push_back(sample_alloc_pool);
     }
 
-    context.block();
-
     // train
-    std::vector<PerSampleAllocationPool> train_set(train_samples_count),
-        validation_set(train_samples_count);
+    size_t samples_count = gpu_alloc.samples.size();
+    std::vector<PerSampleAllocationPool> train_set(samples_count),
+        validation_set(samples_count);
     for (size_t batch_id = 0; batch_id < batches_count; batch_id++) {
       // std::cout << "------ BATCH " << batch_id << " ------" << std::endl;
+      context.block();
       float train_squared_error = 0;
       size_t train_px = 0;
 
@@ -234,6 +196,42 @@ int main(int argc, char** argv) {
 ///
 /// Impl
 ///
+void get_training_samples(std::string dir_path,
+                          std::vector<TrainSampleFiles>& target) {
+  //
+  std::vector<std::string> files;
+  cnn_sr::utils::list_files(dir_path.c_str(), files);
+
+  // split listed files by: base name, large/small
+  std::unordered_map<std::string, TrainSampleFiles> files_by_base_name;
+  for (auto file_path : files) {
+    auto large_pos = file_path.rfind("_large.jpg");
+    auto small_pos = file_path.rfind("_small.jpg");
+    if (large_pos == std::string::npos && small_pos == std::string::npos) {
+      if (file_path != "." && file_path != "..")
+        std::cout << "'" << file_path << "' is not .jpg image. Skipping sample"
+                  << std::endl;
+    } else if (large_pos != std::string::npos) {
+      auto& node = files_by_base_name[file_path.substr(0, large_pos)];
+      node.first = dir_path + "\\" + file_path;
+    } else {
+      auto& node = files_by_base_name[file_path.substr(0, small_pos)];
+      node.second = dir_path + "\\" + file_path;
+    }
+  }
+
+  for (auto entry : files_by_base_name) {
+    auto& pair = entry.second;
+    if (pair.first.length() == 0 || pair.second.length() == 0) {
+      std::cout << "Only 1 image for pair with name '" << entry.first
+                << "'. Skipping sample" << std::endl;
+    } else {
+      // std::cout << entry.first << std::endl;
+      target.push_back(pair);
+    }
+  }
+}
+
 cl_event prepare_image(DataPipeline* const pipeline,
                        const char* const file_path, ImageData& img_data,
                        opencl::MemoryHandle& gpu_data_handle,
@@ -283,6 +281,26 @@ void divide_samples(size_t validation_set_size, GpuAllocationPool& pool,
   std::copy(st, ne, back_inserter(validation_set));
   std::copy(ne, samples.cend(), back_inserter(train_set));
 }
+
+// SNIPPET -- PARAMETER WRITE:
+// context.block();
+// data_pipeline.write_params_to_file("data\\params-file.json",
+//  gpu_alloc.layer_1, gpu_alloc.layer_2,
+//  gpu_alloc.layer_3);
+// exit(EXIT_SUCCESS);
+
+// SNIPPET -- LUMA WRITE:
+// std::cout << "--- expected_output_img debug ---" << std::endl;
+// data_pipeline.print_buffer(gpu_alloc.expected_output_luma,
+//  "expected_output_luma", 16);
+// std::vector<float> luma_data(expected_output_img.w *
+// expected_output_img.h);
+// context.read_buffer(gpu_alloc.expected_output_luma, (void*)&luma_data[0],
+// true);
+// dump_image("data\\luma_extract.png", expected_output_img.w, luma_data,
+// true,
+//  255.0f);
+// exit(EXIT_SUCCESS);
 
 /* clang-format off */
 // data_pipeline.print_buffer(gpu_alloc.layer_1.bias, "layer 1 bias", 1);

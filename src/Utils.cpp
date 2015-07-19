@@ -4,6 +4,8 @@
 #include <fstream>
 #include <stdexcept>  // std::runtime_error
 #include <ios>        // std::ios_base::failure
+#include <dirent.h>   // list files in directory
+
 #include "json/gason.h"
 
 namespace cnn_sr {
@@ -20,6 +22,23 @@ void get_file_content(const char* const filename, std::stringstream& sstr) {
   while (file.good()) {
     getline(file, line);
     sstr << line;
+  }
+}
+
+void list_files(const char* const path, std::vector<std::string>& target) {
+  DIR* d;
+  struct dirent* dir;
+  d = opendir(path);
+  if (d) {
+    while ((dir = readdir(d)) != NULL) {
+      target.push_back(dir->d_name);
+      // if (dir->d_type == DT_REG) { // regular (non dirs/links)
+        // printf("%s\n", dir->d_name);
+      // }
+      // printf("%s\n", dir->d_name);
+    }
+
+    closedir(d);
   }
 }
 
