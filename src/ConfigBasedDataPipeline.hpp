@@ -53,10 +53,11 @@ class ConfigBasedDataPipeline : public DataPipeline {
                          float, cl_event* ev_to_wait_for = nullptr);
   /* clang-format on */
 
-  void write_params_to_file(const char* const file_path,
-                            CnnLayerGpuAllocationPool,
-                            CnnLayerGpuAllocationPool,
-                            CnnLayerGpuAllocationPool);
+  void write_params_to_file(const char* const file_path,  //
+                            std::vector<float>& w1, std::vector<float>& w2,
+                            std::vector<float>& w3,  //
+                            std::vector<float>& b1, std::vector<float>& b2,
+                            std::vector<float>& b3);
 
   /** update weights and biases*/
   cl_event update_parameters(cnn_sr::CnnLayerGpuAllocationPool&,
@@ -64,6 +65,10 @@ class ConfigBasedDataPipeline : public DataPipeline {
                              cnn_sr::CnnLayerGpuAllocationPool&,
                              size_t batch_size,
                              cl_event* ev_to_wait_for = nullptr);
+
+  inline const LayerData* layer_1() { return &layer_data_1; }
+  inline const LayerData* layer_2() { return &layer_data_2; }
+  inline const LayerData* layer_3() { return &layer_data_3; }
 
  protected:
   void load_kernels(int load_flags);

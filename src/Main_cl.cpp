@@ -3,8 +3,9 @@
 #include <stdexcept>  // for runtime_exception
 #include <ctime>      // random seed
 #include <utility>    // for std::pair
+#include <cmath>      // for std::isnan
 #include <unordered_map>
-
+#
 #include "Config.hpp"
 #include "LayerData.hpp"
 #include "ConfigBasedDataPipeline.hpp"
@@ -61,6 +62,7 @@ int main(int argc, char** argv) {
   // const char* const cfg_file = "data\\config_small.json";
   const char* const cfg_file = "data\\config.json";
   const char* const train_samples_dir = "data\\train_samples";
+  const char* const success_params_file = "data\\success_params_file.json";
   const size_t batches_count = 100;
   const size_t validation_set_size = 3;  // TODO use percentage
 
@@ -104,9 +106,17 @@ int main(int argc, char** argv) {
     }
 
     // train
+    std::vector<float> last_weights1(data_pipeline.layer_1()->weight_size()),
+        last_weights2(data_pipeline.layer_2()->weight_size()),
+        last_weights3(data_pipeline.layer_3()->weight_size()),
+        last_bias1(data_pipeline.layer_1()->bias_size()),
+        last_bias2(data_pipeline.layer_2()->bias_size()),
+        last_bias3(data_pipeline.layer_3()->bias_size());
+
     size_t samples_count = gpu_alloc.samples.size();
     std::vector<PerSampleAllocationPool> train_set(samples_count),
         validation_set(samples_count);
+    bool train_error = false;
     for (size_t batch_id = 0; batch_id < batches_count; batch_id++) {
       // std::cout << "------ BATCH " << batch_id << " ------" << std::endl;
       context.block();
@@ -130,6 +140,12 @@ int main(int argc, char** argv) {
             data_pipeline.squared_error(sample_alloc_pool.input_luma,  //
                                         gpu_alloc.layer_3.output,      //
                                         w, h, &forward_ev);
+        if (std::isnan(train_squared_error)) {
+          std::cout << "Error: squared error is NAN" << std::endl;
+          train_error = true;
+          break;
+        }
+
         // backpropagate
         auto weight_decay_value = data_pipeline.weight_decay(
             gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
@@ -144,6 +160,18 @@ int main(int argc, char** argv) {
 
         context.block();
       }
+
+      // if error happened we stop the training. Else copy parameters so if we
+      // error in next batch we will still have proper values
+      if (train_error) break;
+      /* clang-format off */
+      context.read_buffer(gpu_alloc.layer_1.weights, (void *)&last_weights1[0], true);
+      context.read_buffer(gpu_alloc.layer_2.weights, (void *)&last_weights2[0], true);
+      context.read_buffer(gpu_alloc.layer_3.weights, (void *)&last_weights3[0], true);
+      context.read_buffer(gpu_alloc.layer_1.bias,    (void *)&last_bias1[0], true);
+      context.read_buffer(gpu_alloc.layer_2.bias,    (void *)&last_bias2[0], true);
+      context.read_buffer(gpu_alloc.layer_3.bias,    (void *)&last_bias3[0], true);
+      /* clang-format on */
 
       // update_parameters
       data_pipeline.update_parameters(gpu_alloc.layer_1, gpu_alloc.layer_2,
@@ -183,6 +211,19 @@ int main(int argc, char** argv) {
                 << "mean validation set error: " << mean_valid_err << " ("
                 << (mean_valid_err / valid_px) << " per px)" << std::endl;
     }
+
+    context.block();
+    if (train_error) {
+      std::cout << "Training seemingly converged (very small error values "
+                   "resulted in NAN)" << std::endl;
+      data_pipeline.write_params_to_file(success_params_file,  //
+                                         last_weights1, last_weights2,
+                                         last_weights3,  //
+                                         last_bias1, last_bias2, last_bias3);
+    } else {
+      std::cout << "Training did not converge" << std::endl;
+    }
+
   } catch (const std::exception& e) {
     std::cout << "[ERROR] " << e.what() << std::endl;
     exit(EXIT_FAILURE);
@@ -281,13 +322,6 @@ void divide_samples(size_t validation_set_size, GpuAllocationPool& pool,
   std::copy(st, ne, back_inserter(validation_set));
   std::copy(ne, samples.cend(), back_inserter(train_set));
 }
-
-// SNIPPET -- PARAMETER WRITE:
-// context.block();
-// data_pipeline.write_params_to_file("data\\params-file.json",
-//  gpu_alloc.layer_1, gpu_alloc.layer_2,
-//  gpu_alloc.layer_3);
-// exit(EXIT_SUCCESS);
 
 // SNIPPET -- LUMA WRITE:
 // std::cout << "--- expected_output_img debug ---" << std::endl;

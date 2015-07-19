@@ -318,25 +318,15 @@ void dump_layer_parameters(std::ostream &os, const char *const key,
 }
 
 void ConfigBasedDataPipeline::write_params_to_file(
-    const char *const file_path,  //
-    CnnLayerGpuAllocationPool gpu_alloc_layer_1,
-    CnnLayerGpuAllocationPool gpu_alloc_layer_2,
-    CnnLayerGpuAllocationPool gpu_alloc_layer_3) {
-  //
+    const char *const file_path,    //
+    std::vector<float> &weights_1,  //
+    std::vector<float> &weights_2,  //
+    std::vector<float> &weights_3,  //
+    std::vector<float> &bias_1,     //
+    std::vector<float> &bias_2,     //
+    std::vector<float> &bias_3) {
   std::cout << "Saving parameters to: '" << file_path << "'" << std::endl;
   _context->block();
-
-  // transfer data from GPU
-  std::vector<float> weights_1(layer_data_1.weight_size()),
-      weights_2(layer_data_2.weight_size()),
-      weights_3(layer_data_3.weight_size()), bias_1(layer_data_1.bias_size()),
-      bias_2(layer_data_2.bias_size()), bias_3(layer_data_3.bias_size());
-  _context->read_buffer(gpu_alloc_layer_1.weights, (void *)&weights_1[0], true);
-  _context->read_buffer(gpu_alloc_layer_2.weights, (void *)&weights_2[0], true);
-  _context->read_buffer(gpu_alloc_layer_3.weights, (void *)&weights_3[0], true);
-  _context->read_buffer(gpu_alloc_layer_1.bias, (void *)&bias_1[0], true);
-  _context->read_buffer(gpu_alloc_layer_2.bias, (void *)&bias_2[0], true);
-  _context->read_buffer(gpu_alloc_layer_3.bias, (void *)&bias_3[0], true);
 
   // write to file
   std::ofstream params_file;
