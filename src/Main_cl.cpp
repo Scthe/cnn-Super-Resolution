@@ -54,13 +54,65 @@ typedef std::pair<std::string, std::string> TrainSampleFiles;
 
 void get_training_samples(std::string, std::vector<TrainSampleFiles>&);
 
+void execute_app(opencl::Context& context, Config& cfg,
+                 ConfigBasedDataPipeline& data_pipeline,
+                 GpuAllocationPool& gpu_alloc) {
+  // auto in_path = "data\\small.jpg";
+  auto in_path = "data\\small2.jpg";
+  auto out_path = "result.png";
+
+  // read input image
+  ImageData input_img;
+  opencl::MemoryHandle input_data = gpu_nullptr;
+  opencl::MemoryHandle input_luma = gpu_nullptr;
+  auto ev1 = prepare_image(&data_pipeline, in_path,  //
+                           input_img, input_data,    //
+                           input_luma, true, false);
+  data_pipeline.subtract_mean(input_luma, &ev1);
+  size_t w = input_img.w, h = input_img.h,  //
+      luma_w = w - cfg.total_padding(), luma_h = h - cfg.total_padding();
+  context.block();
+
+  // process with layers
+  auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
+                                          gpu_alloc.layer_2,  //
+                                          gpu_alloc.layer_3,  //
+                                          input_luma, w, h);
+  auto squared_error = data_pipeline.squared_error(input_luma,                //
+                                                   gpu_alloc.layer_3.output,  //
+                                                   w, h, &forward_ev);
+  std::cout << "Squared error: " << squared_error << " ("
+            << (squared_error / (luma_w * luma_h)) << " per px)" << std::endl;
+
+  // dbg output read
+  // data_pipeline.print_buffer(gpu_alloc.layer_1.output, "layer 1", h);
+  data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2", h);
+  // data_pipeline.print_buffer(gpu_alloc.layer_3.output, "OUT", h);
+
+  // read image
+  size_t result_size = w * h * 3;  // 3 channels
+  opencl::MemoryHandle gpu_buf_target = gpu_nullptr;
+  data_pipeline.swap_luma(input_img, input_data, gpu_alloc.layer_3.output,
+                          gpu_buf_target, luma_w, luma_h);
+  std::vector<unsigned char> result(result_size);
+  context.read_buffer(gpu_buf_target, (void*)&result[0], true);
+
+  opencl::utils::ImageData res_img(w, h, 3, &result[0]);
+  opencl::utils::write_image(out_path, res_img);
+}
+
 ///
 /// main
 ///
 int main(int argc, char** argv) {
   std::srand(std::time(0));
   // const char* const cfg_file = "data\\config_small.json";
-  const char* const cfg_file = "data\\config.json";
+  // const char* const cfg_file = "data\\config.json";
+  // const char* const cfg_file = "data\\config_f.json";
+  // bool train = true;
+  bool train = false;
+  const char* const cfg_file =
+      train ? "data\\config.json" : "data\\config_f.json";
   const char* const train_samples_dir = "data\\train_samples";
   const char* const success_params_file = "data\\success_params_file.json";
   const size_t batches_count = 100;
@@ -85,6 +137,11 @@ int main(int argc, char** argv) {
     ConfigBasedDataPipeline data_pipeline(cfg, &context);
     data_pipeline.init();
     GpuAllocationPool gpu_alloc;
+
+    if (!train) {
+      execute_app(context, cfg, data_pipeline, gpu_alloc);
+      exit(EXIT_SUCCESS);
+    }
 
     //
     // read & prepare images
@@ -164,14 +221,17 @@ int main(int argc, char** argv) {
       // if error happened we stop the training. Else copy parameters so if we
       // error in next batch we will still have proper values
       if (train_error) break;
-      /* clang-format off */
+      if (batch_id % 5 == 0) {
+        std::cout << "(storing weights)" << std::endl;
+        /* clang-format off */
       context.read_buffer(gpu_alloc.layer_1.weights, (void *)&last_weights1[0], true);
       context.read_buffer(gpu_alloc.layer_2.weights, (void *)&last_weights2[0], true);
       context.read_buffer(gpu_alloc.layer_3.weights, (void *)&last_weights3[0], true);
       context.read_buffer(gpu_alloc.layer_1.bias,    (void *)&last_bias1[0], true);
       context.read_buffer(gpu_alloc.layer_2.bias,    (void *)&last_bias2[0], true);
       context.read_buffer(gpu_alloc.layer_3.bias,    (void *)&last_bias3[0], true);
-      /* clang-format on */
+        /* clang-format on */
+      }
 
       // update_parameters
       data_pipeline.update_parameters(gpu_alloc.layer_1, gpu_alloc.layer_2,
@@ -220,6 +280,19 @@ int main(int argc, char** argv) {
                                          last_weights1, last_weights2,
                                          last_weights3,  //
                                          last_bias1, last_bias2, last_bias3);
+
+      /* clang-format off */
+      context.write_buffer(gpu_alloc.layer_1.weights, (void *)&last_weights1[0], true);
+      context.write_buffer(gpu_alloc.layer_2.weights, (void *)&last_weights2[0], true);
+      context.write_buffer(gpu_alloc.layer_3.weights, (void *)&last_weights3[0], true);
+      context.write_buffer(gpu_alloc.layer_1.bias,    (void *)&last_bias1[0], true);
+      context.write_buffer(gpu_alloc.layer_2.bias,    (void *)&last_bias2[0], true);
+      context.write_buffer(gpu_alloc.layer_3.bias,    (void *)&last_bias3[0], true);
+      /* clang-format on */
+      context.block();
+      execute_app(context, cfg, data_pipeline, gpu_alloc);
+      context.block();
+
     } else {
       std::cout << "Training did not converge" << std::endl;
     }

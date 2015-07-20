@@ -242,8 +242,7 @@ cl_event ConfigBasedDataPipeline::last_layer_delta(
     float weight_decay,  //
     size_t ground_truth_w, size_t ground_truth_h, cl_event *ev) {
   //
-  size_t padding = layer_data_1.f_spatial_size + layer_data_2.f_spatial_size +
-                   layer_data_3.f_spatial_size - 3;
+  size_t padding = _config->total_padding();
   return DataPipeline::last_layer_delta(
       gpu_buf_ground_truth, gpu_buf_algo_res, gpu_buf_target, weight_decay,
       ground_truth_w, ground_truth_h, padding, ev);

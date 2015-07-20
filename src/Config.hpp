@@ -1,5 +1,5 @@
-#ifndef CONFIG__H
-#define CONFIG__H
+#ifndef CONFIG_H
+#define CONFIG_H
 
 #include <cstddef>  // for size_t
 #include <ostream>  // for std::ostream& operator<<(..)
@@ -26,6 +26,8 @@ struct Config {
 
   static void validate(Config&);
 
+  size_t total_padding();
+
   // core parameters
   const size_t n1, n2;
   const size_t f1, f2, f3;
@@ -47,4 +49,4 @@ class ConfigReader {
 
 std::ostream& operator<<(std::ostream&, const cnn_sr::Config&);
 
-#endif /* CONFIG__H   */
+#endif /* CONFIG_H   */

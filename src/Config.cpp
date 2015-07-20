@@ -82,6 +82,8 @@ Config::Config(size_t n1, size_t n2,                                       //
 
 Config::~Config() { delete[] this->parameters_file; }
 
+size_t Config::total_padding() { return f1 + f2 + f3 - 3; }
+
 void Config::validate(Config& config) {
   std::stringstream err_stream;
   bool is_correct = true;
