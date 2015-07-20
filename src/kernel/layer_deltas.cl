@@ -72,7 +72,7 @@ __kernel void main(__read_only __global float* deltas_next_layer,  //
       delta_for_filter[n] = 0.0f;
       // (3) f`( x[i,j,n](l-1) )
       float y_ijn = layer_output[idx + n];
-      float relu_deriv = y_ijn > 0.0f ? 1.0f : 0.0f;
+      activation_func_derivatives[n] = y_ijn > 0.0f ? 1.0f : 0.0f;
     }
 
     for (size_t dy = 0; dy < f_next_spatial_size; dy++) {
