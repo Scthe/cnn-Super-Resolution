@@ -198,7 +198,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   return event3_3;
 }
 
-cl_event ConfigBasedDataPipeline::update_parameters(
+void ConfigBasedDataPipeline::update_parameters(
     cnn_sr::CnnLayerGpuAllocationPool &layer_1_alloc,
     cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
     cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc, size_t batch_size,
@@ -218,10 +218,17 @@ cl_event ConfigBasedDataPipeline::update_parameters(
 
   if (print_steps)
     std::cout << "### Updating weights and biases - 1st layer" << std::endl;
-  auto event3 = DataPipeline::update_parameters(
-      layer_data_1, layer_1_alloc, batch_size, _config->momentum,
-      _config->learning_rate[0], &event2);
-  return event3;
+  DataPipeline::update_parameters(layer_data_1, layer_1_alloc, batch_size,
+                                  _config->momentum, _config->learning_rate[0],
+                                  &event2);
+
+  _context->block();
+  _context->zeros_float(layer_1_alloc.accumulating_grad_w, true);
+  _context->zeros_float(layer_2_alloc.accumulating_grad_w, true);
+  _context->zeros_float(layer_3_alloc.accumulating_grad_w, true);
+  _context->zeros_float(layer_1_alloc.accumulating_grad_b, true);
+  _context->zeros_float(layer_2_alloc.accumulating_grad_b, true);
+  _context->zeros_float(layer_3_alloc.accumulating_grad_b, true);
 }
 
 float ConfigBasedDataPipeline::squared_error(

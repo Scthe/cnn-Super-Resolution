@@ -74,6 +74,7 @@ char *load_file(const char *cFilename, const char *cPreamble,
 
 ///
 /// images
+/// TODO move from OpenCL to general utils
 ///
 
 ImageData::ImageData() : w(0), h(0), bpp(0), data(nullptr) {}
@@ -92,6 +93,27 @@ void load_image(const char *filename, ImageData &data) {
 
 int write_image(const char *filename, ImageData &data) {
   return stbi_write_png(filename, data.w, data.h, data.bpp, data.data, 0);
+}
+
+void dump_image(const char *const file_path, float *source, size_t w, size_t h,
+                bool single_channel, float val_mul) {
+  // TODO add resize - f.e. when viewing weights 9px x 9px is kind of small
+  size_t channel_count = single_channel ? 1 : 3;
+  std::cout << "dumping image(" << w << "x" << h << "x" << channel_count
+            << ")to: '" << file_path << "'" << std::endl;
+  std::vector<unsigned char> data(w * h * 3);
+  for (size_t row = 0; row < h; row++) {
+    for (size_t col = 0; col < w; col++) {
+      size_t idx = (row * w + col) * channel_count;
+      for (size_t k = 0; k < 3; k++) {
+        float val = source[single_channel ? idx : idx + k] * val_mul;
+        data[(row * w + col) * 3 + k] = (unsigned char)val;
+      }
+    }
+  }
+
+  ImageData dd(w, h, sizeof(unsigned char) * 3, &data[0]);
+  opencl::utils::write_image(file_path, dd);
 }
 
 ///

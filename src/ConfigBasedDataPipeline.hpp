@@ -13,6 +13,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
  public:
   ConfigBasedDataPipeline(Config&, opencl::Context*);
   void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
+  inline const Config* config() { return _config; }
 
   cl_event forward(cnn_sr::CnnLayerGpuAllocationPool&,  //
                    cnn_sr::CnnLayerGpuAllocationPool&,  //
@@ -60,11 +61,10 @@ class ConfigBasedDataPipeline : public DataPipeline {
                             std::vector<float>& b3);
 
   /** update weights and biases*/
-  cl_event update_parameters(cnn_sr::CnnLayerGpuAllocationPool&,
-                             cnn_sr::CnnLayerGpuAllocationPool&,
-                             cnn_sr::CnnLayerGpuAllocationPool&,
-                             size_t batch_size,
-                             cl_event* ev_to_wait_for = nullptr);
+  void update_parameters(cnn_sr::CnnLayerGpuAllocationPool&,
+                         cnn_sr::CnnLayerGpuAllocationPool&,
+                         cnn_sr::CnnLayerGpuAllocationPool&, size_t batch_size,
+                         cl_event* ev_to_wait_for = nullptr);
 
   inline const LayerData* layer_1() { return &layer_data_1; }
   inline const LayerData* layer_2() { return &layer_data_2; }
