@@ -16,6 +16,9 @@
 using namespace opencl::utils;
 using namespace cnn_sr;
 
+///
+/// Util. structures
+///
 struct PerSampleAllocationPool {
   /** Raw 3 channel image loaded from hard drive */
   opencl::MemoryHandle input_data = gpu_nullptr;
@@ -65,7 +68,7 @@ struct ParameterSet {
 ///
 cl_event prepare_image(DataPipeline* const pipeline, const char* const,
                        ImageData&, opencl::MemoryHandle&, opencl::MemoryHandle&,
-                       bool);
+                       bool print = false);
 
 void divide_samples(size_t validation_set_size, GpuAllocationPool&,
                     std::vector<PerSampleAllocationPool>& train_set,
@@ -78,52 +81,8 @@ void get_training_samples(std::string, std::vector<TrainSampleFiles>&);
 float execute_batch(bool backpropagate, ConfigBasedDataPipeline&,
                     GpuAllocationPool&, std::vector<PerSampleAllocationPool>);
 
-void execute_app(opencl::Context& context, Config& cfg,
-                 ConfigBasedDataPipeline& data_pipeline,
-                 GpuAllocationPool& gpu_alloc) {
-  // auto in_path = "data\\small.jpg";
-  auto in_path = "data\\small2.jpg";
-  auto out_path = "result.png";
-
-  // read input image
-  ImageData input_img;
-  opencl::MemoryHandle input_data = gpu_nullptr;
-  opencl::MemoryHandle input_luma = gpu_nullptr;
-  auto ev1 = prepare_image(&data_pipeline, in_path,  //
-                           input_img, input_data,    //
-                           input_luma, false);
-  data_pipeline.subtract_mean(input_luma, &ev1);
-  size_t w = input_img.w, h = input_img.h,  //
-      luma_w = w - cfg.total_padding(), luma_h = h - cfg.total_padding();
-  context.block();
-
-  // process with layers
-  auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
-                                          gpu_alloc.layer_2,  //
-                                          gpu_alloc.layer_3,  //
-                                          input_luma, w, h);
-  auto squared_error = data_pipeline.squared_error(input_luma,                //
-                                                   gpu_alloc.layer_3.output,  //
-                                                   w, h, &forward_ev);
-  std::cout << "Squared error: " << squared_error << " ("
-            << (squared_error / (luma_w * luma_h)) << " per px)" << std::endl;
-
-  // dbg output read
-  // data_pipeline.print_buffer(gpu_alloc.layer_1.output, "layer 1", h);
-  // data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2", h);
-  data_pipeline.print_buffer(gpu_alloc.layer_3.output, "OUT", h);
-
-  // read image
-  size_t result_size = w * h * 3;  // 3 channels
-  opencl::MemoryHandle gpu_buf_target = gpu_nullptr;
-  data_pipeline.swap_luma(input_img, input_data, gpu_alloc.layer_3.output,
-                          gpu_buf_target, luma_w, luma_h);
-  std::vector<unsigned char> result(result_size);
-  context.read_buffer(gpu_buf_target, (void*)&result[0], true);
-
-  opencl::utils::ImageData res_img(w, h, 3, &result[0]);
-  opencl::utils::write_image(out_path, res_img);
-}
+void execute_forward(ConfigBasedDataPipeline&, GpuAllocationPool&,
+                     const char* const in_path, const char* const out_path);
 
 ///
 /// main
@@ -133,10 +92,11 @@ int main(int argc, char** argv) {
 
   auto train_samples_dir = "data\\train_samples";
   auto success_params_file = "data\\success_params_file.json";
-  // auto forward_result_file = "data\\result.png";
+  auto forward_in_file = "data\\small2.jpg";
+  auto forward_out_file = "data\\result.png";
 
-  bool train = true;
-  // bool train = false;
+  // bool train = true;
+  bool train = false;
   const size_t batches_count = 100;
   const size_t validation_set_percent = 25;
   const size_t batches_between_params_store = 5;
@@ -157,7 +117,8 @@ int main(int argc, char** argv) {
   GpuAllocationPool gpu_alloc;
 
   if (!train) {
-    execute_app(context, cfg, data_pipeline, gpu_alloc);
+    execute_forward(data_pipeline, gpu_alloc, forward_in_file,
+                    forward_out_file);
     exit(EXIT_SUCCESS);
   }
 
@@ -181,10 +142,10 @@ int main(int argc, char** argv) {
     PerSampleAllocationPool sample_alloc_pool;
     prepare_image(&data_pipeline, path_pair.first.c_str(), expected_output_img,
                   sample_alloc_pool.expected_output_data,
-                  sample_alloc_pool.expected_output_luma, false);
+                  sample_alloc_pool.expected_output_luma);
     auto ev1 = prepare_image(&data_pipeline, path_pair.second.c_str(),
                              input_img, sample_alloc_pool.input_data,
-                             sample_alloc_pool.input_luma, false);
+                             sample_alloc_pool.input_luma);
     data_pipeline.subtract_mean(sample_alloc_pool.input_luma, &ev1);
     sample_alloc_pool.w = (size_t)input_img.w;
     sample_alloc_pool.h = (size_t)input_img.h;
@@ -261,6 +222,108 @@ int main(int argc, char** argv) {
 }
 
 ///
+/// Forward
+///
+void execute_forward(ConfigBasedDataPipeline& data_pipeline,
+                     GpuAllocationPool& gpu_alloc, const char* const in_path,
+                     const char* const out_path) {
+  auto context = data_pipeline.context();
+  auto cfg = data_pipeline.config();
+
+  // read input image
+  ImageData input_img;
+  opencl::MemoryHandle input_data = gpu_nullptr;
+  opencl::MemoryHandle input_luma = gpu_nullptr;
+  auto ev1 =
+      prepare_image(&data_pipeline, in_path, input_img, input_data, input_luma);
+  data_pipeline.subtract_mean(input_luma, &ev1);
+  size_t w = input_img.w,                 //
+      h = input_img.h,                    //
+      luma_w = w - cfg->total_padding(),  //
+      luma_h = h - cfg->total_padding();
+  context->block();
+
+  // process with layers
+  auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
+                                          gpu_alloc.layer_2,  //
+                                          gpu_alloc.layer_3,  //
+                                          input_luma, w, h);
+  auto squared_error = data_pipeline.squared_error(input_luma,                //
+                                                   gpu_alloc.layer_3.output,  //
+                                                   w, h, &forward_ev);
+  std::cout << "Squared error: " << squared_error << " ("
+            << (squared_error / (luma_w * luma_h)) << " per px)" << std::endl;
+
+  // dbg output read
+  // data_pipeline.print_buffer(gpu_alloc.layer_1.output, "layer 1", h);
+  // data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2", h);
+  data_pipeline.print_buffer(gpu_alloc.layer_3.output, "OUT", h);
+
+  // read image
+  size_t result_size = w * h * 3;  // 3 channels
+  opencl::MemoryHandle gpu_buf_target = gpu_nullptr;
+  data_pipeline.swap_luma(input_img, input_data, gpu_alloc.layer_3.output,
+                          gpu_buf_target, luma_w, luma_h);
+  std::vector<unsigned char> result(result_size);
+  context->read_buffer(gpu_buf_target, (void*)&result[0], true);
+
+  opencl::utils::ImageData res_img(w, h, 3, &result[0]);
+  opencl::utils::write_image(out_path, res_img);
+}
+
+///
+/// Training
+///
+void divide_samples(size_t validation_set_size, GpuAllocationPool& pool,
+                    std::vector<PerSampleAllocationPool>& train_set,
+                    std::vector<PerSampleAllocationPool>& validation_set) {
+  auto samples = pool.samples;
+  train_set.clear();
+  validation_set.clear();
+  std::random_shuffle(samples.begin(), samples.end());
+  auto st = samples.cbegin(), ne = std::next(st, validation_set_size);
+  std::copy(st, ne, back_inserter(validation_set));
+  std::copy(ne, samples.cend(), back_inserter(train_set));
+}
+
+float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
+                    GpuAllocationPool& gpu_alloc,
+                    std::vector<PerSampleAllocationPool> sample_set) {
+  auto context = data_pipeline.context();
+  auto cfg = data_pipeline.config();
+
+  float squared_error = 0;
+  for (PerSampleAllocationPool& sample : sample_set) {
+    const size_t w = sample.w, h = sample.h;
+    // process with layers
+    auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
+                                            gpu_alloc.layer_2,  //
+                                            gpu_alloc.layer_3,  //
+                                            sample.input_luma, w, h);
+    // squared difference
+    squared_error += data_pipeline.squared_error(
+        sample.input_luma, gpu_alloc.layer_3.output, w, h, &forward_ev);
+    if (std::isnan(squared_error)) {
+      return squared_error;
+    }
+
+    if (backpropagate) {
+      auto weight_decay_value = data_pipeline.weight_decay(
+          gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
+          cfg->weight_decay_parameter, &forward_ev);
+      auto finish_token4 = data_pipeline.backpropagate(
+          gpu_alloc.layer_1,  //
+          gpu_alloc.layer_2,  //
+          gpu_alloc.layer_3,  //
+          sample.input_luma, sample.expected_output_luma, w, h,
+          weight_decay_value);
+    }
+    context->block();
+  }
+  return squared_error;
+}
+
+///
 ///
 /// Impl
 ///
@@ -316,87 +379,3 @@ cl_event prepare_image(DataPipeline* const pipeline,
   return pipeline->extract_luma(img_data, gpu_data_handle, gpu_luma_handle,
                                 normalize_luma);
 }
-
-void divide_samples(size_t validation_set_size, GpuAllocationPool& pool,
-                    std::vector<PerSampleAllocationPool>& train_set,
-                    std::vector<PerSampleAllocationPool>& validation_set) {
-  auto samples = pool.samples;
-  train_set.clear();
-  validation_set.clear();
-  std::random_shuffle(samples.begin(), samples.end());
-  auto st = samples.cbegin(), ne = std::next(st, validation_set_size);
-  std::copy(st, ne, back_inserter(validation_set));
-  std::copy(ne, samples.cend(), back_inserter(train_set));
-}
-
-float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
-                    GpuAllocationPool& gpu_alloc,
-                    std::vector<PerSampleAllocationPool> sample_set) {
-  auto context = data_pipeline.context();
-  auto cfg = data_pipeline.config();
-
-  float squared_error = 0;
-  for (PerSampleAllocationPool& sample : sample_set) {
-    const size_t w = sample.w, h = sample.h;
-    // process with layers
-    auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
-                                            gpu_alloc.layer_2,  //
-                                            gpu_alloc.layer_3,  //
-                                            sample.input_luma, w, h);
-    // squared difference
-    squared_error += data_pipeline.squared_error(
-        sample.input_luma, gpu_alloc.layer_3.output, w, h, &forward_ev);
-    if (std::isnan(squared_error)) {
-      return squared_error;
-    }
-
-    if (backpropagate) {
-      auto weight_decay_value = data_pipeline.weight_decay(
-          gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
-          cfg->weight_decay_parameter, &forward_ev);
-      auto finish_token4 = data_pipeline.backpropagate(
-          gpu_alloc.layer_1,  //
-          gpu_alloc.layer_2,  //
-          gpu_alloc.layer_3,  //
-          sample.input_luma, sample.expected_output_luma, w, h,
-          weight_decay_value);
-    }
-    context->block();
-  }
-  return squared_error;
-}
-
-// SNIPPET -- LUMA WRITE:
-// std::cout << "--- expected_output_img debug ---" << std::endl;
-// data_pipeline.print_buffer(gpu_alloc.expected_output_luma,
-//  "expected_output_luma", 16);
-// std::vector<float> luma_data(expected_output_img.w *
-// expected_output_img.h);
-// context.read_buffer(gpu_alloc.expected_output_luma, (void*)&luma_data[0],
-// true);
-// dump_image("data\\luma_extract.png", expected_output_img.w, luma_data,
-// true,
-//  255.0f);
-// exit(EXIT_SUCCESS);
-
-/* clang-format off */
-// data_pipeline.print_buffer(gpu_alloc.layer_1.bias, "layer 1 bias", 1);
-// data_pipeline.print_buffer(gpu_alloc.layer_2.bias, "layer 2 bias", 1);
-// data_pipeline.print_buffer(gpu_alloc.layer_3.bias, "layer 3 bias", 1);
-
-// data_pipeline.print_buffer(gpu_alloc.layer_1.weights, "layer 1 weights", cfg.f1*cfg.f1);
-// data_pipeline.print_buffer(gpu_alloc.layer_2.weights, "layer 2 weights", cfg.f2*cfg.f2);
-// data_pipeline.print_buffer(gpu_alloc.layer_3.weights, "layer 3 weights", cfg.f3*cfg.f3);
-
-// data_pipeline.print_buffer(gpu_alloc.layer_1.grad_w, "layer 1 weight gradients", cfg.f1*cfg.f1);
-// data_pipeline.print_buffer(gpu_alloc.layer_2.grad_w, "layer 2 weight gradients", cfg.f2*cfg.f2);
-// data_pipeline.print_buffer(gpu_alloc.layer_3.grad_w, "layer 3 weight gradients", cfg.f3*cfg.f3);
-
-// data_pipeline.print_buffer(gpu_alloc.layer_1.output, "layer 1 out", l1_out_rows);
-// data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2 out", l2_out_rows);
-// data_pipeline.print_buffer(gpu_alloc.layer_3.output, "layer 3 out", l3_out_rows);
-
-// data_pipeline.print_buffer(gpu_alloc.layer_1.deltas, "layer 1 deltas", l1_out_rows);
-// data_pipeline.print_buffer(gpu_alloc.layer_2.deltas, "layer 2 deltas", l2_out_rows);
-// data_pipeline.print_buffer(gpu_alloc.layer_3.deltas, "layer 3 deltas", l3_out_rows);
-/* clang-format on */

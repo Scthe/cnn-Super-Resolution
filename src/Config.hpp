@@ -26,7 +26,7 @@ struct Config {
 
   static void validate(Config&);
 
-  size_t total_padding();
+  size_t total_padding() const;
 
   // core parameters
   const size_t n1, n2;
