@@ -43,6 +43,14 @@ const char *TestException::what() const throw() { return cnvt.str().c_str(); }
 ///
 /// TestCase
 ///
+void TestCase::assert_equals(int expected, int result) {
+  if (expected != result) {
+    snprintf(msg_buffer, sizeof(msg_buffer),  //
+             "Expected %d to be %d", result, expected);
+    throw TestException(msg_buffer);
+  }
+}
+
 void TestCase::assert_equals(float expected, float result) {
   // (yeah, this are going to be totally arbitrary numbers)
   expected = std::abs(expected);
@@ -141,6 +149,7 @@ int main(int argc, char **argv) {
 
   ADD_TEST(LayerTest);
   ADD_TEST(ExtractLumaTest);
+  ADD_TEST(SwapLumaTest);
   ADD_TEST(SquaredErrorTest);
   ADD_TEST(SubtractFromAllTest);
   ADD_TEST(SumTest);

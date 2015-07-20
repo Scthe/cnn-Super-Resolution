@@ -13,6 +13,7 @@ const bool print_work_dimensions = false;
 
 /* clang-format off */
 const char *const luma_kernel_file = "src/kernel/extract_luma.cl";
+const char *const swap_luma_kernel_file = "src/kernel/swap_luma.cl";
 const char *const layer_kernel_file = "src/kernel/layer_uber_kernel.cl";
 const char *const squared_error_kernel_file = "src/kernel/squared_error.cl";
 const char *const sum_kernel_file = "src/kernel/sum.cl";
@@ -123,6 +124,8 @@ void DataPipeline::load_kernels(int load_flags) {
       _luma_kernel_norm = _context->create_kernel(luma_kernel_file, norm_arg);
     if (!_luma_kernel_raw)
       _luma_kernel_raw = _context->create_kernel(luma_kernel_file);
+    if (!_swap_luma_kernel)
+      _swap_luma_kernel = _context->create_kernel(swap_luma_kernel_file);
   }
 
   if (load_misc) {
@@ -185,7 +188,7 @@ cl_event DataPipeline::extract_luma(opencl::utils::ImageData &img_data,
                                     bool normalize, cl_event *ev_to_wait_for) {
   check_initialized(DataPipeline::LOAD_KERNEL_LUMA);
 
-  size_t out_pixel_count = img_data.w * img_data.h;
+  size_t out_pixel_count = img_data.w * img_data.h /* sizeof(cl_char)*/;
   auto kernel = normalize ? _luma_kernel_norm : _luma_kernel_raw;
 
   // memory allocation
@@ -212,6 +215,52 @@ cl_event DataPipeline::extract_luma(opencl::utils::ImageData &img_data,
                             work_dims, print_work_dimensions);
   auto finish_token = kernel->execute(2, global_work_size, local_work_size,
                                       ev_to_wait_for, ev_to_wait_for ? 1 : 0);
+  return finish_token;
+}
+
+cl_event DataPipeline::swap_luma(opencl::utils::ImageData &img_data,
+                                 opencl::MemoryHandle &gpu_buf_org_img,
+                                 opencl::MemoryHandle gpu_buf_new_luma,
+                                 opencl::MemoryHandle &target,
+                                 size_t new_luma_w, size_t new_luma_h,
+                                 cl_event *ev_to_wait_for) {
+  check_initialized(DataPipeline::LOAD_KERNEL_LUMA);
+
+  size_t img_size = img_data.w * img_data.h /* sizeof(cl_char)*/,
+         img_size_3ch = img_size * 3,
+         new_luma_size = new_luma_w * new_luma_h * sizeof(cl_float);
+
+  // memory allocation
+  // (writing image may be redundant, but let's ignore this)
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_new_luma, new_luma_size)) {
+    throw std::runtime_error("Invalid size of new luma buffer");
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(target, img_size_3ch)) {
+    target = _context->allocate(CL_MEM_READ_WRITE, img_size_3ch);
+  }
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_org_img, img_size * 4)) {
+    gpu_buf_org_img = _context->create_image(
+        CL_MEM_READ_WRITE, CL_RGBA, CL_UNSIGNED_INT8, img_data.w, img_data.h);
+  }
+  _context->write_image(gpu_buf_org_img, img_data, true);
+
+  // kernel args
+  _swap_luma_kernel->push_arg(gpu_buf_org_img);
+  _swap_luma_kernel->push_arg(gpu_buf_new_luma);
+  _swap_luma_kernel->push_arg(target);
+  _swap_luma_kernel->push_arg(sizeof(cl_uint), (void *)&img_data.w);
+  _swap_luma_kernel->push_arg(sizeof(cl_uint), (void *)&img_data.h);
+  _swap_luma_kernel->push_arg(sizeof(cl_uint), (void *)&new_luma_w);
+  _swap_luma_kernel->push_arg(sizeof(cl_uint), (void *)&new_luma_h);
+
+  // Launch kernel
+  size_t global_work_size[2], local_work_size[2],
+      work_dims[2] = {(size_t)img_data.w, (size_t)img_data.h};
+  opencl::utils::work_sizes(*_swap_luma_kernel, 2, global_work_size,
+                            local_work_size, work_dims, print_work_dimensions);
+  auto finish_token =
+      _swap_luma_kernel->execute(2, global_work_size, local_work_size,
+                                 ev_to_wait_for, ev_to_wait_for ? 1 : 0);
   return finish_token;
 }
 

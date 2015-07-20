@@ -28,6 +28,7 @@ namespace test {
 namespace specs {
 
 DECLARE_TEST_SPEC(ExtractLumaTest)
+DECLARE_TEST_SPEC(SwapLumaTest)
 DECLARE_TEST_SPEC(SquaredErrorTest)
 DECLARE_TEST_SPEC(SubtractFromAllTest)
 DECLARE_TEST_SPEC(SumTest)

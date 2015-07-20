@@ -77,6 +77,14 @@ class DataPipeline {
   cl_event extract_luma(opencl::utils::ImageData&, opencl::MemoryHandle&,
                         opencl::MemoryHandle&, bool, cl_event* ev = nullptr);
 
+  /** Swap luma in image to specified set of values */
+  cl_event swap_luma(opencl::utils::ImageData&,
+                     opencl::MemoryHandle& gpu_buf_org_img,
+                     opencl::MemoryHandle gpu_buf_new_luma,
+                     opencl::MemoryHandle& target,  //
+                     size_t new_luma_w, size_t new_luma_h,
+                     cl_event* ev = nullptr);
+
   /**
    * Forward propagation for single layer.
    *
@@ -234,6 +242,7 @@ class DataPipeline {
 
   opencl::Kernel* _luma_kernel_norm = nullptr;
   opencl::Kernel* _luma_kernel_raw = nullptr;
+  opencl::Kernel* _swap_luma_kernel = nullptr;
   opencl::Kernel* _squared_error_kernel = nullptr;
   opencl::Kernel* _sum_kernel = nullptr;
   opencl::Kernel* _sum_squared_kernel = nullptr;
