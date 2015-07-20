@@ -86,8 +86,8 @@ void execute_app(opencl::Context& context, Config& cfg,
 
   // dbg output read
   // data_pipeline.print_buffer(gpu_alloc.layer_1.output, "layer 1", h);
-  data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2", h);
-  // data_pipeline.print_buffer(gpu_alloc.layer_3.output, "OUT", h);
+  // data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2", h);
+  data_pipeline.print_buffer(gpu_alloc.layer_3.output, "OUT", h);
 
   // read image
   size_t result_size = w * h * 3;  // 3 channels
@@ -116,14 +116,21 @@ int main(int argc, char** argv) {
   const char* const train_samples_dir = "data\\train_samples";
   const char* const success_params_file = "data\\success_params_file.json";
   const size_t batches_count = 100;
-  const size_t validation_set_size = 3;  // TODO use percentage
+  const size_t validation_set_percent = 25;
 
   std::vector<TrainSampleFiles> train_sample_files;
   get_training_samples(train_samples_dir, train_sample_files);
+  const size_t validation_set_size =
+      (size_t)(train_sample_files.size() * validation_set_percent / 100.0f);
   if (validation_set_size >= train_sample_files.size()) {
     throw std::runtime_error(
         "Provide more training samples or decrease validation set size");
   }
+
+  std::cout << "validation_set_size: " << validation_set_size << "/"
+            << train_sample_files.size() << " = "
+            << (validation_set_size * 100.0f / train_sample_files.size()) << "%"
+            << std::endl;
 
   try {
     // read config
@@ -273,29 +280,11 @@ int main(int argc, char** argv) {
     }
 
     context.block();
-    if (train_error) {
-      std::cout << "Training seemingly converged (very small error values "
-                   "resulted in NAN)" << std::endl;
-      data_pipeline.write_params_to_file(success_params_file,  //
-                                         last_weights1, last_weights2,
-                                         last_weights3,  //
-                                         last_bias1, last_bias2, last_bias3);
 
-      /* clang-format off */
-      context.write_buffer(gpu_alloc.layer_1.weights, (void *)&last_weights1[0], true);
-      context.write_buffer(gpu_alloc.layer_2.weights, (void *)&last_weights2[0], true);
-      context.write_buffer(gpu_alloc.layer_3.weights, (void *)&last_weights3[0], true);
-      context.write_buffer(gpu_alloc.layer_1.bias,    (void *)&last_bias1[0], true);
-      context.write_buffer(gpu_alloc.layer_2.bias,    (void *)&last_bias2[0], true);
-      context.write_buffer(gpu_alloc.layer_3.bias,    (void *)&last_bias3[0], true);
-      /* clang-format on */
-      context.block();
-      execute_app(context, cfg, data_pipeline, gpu_alloc);
-      context.block();
-
-    } else {
-      std::cout << "Training did not converge" << std::endl;
-    }
+    data_pipeline.write_params_to_file(success_params_file,  //
+                                       last_weights1, last_weights2,
+                                       last_weights3,  //
+                                       last_bias1, last_bias2, last_bias3);
 
   } catch (const std::exception& e) {
     std::cout << "[ERROR] " << e.what() << std::endl;

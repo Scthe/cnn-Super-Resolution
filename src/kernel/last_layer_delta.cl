@@ -32,16 +32,15 @@ __kernel void main(__read_only __global float* ground_truth_image,
 
   if (pos.x >= 0 && pos.x < out_size.x &&  //
       pos.y >= 0 && pos.y < out_size.y) {
-    // usuall mean square error derivative calculations
+    // usuall square error derivative calculations
     float t = ground_truth_image[ground_truth_idx];
     float y = algo_result[idx];
     float d = y - t;
-    // sigmoid
-    // NOTE y/(1-y) is > 0 iff. y in (0,1)
-    // taking log of number < 0 ends up badly
-    float x = log(y / (1 - y));  // reverse sigmoid(log==ln)
-    float sigm_deriv = x * (1 - x);
+
+    // relu
+    float relu_deriv = y > 0.0f ? 1.0f : 0.0f;
+
     // write result
-    target[idx] = d * sigm_deriv + weight_decay;
+    target[idx] = d * relu_deriv + weight_decay;
   }
 }
