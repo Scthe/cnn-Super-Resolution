@@ -81,13 +81,13 @@ bool UpdateParametersTest::operator()(size_t,
   std::vector<float> expected_b(bs), current_b(bs), new_deltas_b(bs);
   _impl->create_data(generator, context,
                      gpu_alloc.weights,           //
-                     gpu_alloc.grad_w,            //
-                     gpu_alloc.previous_delta_w,  //
+                     gpu_alloc.accumulating_grad_w,            //
+                     gpu_alloc.previous_batch_delta_w,  //
                      expected_w, current_w, new_deltas_w);
   _impl->create_data(generator, context,
                      gpu_alloc.bias,              //
-                     gpu_alloc.grad_b,            //
-                     gpu_alloc.previous_delta_b,  //
+                     gpu_alloc.accumulating_grad_b,            //
+                     gpu_alloc.previous_batch_delta_b,  //
                      expected_b, current_b, new_deltas_b);
 
   layer_data.set_weights(&current_w[0]);
@@ -98,8 +98,8 @@ bool UpdateParametersTest::operator()(size_t,
 
   assert_equals(pipeline, expected_w, gpu_alloc.weights);
   assert_equals(pipeline, expected_b, gpu_alloc.bias);
-  assert_equals(pipeline, new_deltas_w, gpu_alloc.previous_delta_w);
-  assert_equals(pipeline, new_deltas_b, gpu_alloc.previous_delta_b);
+  assert_equals(pipeline, new_deltas_w, gpu_alloc.previous_batch_delta_w);
+  assert_equals(pipeline, new_deltas_b, gpu_alloc.previous_batch_delta_b);
 
   return true;
 }

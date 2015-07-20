@@ -122,11 +122,11 @@ void execute(DataPipeline *pipeline, LayerData &data,     //
   /* clang-format off */
   gpu_buf.deltas = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * deltas_size);
   gpu_buf_layer_input = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * input_size);
-  gpu_buf.grad_w = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data.weight_size());
+  gpu_buf.accumulating_grad_w = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data.weight_size());
   /* clang-format on */
   context->write_buffer(gpu_buf.deltas, (void *)deltas, true);
   context->write_buffer(gpu_buf_layer_input, (void *)input, true);
-  context->fill_float(gpu_buf.grad_w, w_init, true);
+  context->fill_float(gpu_buf.accumulating_grad_w, w_init, true);
 
   // run
   pipeline->backpropagate2(data, gpu_buf_layer_input, gpu_buf,  //
@@ -149,9 +149,9 @@ bool BackpropagationTest::operator()(size_t data_set_id,
             _impl->grad_weights_init_val, 5, 5);
     // check results
     std::cout << "checking weights" << std::endl;
-    assert_equals(pipeline, _impl->expected_weights, gpu_buf.grad_w);
+    assert_equals(pipeline, _impl->expected_weights, gpu_buf.accumulating_grad_w);
     std::cout << "checking bias" << std::endl;
-    assert_equals(pipeline, _impl->expected_bias, gpu_buf.grad_b);
+    assert_equals(pipeline, _impl->expected_bias, gpu_buf.accumulating_grad_b);
   } else {
     LayerData data(32, 16, 3);
     float w[4608], bias[16];

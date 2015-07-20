@@ -46,7 +46,7 @@ const char *TestException::what() const throw() { return cnvt.str().c_str(); }
 void TestCase::assert_equals(int expected, int result) {
   if (expected != result) {
     snprintf(msg_buffer, sizeof(msg_buffer),  //
-             "Expected %d to be %d", result, expected);
+             "[INT] Expected %d to be %d", result, expected);
     throw TestException(msg_buffer);
   }
 }
@@ -62,7 +62,7 @@ void TestCase::assert_equals(float expected, float result) {
 
   if (err > margin) {
     snprintf(msg_buffer, sizeof(msg_buffer),  //
-             "Expected %f to be %f", result, expected);
+             "[FLOAT] Expected %f to be %f", result, expected);
     throw TestException(msg_buffer);
   }
 }
