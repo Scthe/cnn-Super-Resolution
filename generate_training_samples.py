@@ -44,8 +44,8 @@ def process_img(in_dir,out_dir,file_name, out_size,small_scale):
 
 
 if __name__ == '__main__':
-  help_text = 'Mass resize images. Example usage: ' + \
-              '" python generate_training_samples.py -i data\\org -o data\\train_samples -s 550 -d 5"'
+  help_text = 'Mass resize images. Usage: ' + \
+              '"generate_training_samples.py -i data\\train_samples_raw -o data\\train_samples -s 128 -d 3"'
 
   parser = argparse.ArgumentParser(description=help_text)
   parser.add_argument('--in-dir',   '-i',required=True, help='input directory' )
