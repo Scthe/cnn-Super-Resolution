@@ -89,9 +89,6 @@ class ConfigBasedDataPipeline : public DataPipeline {
   opencl::Kernel* _layer_1_kernel = nullptr;
   opencl::Kernel* _layer_2_kernel = nullptr;
   opencl::Kernel* _layer_3_kernel = nullptr;
-  opencl::Kernel* _layer_1_backpropagate_kernel = nullptr;
-  opencl::Kernel* _layer_2_backpropagate_kernel = nullptr;
-  opencl::Kernel* _layer_3_backpropagate_kernel = nullptr;
   opencl::Kernel* _layer_1_deltas_kernel = nullptr;
   opencl::Kernel* _layer_2_deltas_kernel = nullptr;
 };

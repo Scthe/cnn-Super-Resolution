@@ -129,8 +129,8 @@ void execute(DataPipeline *pipeline, LayerData &data,     //
   context->fill_float(gpu_buf.accumulating_grad_w, w_init, true);
 
   // run
-  pipeline->backpropagate2(data, gpu_buf_layer_input, gpu_buf,  //
-                           output_dim[0], output_dim[1]);
+  pipeline->backpropagate(data, gpu_buf_layer_input, gpu_buf,  //
+                          output_dim[0], output_dim[1]);
 }
 
 bool BackpropagationTest::operator()(size_t data_set_id,
@@ -149,7 +149,8 @@ bool BackpropagationTest::operator()(size_t data_set_id,
             _impl->grad_weights_init_val, 5, 5);
     // check results
     std::cout << "checking weights" << std::endl;
-    assert_equals(pipeline, _impl->expected_weights, gpu_buf.accumulating_grad_w);
+    assert_equals(pipeline, _impl->expected_weights,
+                  gpu_buf.accumulating_grad_w);
     std::cout << "checking bias" << std::endl;
     assert_equals(pipeline, _impl->expected_bias, gpu_buf.accumulating_grad_b);
   } else {

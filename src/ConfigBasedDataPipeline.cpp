@@ -68,13 +68,6 @@ void ConfigBasedDataPipeline::load_kernels(int load_flags) {
     /* clang-format off */
     if (!_layer_1_deltas_kernel) _layer_1_deltas_kernel = create_deltas_kernel(layer_data_1);
     if (!_layer_2_deltas_kernel) _layer_2_deltas_kernel = create_deltas_kernel(layer_data_2);
-
-    if (!_layer_1_backpropagate_kernel)
-      _layer_1_backpropagate_kernel = create_backpropagation_kernel(layer_data_1);
-    if (!_layer_2_backpropagate_kernel)
-      _layer_2_backpropagate_kernel = create_backpropagation_kernel(layer_data_2);
-    if (!_layer_3_backpropagate_kernel)
-      _layer_3_backpropagate_kernel = create_backpropagation_kernel(layer_data_3);
     /* clang-format on */
   }
 }
@@ -173,28 +166,28 @@ cl_event ConfigBasedDataPipeline::backpropagate(
     std::cout << "### Backpropagate(weights&bias gradients) - 3rd layer"
               << std::endl;
   auto event3_1 =
-      DataPipeline::backpropagate2(layer_data_3,                            //
-                                   layer_2_alloc.output, layer_3_alloc,     //
-                                   layer_3_out_dim[0], layer_3_out_dim[1],  //
-                                   &event2_3);
+      DataPipeline::backpropagate(layer_data_3,                            //
+                                  layer_2_alloc.output, layer_3_alloc,     //
+                                  layer_3_out_dim[0], layer_3_out_dim[1],  //
+                                  &event2_3);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 2nd layer"
               << std::endl;
   auto event3_2 =
-      DataPipeline::backpropagate2(layer_data_2,                            //
-                                   layer_1_alloc.output, layer_2_alloc,     //
-                                   layer_2_out_dim[0], layer_2_out_dim[1],  //
-                                   &event3_1);
+      DataPipeline::backpropagate(layer_data_2,                            //
+                                  layer_1_alloc.output, layer_2_alloc,     //
+                                  layer_2_out_dim[0], layer_2_out_dim[1],  //
+                                  &event3_1);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 1st layer"
               << std::endl;
   auto event3_3 =
-      DataPipeline::backpropagate2(layer_data_1,                            //
-                                   cnn_input, layer_1_alloc,                //
-                                   layer_1_out_dim[0], layer_1_out_dim[1],  //
-                                   &event3_2);
+      DataPipeline::backpropagate(layer_data_1,                            //
+                                  cnn_input, layer_1_alloc,                //
+                                  layer_1_out_dim[0], layer_1_out_dim[1],  //
+                                  &event3_2);
   return event3_3;
 }
 

@@ -154,13 +154,6 @@ class DataPipeline {
                             size_t, size_t,                      //
                             cl_event* ev = nullptr);
 
-  /** NOTE: deprecated, use backpropagate2 */
-  cl_event backpropagate(opencl::Kernel&, LayerData&,
-                         opencl::MemoryHandle layer_input,
-                         CnnLayerGpuAllocationPool&,  //
-                         size_t layer_out_w, size_t layer_out_h,
-                         cl_event* ev = nullptr);
-
   /**
    * Calculate gradients of weights and bias
    *
@@ -168,10 +161,10 @@ class DataPipeline {
    * 	in  - layer.deltas, this layer's input(that means previous layer output)
    * 	out - layer.grad_w, layer.grad_b
    */
-  cl_event backpropagate2(LayerData&, opencl::MemoryHandle layer_input,
-                          CnnLayerGpuAllocationPool&,  //
-                          size_t layer_out_w, size_t layer_out_h,
-                          cl_event* ev = nullptr);
+  cl_event backpropagate(LayerData&, opencl::MemoryHandle layer_input,
+                         CnnLayerGpuAllocationPool&,  //
+                         size_t layer_out_w, size_t layer_out_h,
+                         cl_event* ev = nullptr);
 
   /**
    * Update weights and biases based on gradients and various factors like batch
@@ -210,7 +203,6 @@ class DataPipeline {
   ///
   opencl::Kernel* create_layer_kernel(const LayerData&);
   opencl::Kernel* create_deltas_kernel(const LayerData&);
-  opencl::Kernel* create_backpropagation_kernel(const LayerData&);
 
   ///
   /// misc
@@ -249,7 +241,7 @@ class DataPipeline {
   opencl::Kernel* _subtract_from_all_kernel = nullptr;
   opencl::Kernel* _last_layer_delta_kernel = nullptr;
   opencl::Kernel* _update_parameters_kernel = nullptr;
-  opencl::Kernel* _backpropagate2_kernel = nullptr;
+  opencl::Kernel* _backpropagate_kernel = nullptr;
 };
 }
 
