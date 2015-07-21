@@ -12,14 +12,14 @@ namespace opencl {
 
 class Context;
 
-namespace utils{
-  struct ImageData;
+namespace utils {
+struct ImageData;
 }
 
 /**
  * base information about platform
  */
-struct PlatformInfo{
+struct PlatformInfo {
   char name[MAX_INFO_STRING_LEN];
   char vendor[MAX_INFO_STRING_LEN];
   char version[MAX_INFO_STRING_LEN];
@@ -28,7 +28,7 @@ struct PlatformInfo{
 /**
  * base information about device
  */
-struct DeviceInfo{
+struct DeviceInfo {
   cl_device_id device_id;
   cl_device_type type;
   char name[MAX_INFO_STRING_LEN];
@@ -50,30 +50,33 @@ typedef size_t MemoryHandle;
 /**
  * represents gpu memory allocation. Should not be used
  */
-struct RawMemoryHandle{
+struct RawMemoryHandle {
   RawMemoryHandle();
   void release();
+  inline bool is_usable() const { return !released; }
+  inline bool is_image() const { return bpp != 0; }
 
   cl_mem handle;
   size_t size = 0;
+  /* must be nonzero if represents image */
+  size_t bpp = 0;
 
-  private:
-    bool released;
+ private:
+  bool released;
 };
-
 
 /**
  * Base class for interaction with opencl.
  * Remember to call init!
  */
 class Context {
-
-public:
-  Context(int argc, char **argv);
+ public:
+  Context();
   ~Context();
-  void init(); // TODO int clDeviceType = CL_DEVICE_TYPE_GPU, int deviceNumber = -1
-  void check_error(bool, char const *);
-  void check_error(cl_int, char const *);
+  void init();
+  void check_error(bool, char const*);
+  void check_error(cl_int, char const*);
+  void print_app_memory_usage();
 
   //
   // execution
@@ -99,8 +102,8 @@ public:
    * @param  main_f    [OPT] name of main kernel function
    * @return           kernel object
    */
-  Kernel* create_kernel(char const *file_path,
-                        char const *cmp_opt=nullptr, char const *main_f="main");
+  Kernel* create_kernel(char const* file_path, char const* cmp_opt = nullptr,
+                        char const* main_f = "main");
 
   /**
    * Read buffer from opencl device and copy it to host memory
@@ -114,8 +117,8 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event read_buffer(MemoryHandle, size_t offset, size_t size, void *dst,
-                       bool block, cl_event* es=nullptr, int event_count=0);
+  cl_event read_buffer(MemoryHandle, size_t offset, size_t size, void* dst,
+                       bool block, cl_event* es = nullptr, int event_count = 0);
 
   /**
    * Read buffer from opencl device and copy it to host memory
@@ -127,9 +130,10 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event read_buffer(MemoryHandle, void *dst, bool block,
-                       cl_event* es=nullptr, int event_count=0);
+  cl_event read_buffer(MemoryHandle, void* dst, bool block,
+                       cl_event* es = nullptr, int event_count = 0);
 
+  /* clang-format off */
  /**
   * Copy data from host memory to opencl device
   *
@@ -142,8 +146,10 @@ public:
   * @param  events_to_wait_for_count [OPT]
   * @return                          opencl event object
   */
-  cl_event write_buffer(MemoryHandle, size_t offset, size_t size, void *src,
-                      bool block, cl_event* es=nullptr, int event_count=0);
+  cl_event write_buffer(MemoryHandle, size_t offset, size_t size, void* src,
+                        bool block, cl_event* es = nullptr,
+                        int event_count = 0);
+  /* clang-format on */
 
   /**
    * Copy data from host memory to opencl device
@@ -155,8 +161,8 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event write_buffer(MemoryHandle, void *src, bool block,
-                        cl_event* es=nullptr, int event_count=0);
+  cl_event write_buffer(MemoryHandle, void* src, bool block,
+                        cl_event* es = nullptr, int event_count = 0);
 
   /**
    * Fill with zero values
@@ -167,8 +173,21 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event zeros_float(MemoryHandle, bool block,
-                       cl_event* es=nullptr, int event_count=0);
+  cl_event zeros_float(MemoryHandle, bool block,  //
+                       cl_event* es = nullptr, int event_count = 0);
+
+  /**
+   * Fill buffer
+   *
+   * @param  gpu_buffer               destination buffer
+   * @param  value                    value to fill with
+   * @param  block                    blocking/nonblocking operation switch
+   * @param  events_to_wait_for       [OPT]wait for other operations to finish
+   * @param  events_to_wait_for_count [OPT]
+   * @return                          opencl event object
+   */
+  cl_event fill_float(MemoryHandle, float, bool block,  //
+                      cl_event* es = nullptr, int event_count = 0);
 
   /**
    * Copyt from source to destination
@@ -178,8 +197,8 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event copy_buffer(MemoryHandle, MemoryHandle,
-                       cl_event* es=nullptr, int event_count=0);
+  cl_event copy_buffer(MemoryHandle, MemoryHandle,  //
+                       cl_event* es = nullptr, int event_count = 0);
 
   /**
    * Allocate image
@@ -191,8 +210,7 @@ public:
    * @return              handler used by context
    */
   MemoryHandle create_image(cl_mem_flags, cl_channel_order, cl_channel_type,
-                              size_t, size_t);
-
+                            size_t, size_t);
 
   /**
    * Write image data to buffer
@@ -204,8 +222,8 @@ public:
    * @param  events_to_wait_for_count [OPT]
    * @return                          opencl event object
    */
-  cl_event write_image(MemoryHandle, utils::ImageData&,
-                        bool block, cl_event* es=nullptr, int event_count=0);
+  cl_event write_image(MemoryHandle, utils::ImageData&, bool block,
+                       cl_event* es = nullptr, int event_count = 0);
 
   //
   // info
@@ -223,38 +241,37 @@ public:
   /**
    * was context initialized ? AKA can I use any cmds beside info gathering ?
    */
-  bool was_initialized(){ return initialized; }
+  bool was_initialized() { return initialized; }
 
   /**
    * device that this context is bound to
    */
-  DeviceInfo device(){ return _device; }
+  DeviceInfo device() { return _device; }
 
   /**
    * platform that this context is bound to
    */
-  PlatformInfo platform(){ return _platform; }
-
+  PlatformInfo platform() { return _platform; }
 
   /**
    * command queue. This may be called leaky abstraction, but it's not like
    * we don't expose more advanced stuff (f.e. max_work_group_size).
    * Also You probably will not have any use of raw command_queue.
    */
-  cl_command_queue* command_queue(){ return &_clcommand_queue; }
+  cl_command_queue* command_queue() { return &_clcommand_queue; }
 
   RawMemoryHandle* raw_memory(MemoryHandle);
 
-private:
+ private:
   void _cleanup();
-  void platform_info(cl_platform_id platform_id, PlatformInfo& platform_info, std::vector<DeviceInfo>* devices=nullptr);
+  size_t channels_count(cl_channel_order, cl_channel_type);
+  size_t per_pixel_bytes(cl_channel_order, cl_channel_type);
+  void platform_info(cl_platform_id platform_id, PlatformInfo& platform_info,
+                     std::vector<DeviceInfo>* devices = nullptr);
   void device_info(cl_device_id, DeviceInfo&);
 
-private:
+ private:
   bool initialized;
-  int argc;
-  char **argv;
-
   cl_context _clcontext;
   cl_command_queue _clcommand_queue;
 
@@ -266,7 +283,7 @@ private:
 };
 }
 
-std::ostream& operator<< (std::ostream&, const opencl::PlatformInfo&);
-std::ostream& operator<< (std::ostream&, const opencl::DeviceInfo&);
+std::ostream& operator<<(std::ostream&, const opencl::PlatformInfo&);
+std::ostream& operator<<(std::ostream&, const opencl::DeviceInfo&);
 
-#endif // OPENCL_CONTEXT_H_
+#endif  // OPENCL_CONTEXT_H_

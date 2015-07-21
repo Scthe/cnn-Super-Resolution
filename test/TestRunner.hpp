@@ -29,9 +29,9 @@ namespace test {
 ///
 /// utils functions
 ///
-float sigmoid(float);
 
-float mean(float *, size_t);
+float activation_function(float);
+float activation_function_derivative(float);
 
 struct DataSet {
   DataSet(std::string name) : name(name) {}
@@ -51,6 +51,7 @@ class TestCase {
   virtual size_t data_set_count() { return 1; }
 
  protected:
+  void assert_equals(int expected, int result);
   void assert_equals(float expected, float result);
   void assert_equals(const std::vector<float> &expected,
                      const std::vector<float> &result, bool print = false);

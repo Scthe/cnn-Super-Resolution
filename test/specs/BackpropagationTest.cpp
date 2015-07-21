@@ -72,17 +72,18 @@ struct BackpropagationTestImpl {
                                0.021f, 0.136f, 0.062f,   // row 3, col 2
                                0.066f, 0.165f, 0.176f};  // row 3, col 3
 #define WEIGHTS_SIZE 54
+  const float grad_weights_init_val = 1.5f;
   /* clang-format off */
   const std::vector<float> expected_weights = {
-     0.0438, -0.008,   0.0265,           -0.0203, -0.0072, -0.0328,
-     0.0313, -0.049,   0.00872,          -0.0508, -0.096,  -0.0773,
-     0.0157,  0.027,   0.0191,           -0.0623, -0.0533, -0.0526,
-    -0.0418, -0.083,  -0.0991,            0.0052,  0.0941, -0.0232,
-     0.0150, -0.106,  -0.0252,           -0.0159,  0.111,   0.0451,
-     0.0445,  0.089,   0.109,            -0.0497, -0.109,  -0.0953,
-    -0.0366, -0.075,  -0.0556,            0.144,  -0.0422,  0.164,
-    -0.1360,  0.00027,-0.181,             0.0713,  0.12,    0.0159,
-    -0.0287,  0.0962,  0.0414,           -0.0509, -0.106,  -0.0118
+     1.5438,  1.4920,  1.5265,            1.4797,  1.4928,  1.4672,
+     1.5313,  1.4511,  1.5087,            1.4492,  1.4040,  1.4227,
+     1.5157,  1.5271,  1.5191,            1.4377,  1.4467,  1.4474,
+     1.4582,  1.4170,  1.4009,            1.5052,  1.5941,  1.4768,
+     1.5150,  1.3938,  1.4748,            1.4841,  1.6112,  1.5451,
+     1.5445,  1.5892,  1.6088,            1.4503,  1.3907,  1.4047,
+     1.4634,  1.4251,  1.4444,            1.6442,  1.4578,  1.6641,
+     1.3638,  1.5003,  1.3188,            1.5713,  1.6199,  1.5159,
+     1.4713,  1.5962,  1.5414,            1.4491,  1.3937,  1.4882
   };
   /* clang-format on */
 
@@ -107,7 +108,8 @@ size_t BackpropagationTest::data_set_count() { return 2; }
 
 void execute(DataPipeline *pipeline, LayerData &data,     //
              cnn_sr::CnnLayerGpuAllocationPool &gpu_buf,  //
-             float *deltas, float *input, size_t input_w, size_t input_h) {
+             float *deltas, float *input, float w_init,   //
+             size_t input_w, size_t input_h) {
   auto context = pipeline->context();
   size_t output_dim[2];
   data.get_output_dimensions(output_dim, input_w, input_h);
@@ -120,9 +122,11 @@ void execute(DataPipeline *pipeline, LayerData &data,     //
   /* clang-format off */
   gpu_buf.deltas = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * deltas_size);
   gpu_buf_layer_input = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * input_size);
+  gpu_buf.accumulating_grad_w = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data.weight_size());
   /* clang-format on */
   context->write_buffer(gpu_buf.deltas, (void *)deltas, true);
   context->write_buffer(gpu_buf_layer_input, (void *)input, true);
+  context->fill_float(gpu_buf.accumulating_grad_w, w_init, true);
 
   // run
   pipeline->backpropagate2(data, gpu_buf_layer_input, gpu_buf,  //
@@ -141,12 +145,13 @@ bool BackpropagationTest::operator()(size_t data_set_id,
     float w[WEIGHTS_SIZE], bias[10];
     data.set_bias(bias);
     data.set_weights(w);
-    execute(pipeline, data, gpu_buf, _impl->deltas, _impl->input, 5, 5);
+    execute(pipeline, data, gpu_buf, _impl->deltas, _impl->input,
+            _impl->grad_weights_init_val, 5, 5);
     // check results
     std::cout << "checking weights" << std::endl;
-    assert_equals(pipeline, _impl->expected_weights, gpu_buf.grad_w);
+    assert_equals(pipeline, _impl->expected_weights, gpu_buf.accumulating_grad_w);
     std::cout << "checking bias" << std::endl;
-    assert_equals(pipeline, _impl->expected_bias, gpu_buf.grad_b);
+    assert_equals(pipeline, _impl->expected_bias, gpu_buf.accumulating_grad_b);
   } else {
     LayerData data(32, 16, 3);
     float w[4608], bias[16];
@@ -157,7 +162,7 @@ bool BackpropagationTest::operator()(size_t data_set_id,
     std::vector<float> deltas(input_w * input_h * data.current_filter_count),
         input(input_w * input_h * data.n_prev_filter_cnt);
     execute(pipeline, data, gpu_buf,  //
-            &deltas[0], &input[0], input_w, input_h);
+            &deltas[0], &input[0], 0.0f, input_w, input_h);
     context->block();
     // didn't crash? then it's ok
   }

@@ -14,7 +14,7 @@ namespace specs {
 ///
 struct UpdateParametersTestImpl {
   const size_t n_prev_filter_cnt = 2, current_filter_count = 400,
-               f_spatial_size = 5;
+               f_spatial_size = 5, batch_size = 2;
   // const size_t n_prev_filter_cnt = 2, current_filter_count = 2,
   //  f_spatial_size = 3;
   const float momentum = 0.8f, learning_rate = 0.001;
@@ -33,7 +33,7 @@ struct UpdateParametersTestImpl {
       grad[i] = (generator() % 2560) / 100.0f;
       previous_delta[i] = (generator() % 2560) / 10.0f;
       deltas[i] = momentum * previous_delta[i] + learning_rate * grad[i];
-      expected[i] = current_vals[i] - deltas[i];
+      expected[i] = current_vals[i] - (deltas[i] / batch_size);
     }
 
     // alloc
@@ -81,25 +81,25 @@ bool UpdateParametersTest::operator()(size_t,
   std::vector<float> expected_b(bs), current_b(bs), new_deltas_b(bs);
   _impl->create_data(generator, context,
                      gpu_alloc.weights,           //
-                     gpu_alloc.grad_w,            //
-                     gpu_alloc.previous_delta_w,  //
+                     gpu_alloc.accumulating_grad_w,            //
+                     gpu_alloc.previous_batch_delta_w,  //
                      expected_w, current_w, new_deltas_w);
   _impl->create_data(generator, context,
                      gpu_alloc.bias,              //
-                     gpu_alloc.grad_b,            //
-                     gpu_alloc.previous_delta_b,  //
+                     gpu_alloc.accumulating_grad_b,            //
+                     gpu_alloc.previous_batch_delta_b,  //
                      expected_b, current_b, new_deltas_b);
 
   layer_data.set_weights(&current_w[0]);
   layer_data.set_bias(&current_b[0]);
 
-  pipeline->update_parameters(layer_data, gpu_alloc, _impl->momentum,
-                              _impl->learning_rate);
+  pipeline->update_parameters(layer_data, gpu_alloc, _impl->batch_size,
+                              _impl->momentum, _impl->learning_rate);
 
   assert_equals(pipeline, expected_w, gpu_alloc.weights);
   assert_equals(pipeline, expected_b, gpu_alloc.bias);
-  assert_equals(pipeline, new_deltas_w, gpu_alloc.previous_delta_w);
-  assert_equals(pipeline, new_deltas_b, gpu_alloc.previous_delta_b);
+  assert_equals(pipeline, new_deltas_w, gpu_alloc.previous_batch_delta_w);
+  assert_equals(pipeline, new_deltas_b, gpu_alloc.previous_batch_delta_b);
 
   return true;
 }

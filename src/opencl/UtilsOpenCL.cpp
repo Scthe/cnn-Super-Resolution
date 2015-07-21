@@ -74,12 +74,16 @@ char *load_file(const char *cFilename, const char *cPreamble,
 
 ///
 /// images
+/// TODO move from OpenCL to general utils
 ///
 
 ImageData::ImageData() : w(0), h(0), bpp(0), data(nullptr) {}
 
+ImageData::ImageData(int w, int h, int bpp, unsigned char *data)
+    : w(w), h(h), bpp(bpp), data(data), read_from_file(false) {}
+
 ImageData::~ImageData() {
-  if (data) stbi_image_free(data);
+  if (data && read_from_file) stbi_image_free(data);
 }
 
 void load_image(const char *filename, ImageData &data) {
@@ -91,48 +95,94 @@ int write_image(const char *filename, ImageData &data) {
   return stbi_write_png(filename, data.w, data.h, data.bpp, data.data, 0);
 }
 
+void dump_image(const char *const file_path, float *source, size_t w, size_t h,
+                bool single_channel, float val_mul) {
+  // TODO add resize - f.e. when viewing weights 9px x 9px is kind of small
+  size_t channel_count = single_channel ? 1 : 3;
+  std::cout << "dumping image(" << w << "x" << h << "x" << channel_count
+            << ")to: '" << file_path << "'" << std::endl;
+  std::vector<unsigned char> data(w * h * 3);
+  for (size_t row = 0; row < h; row++) {
+    for (size_t col = 0; col < w; col++) {
+      size_t idx = (row * w + col) * channel_count;
+      for (size_t k = 0; k < 3; k++) {
+        float val = source[single_channel ? idx : idx + k] * val_mul;
+        data[(row * w + col) * 3 + k] = (unsigned char)val;
+      }
+    }
+  }
+
+  ImageData dd(w, h, sizeof(unsigned char) * 3, &data[0]);
+  opencl::utils::write_image(file_path, dd);
+}
+
 ///
 /// misc
 ///
-void work_sizes(const opencl::Kernel &kernel, size_t *global_work_size,
-                size_t *local_work_size, size_t w, size_t h) {
+
+void work_sizes(const opencl::Kernel &kernel, size_t dim,
+                size_t *global_work_size, size_t *local_work_size, size_t *work,
+                bool print) {
+  if (dim == 0 || dim > 3) {
+    throw std::runtime_error("Work dimesions should be 1,2 or 3");
+  }
+
   auto context = kernel.get_context();
   auto device = context->device();
   auto max_local =
       std::min(device.max_work_group_size, kernel.get_max_work_group_size());
   auto max_device_local_size = device.work_items_for_dims;
 
-  // size_t max_local = 1024; // TESTS ONLY
-  // size_t max_device_local_size[2] = {128, 128}; // TESTS ONLY
-
-  global_work_size[0] = closest_power_of_2(static_cast<int>(w));
-  global_work_size[1] = closest_power_of_2(static_cast<int>(h));
-
-  // if picture dimension is smaller then max allowed local group dimension
-  // then just make it power of 2. Else we will use max value possible.
-  local_work_size[0] = w >= max_device_local_size[0] ? max_device_local_size[0]
-                                                     : closest_power_of_2(w);
-  local_work_size[1] = h >= max_device_local_size[1] ? max_device_local_size[1]
-                                                     : closest_power_of_2(h);
-
-  bool div_w = local_work_size[0] > local_work_size[1];
-  while (local_work_size[0] * local_work_size[1] > max_local) {
-    // note: we are decreasing only one of local_work_size for each iteration
-    local_work_size[0] /= div_w ? 2 : 1;
-    local_work_size[1] /= !div_w ? 2 : 1;
-    div_w = !div_w;
+  // global_work_size
+  for (size_t i = 0; i < dim; i++) {
+    global_work_size[i] = closest_power_of_2(static_cast<int>(work[i]));
   }
 
-  if (global_work_size[0] < local_work_size[0] ||
-      global_work_size[1] < local_work_size[1] || local_work_size[0] == 0 ||
-      local_work_size[1] == 0) {
+  // local_work_size
+  // we are doing round robin (see to_update variable) multiplying each
+  // dimension by 2 each time. It may not work that good for:
+  // max_device_local_size = [1024, 1024, 1], since it stops after 3 iterations
+  // On the other note I've had to look up syntax to do{..}while(...);
+  size_t tmp[3] = {1, 1, 1}, local_dims_multiplied = 1, to_update = 0;
+  bool satisfies_conditions;
+  do {
+    // copy last correct configuration to local
+    memcpy(local_work_size, tmp, dim * sizeof(float));
+    tmp[to_update] *= 2;
+    local_dims_multiplied *= 2;
+    satisfies_conditions = tmp[to_update] <= max_device_local_size[to_update] &&
+                           tmp[to_update] <= global_work_size[to_update] &&
+                           local_dims_multiplied <= max_local;
+    to_update = (to_update + 1) % dim;
+  } while (satisfies_conditions);
+
+  bool ok = true;
+  for (size_t i = 0; i < dim; i++) {
+    ok &= global_work_size[i] >= local_work_size[i];
+    ok &= local_work_size[i] > 0;
+  }
+
+  if (!ok) {
     char buf[255];
     snprintf(buf, 255,
              "Tried to create nonstandard work dimensions: global=[%d,%d,%d], "
              "local=[%d,%d,%d]",
-             global_work_size[0], global_work_size[1], 1,  //
-             local_work_size[0], local_work_size[1], 1);
-    throw std::runtime_error("Tried to create nonstandard work dimensions");
+             global_work_size[0], (dim > 1 ? global_work_size[1] : 1),
+             (dim == 3 ? global_work_size[2] : 1),  //
+             local_work_size[0], (dim > 1 ? local_work_size[1] : 1),
+             (dim == 3 ? local_work_size[2] : 1));
+    throw std::runtime_error(buf);
+  }
+
+  if (print) {
+    std::cout << "global work size: ["                        //
+              << global_work_size[0] << ", "                  //
+              << (dim > 1 ? global_work_size[1] : 1) << ", "  //
+              << (dim == 3 ? global_work_size[2] : 1) << "]" << std::endl;
+    std::cout << "local work size: ["                        //
+              << local_work_size[0] << ", "                  //
+              << (dim > 1 ? local_work_size[1] : 1) << ", "  //
+              << (dim == 3 ? local_work_size[2] : 1) << "]" << std::endl;
   }
 }
 

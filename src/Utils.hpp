@@ -1,9 +1,10 @@
-#ifndef __UTILS__H
-#define __UTILS__H
+#ifndef UTILS_H
+#define UTILS_H
 
 #include <sstream>
 #include <cstring>
 #include <string>
+#include <vector>
 
 // TODO use dropbox/json11 since it allows for write too
 union JsonValue;
@@ -14,8 +15,14 @@ namespace utils {
 
 void get_file_content(const char* const, std::stringstream&);
 
+void list_files(const char* const, std::vector<std::string>&);
+
 void read_json_file(const char* const, JsonValue&, JsonAllocator&,
                     std::string& file_content, int root_type);
+
+void dump_vector(std::ostream&, std::vector<float>&,
+                 const char* line_prefix = nullptr, size_t per_line = 0,
+                 bool add_line_numbers = false);
 
 template <typename T>
 inline bool is_odd(T x) {
@@ -65,4 +72,4 @@ inline bool is_even(T x) {
     OBJECT.PROP_NAME = NODE->value.toString(); \
   }
 
-#endif /* __UTILS__H   */
+#endif /* UTILS_H   */

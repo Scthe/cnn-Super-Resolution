@@ -11,16 +11,11 @@
 
 namespace test {
 
-// utils functions
-float sigmoid(float x) { return 1 / (1 + std::exp(-x)); }
-
-float mean(float *arr, size_t count) {
-  float acc = 0;
-  for (size_t i = 0; i < count; i++) {
-    acc += arr[i];
-  }
-  return acc / count;
-}
+///
+/// utils functions
+///
+float activation_function(float x) { return std::max(x, 0.0f); }
+float activation_function_derivative(float x) { return x > 0.0f ? 1.0f : 0.0f; }
 
 ///
 /// TestException
@@ -43,6 +38,14 @@ const char *TestException::what() const throw() { return cnvt.str().c_str(); }
 ///
 /// TestCase
 ///
+void TestCase::assert_equals(int expected, int result) {
+  if (expected != result) {
+    snprintf(msg_buffer, sizeof(msg_buffer),  //
+             "[INT] Expected %d to be %d", result, expected);
+    throw TestException(msg_buffer);
+  }
+}
+
 void TestCase::assert_equals(float expected, float result) {
   // (yeah, this are going to be totally arbitrary numbers)
   expected = std::abs(expected);
@@ -54,7 +57,7 @@ void TestCase::assert_equals(float expected, float result) {
 
   if (err > margin) {
     snprintf(msg_buffer, sizeof(msg_buffer),  //
-             "Expected %f to be %f", result, expected);
+             "[FLOAT] Expected %f to be %f", result, expected);
     throw TestException(msg_buffer);
   }
 }
@@ -130,7 +133,7 @@ int main(int argc, char **argv) {
   std::vector<TestCase *> cases;
   std::vector<int> results;
 
-  opencl::Context context(argc, argv);
+  opencl::Context context;
   context.init();
   cnn_sr::DataPipeline pipeline(&context);
   pipeline.init(cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
@@ -141,7 +144,8 @@ int main(int argc, char **argv) {
 
   ADD_TEST(LayerTest);
   ADD_TEST(ExtractLumaTest);
-  ADD_TEST(MeanSquaredErrorTest);
+  ADD_TEST(SwapLumaTest);
+  ADD_TEST(SquaredErrorTest);
   ADD_TEST(SubtractFromAllTest);
   ADD_TEST(SumTest);
   ADD_TEST(LayerDeltasTest);

@@ -4,6 +4,8 @@
 #include <fstream>
 #include <stdexcept>  // std::runtime_error
 #include <ios>        // std::ios_base::failure
+#include <dirent.h>   // list files in directory
+
 #include "json/gason.h"
 
 namespace cnn_sr {
@@ -20,6 +22,50 @@ void get_file_content(const char* const filename, std::stringstream& sstr) {
   while (file.good()) {
     getline(file, line);
     sstr << line;
+  }
+}
+
+void list_files(const char* const path, std::vector<std::string>& target) {
+  DIR* d;
+  struct dirent* dir;
+  d = opendir(path);
+  if (d) {
+    while ((dir = readdir(d)) != NULL) {
+      target.push_back(dir->d_name);
+      // if (dir->d_type == DT_REG) { // regular (non dirs/links)
+        // printf("%s\n", dir->d_name);
+      // }
+      // printf("%s\n", dir->d_name);
+    }
+
+    closedir(d);
+  }
+}
+
+void dump_vector(std::ostream& os, std::vector<float>& data,
+                 const char* line_prefix, size_t per_line,
+                 bool add_line_numbers) {
+  auto len = data.size();
+  size_t lines;
+  if (per_line == 0) {
+    lines = 1;
+    per_line = len;
+  } else {
+    lines = len / per_line;
+  }
+
+  line_prefix = line_prefix ? line_prefix : "";
+
+  for (size_t i = 0; i < lines; i++) {
+    os << line_prefix;
+    if (add_line_numbers) os << "[" << i << "] ";
+
+    for (size_t j = 0; j < per_line; j++) {
+      size_t idx = i * per_line + j;
+      if (idx < len) os << data[idx];
+      if (j + 1 < per_line) os << ", ";
+    }
+    if (i + 1 < lines) os << std::endl;
   }
 }
 

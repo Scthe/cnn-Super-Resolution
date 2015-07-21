@@ -11,10 +11,13 @@ using namespace cnn_sr;
 ///   'delta_for_filter[n] += delta * w * activation_func_derivative;'
 /// to:
 ///   'delta_for_filter[n] += ONLY_ONE_OF_MULTIPLIERS'
+///
 /// compare results with:
-///   weight: should be
-///   activation_func_derivative: should be expected_derivative
-///   delta: run LayerDeltasTest_script.py
+///   * weight: should be [-0.077999..., -0.584] (sum columns 1-3 for first
+///             value, columns 4-6 for second)
+///   * activation_func_derivative: should be expected_derivative
+///                                 (code-generated)
+///   * delta: run LayerDeltasTest_script.py
 /// if all of multipliers have correct value their produt will be ok.
 ///
 
@@ -27,7 +30,7 @@ namespace specs {
 struct LayerDeltasTestImpl {
 // INPUT_SIZE = input_dim*n(l-1)
 #define INPUT_SIZE 50
-  float input_x[INPUT_SIZE] = {-0.083, -0.064,  // pre sigmoid
+  float input_x[INPUT_SIZE] = {-0.083, -0.064,  //
                                0.075,  -0.055,  //
                                -0.058, -0.138,  //
                                -0.068, -0.144,  //
@@ -76,15 +79,6 @@ float weights[WEIGHTS_SIZE] = {
    -0.631,   0.301, -0.001,    -0.761, -0.021,  0.501};
 /* clang-format on */
 
-// per filter n_prev_layer_filter: [-0.07799999999999996, -0.584]
-// raw data:
-// [-0.369,  0.025,  0.213, 0.236,  0.071, -0.429, 0.361, -0.055,  0.273, 0.229,
-// 0.378, -0.178, -0.220, -0.364,  0.711, -0.411,   0.661, -0.831,-0.931,
-// 0.511,  0.141,0.291,  -0.211,  0.151,-0.631,   0.301, -0.001]
-// [0.058,  0.410, -0.068,-0.104,  0.161,  0.087,0.071,  0.431, -0.095,0.343,
-// 0.114, -0.409,0.281,  0.851, -1.001,-0.091,  0.281, -0.341,-0.591,  0.491,
-// -0.921,0.491, -0.431, -0.321,-0.761, -0.021,  0.501]
-
 // DELTAS_SIZE = output_dim * n(l)
 #define DELTAS_SIZE 27
   float deltas[DELTAS_SIZE] = {0.122, 0.083, 0.064,   // row 1, col 1
@@ -97,37 +91,39 @@ float weights[WEIGHTS_SIZE] = {
                                0.021, 0.136, 0.062,   // row 3, col 2
                                0.066, 0.165, 0.176};  // row 3, col 3
 
+  /* clang-format off */
   std::vector<float> expected_output = {
-      0.00263473,    -0.0025028,   // row 1
-      -1.48462e-005, -0.00212133,  //
-      -0.00452561,   -0.0102287,   //
-      0.00128668,    -0.00821884,  //
-      -0.000572977,  0.00198146,   //
+    0,                      0,
+    -0.000213999,           0,
+    0,                      0,
+    0,                      0,
+    0,                      0.013663,
 
-      0.00246639,    0.00247348,   // row 2
-      -0.00053351,   -0.00282118,  //
-      -0.000531001,  -0.00501575,  //
-      -0.0286956,    0.0129228,    //
-      -0.00789852,   -0.002529,    //
+    0.017562,               0.05308,
+    -0.00359898,            0,
+    -0.004519,              0,
+    0,                      0,
+    -0.059068,              0,
 
-      0.00110371,    -0.00214933,  // row 3
-      0.000187628,   0.00399032,   //
-      -0.0017117,    0.0054064,    //
-      0.0289023,     -0.00391387,  //
-      0.0199246,     -0.00979848,  //
+    0,                     -0.012211,
+    0.06273,                0,
+    0,                      0,
+    0,                      0,
+    0.108619,               0,
 
-      -0.0104161,    -0.0484205,    // row 4
-      0.00600906,    -0.0254861,    //
-      -0.119347,     -0.000239547,  //
-      -0.000389471,  -0.0154712,    //
-      -0.0118618,    0.0244768,     //
+    -0.043191,             -0.198902,
+    0,                     -0.118114,
+    0,                      0,
+    -0.00165999,           -0.062883,
+    -0.054512,              0,
 
-      0.010305,      -0.00323524,  // row 5
-      -0.00330262,   -0.00287311,  //
-      0.00824437,    -0.00538743,  //
-      -0.00143925,   0.00453933,   //
-      0.000386629,   -0.00124922,  //
+    0.096889,               0,
+    0,                     -0.095646,
+    0.086999,              -0.168827,
+    0,                      0,
+    0.007843,               0
   };
+  /* clang-format on */
 };
 
 ///
@@ -160,11 +156,15 @@ bool LayerDeltasTest::operator()(size_t, cnn_sr::DataPipeline *const pipeline) {
 
   // all variations with activation function
   float output[INPUT_SIZE];
-  float expected_derivative[INPUT_SIZE];
+  std::vector<float> expected_derivative(INPUT_SIZE);
+  size_t derivative_repeat_cnt = curr_data.f_spatial_size *
+                                 curr_data.f_spatial_size *
+                                 curr_data.current_filter_count;
   for (size_t i = 0; i < INPUT_SIZE; i++) {
     float x = _impl->input_x[i];
-    output[i] = sigmoid(x);
-    expected_derivative[i] = x * (1 - x);
+    output[i] = activation_function(x);
+    expected_derivative[i] =
+        activation_function_derivative(x) * derivative_repeat_cnt;
   }
 
   // gpu memory alloc
@@ -177,12 +177,15 @@ bool LayerDeltasTest::operator()(size_t, cnn_sr::DataPipeline *const pipeline) {
   context->write_buffer(prev_gpu_buf.output, (void *)output, true);
 
   // create kernel & run
-  auto kernel = pipeline->create_deltas_kernel(curr_data);
+  auto kernel = pipeline->create_deltas_kernel(prev_data);
   pipeline->calculate_deltas(*kernel,                     //
                              prev_data, curr_data,        //
                              prev_gpu_buf, curr_gpu_buf,  //
                              output_dim[0], output_dim[1]);
   assert_equals(pipeline, _impl->expected_output, prev_gpu_buf.deltas);
+
+  // sub test with expected_derivative
+  // assert_equals(pipeline, expected_derivative, prev_gpu_buf.deltas);
 
   return true;
 }

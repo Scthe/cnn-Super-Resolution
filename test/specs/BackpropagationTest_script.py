@@ -31,7 +31,7 @@ inn = 5,5
 n_curr = 3
 n_prev = 2
 
-w = [0] * 54
+w = [1.5] * 54 # we will add algo result to this
 
 def kernel(x,y):
     for n in range(n_curr):
@@ -50,15 +50,12 @@ def kernel(x,y):
 for y in range(out[1]):
     for x in range(out[0]):
         kernel(x,y)
-
-
 # print('\n'.join(["[{}]\t{:>6.3}".format(i,x) for i,x in enumerate(w)]))
 # print('\n'.join(["[{}]\t{:>6.3}".format(i,x) for i,x in enumerate(w) if i%3==0]))
 # print('\n'.join(["[{}]\t{:>6}".format(i,x) for i,x in enumerate(w)]))
-
 for i in range(9):
     xs = w[i*6:(i+1)*6]
-    print(', '.join(["{:>6.3}".format(x) for i,x in enumerate(xs)]))
+    print(', '.join(["{:>7.5}".format(x) for i,x in enumerate(xs)]))
 
 
 print('\n\nbias:')

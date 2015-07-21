@@ -71,11 +71,8 @@ __kernel void main(__read_only __global float* deltas_next_layer,  //
     for (size_t n = 0; n < CURRENT_FILTER_COUNT; n++) {
       delta_for_filter[n] = 0.0f;
       // (3) f`( x[i,j,n](l-1) )
-      // y_ijn := activation (value after sigmoid application)
-      // x_ijn := value before sigmoid application
       float y_ijn = layer_output[idx + n];
-      float x_ijn = log(y_ijn / (1 - y_ijn));  // reverse sigmoid(log==ln)
-      activation_func_derivatives[n] = x_ijn * (1 - x_ijn);
+      activation_func_derivatives[n] = y_ijn > 0.0f ? 1.0f : 0.0f;
     }
 
     for (size_t dy = 0; dy < f_next_spatial_size; dy++) {
