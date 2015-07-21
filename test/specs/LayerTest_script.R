@@ -10,8 +10,9 @@ if (!require("rjson")) {
 json_data <- fromJSON(file="test/data/test_cases.json")
 
 
-sigmoid <- function(x){
-    1 / (1 + exp(-x))
+activation_function <- function(x){
+    #1 / (1 + exp(-x))
+    max(x,0)
 }
 
 split_by_columns <- function(arr, column_count, as_lists=FALSE){
@@ -38,9 +39,7 @@ split_by_columns <- function(arr, column_count, as_lists=FALSE){
 }
 
 
-test_layer <- function(data, preproces_mean=FALSE, result_multiplier=0, decimal_places=2){
-    cat("\n", data$name, ":\n")
-
+test_layer <- function(data, preproces_mean=FALSE, result_multiplier=0, decimal_places=3){
     n_prev_filter_cnt <- data$n_prev_filter_cnt
     current_filter_count <- data$current_filter_count
     f_spatial_size <- data$f_spatial_size
@@ -113,7 +112,7 @@ test_layer <- function(data, preproces_mean=FALSE, result_multiplier=0, decimal_
             # print(round(sub_view,3))
             res <- sum(sub_view * filter_weight) + B
             res <- if(result_multiplier != 0) res * result_multiplier
-                   else sigmoid(res)
+                   else activation_function(res)
             result <- c(result, res)
         }
     }
@@ -125,9 +124,9 @@ test_layer <- function(data, preproces_mean=FALSE, result_multiplier=0, decimal_
     exp_arr <- array(round(output, decimal_places), out_dims)
 
     cat("DIFFERENCE - calculated result vs JSON output field (should be ~0 across the board):\n")
-    print(round(result-output,2))
-    # cat("RESULT:\n")
-    # print(round(res_arr,2))
+    print(round(result-output,decimal_places))
+    cat("RESULT:\n")
+    print(round(res_arr,decimal_places))
     # cat("EXPECTED:\n")
     # print(round(exp_arr,2))
 
@@ -138,7 +137,16 @@ help_text <- "How to interpret results:\nResults have OUT_W*OUT_H*CURRENT_FILTER
 
 cat("\n\n", help_text, "\n")
 
-l1  <- test_layer(json_data$layer_1, preproces_mean = TRUE, decimal_places=3)
-l21 <- test_layer(json_data$layer_2_data_set_1, decimal_places=3)
-l22 <- test_layer(json_data$layer_2_data_set_2)
-l3  <- test_layer(json_data$layer_3, result_multiplier=256, decimal_places=1)
+# print(json_data)
+# print(class(json_data))
+# print(json_data[[1]])
+# print(length(json_data))
+# print(names(json_data))
+
+for( name in names(json_data)){
+    print('------------------')
+    print(name)
+    print('------------------')
+    test_layer(json_data[[name]], preproces_mean = FALSE)
+}
+

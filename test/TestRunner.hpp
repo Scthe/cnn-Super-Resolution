@@ -29,9 +29,9 @@ namespace test {
 ///
 /// utils functions
 ///
-float sigmoid(float);
 
-float mean(float *, size_t);
+float activation_function(float);
+float activation_function_derivative(float);
 
 struct DataSet {
   DataSet(std::string name) : name(name) {}

@@ -58,11 +58,12 @@ bool LastLayerDeltaTest::operator()(size_t,
            g_t_idx =
                (row + _impl->padding) * ground_truth_w + _impl->padding + col;
     float t = (generator() % 256) / 100.0f;
-    // sigmoid etc
+    // activation_function etc
     float x = (generator() % 2560) / 1000.0f;
-    float y = sigmoid(x);
+    float y = activation_function(x);
     // fill expected buffer
-    cpu_expected[i] = (y - t) * x * (1 - x) + _impl->weight_decay;
+    cpu_expected[i] =
+        (y - t) * activation_function_derivative(x) + _impl->weight_decay;
     cpu_ground_truth[g_t_idx] = t;
     cpu_algo_res[i] = y;
   }

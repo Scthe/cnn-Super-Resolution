@@ -11,16 +11,11 @@
 
 namespace test {
 
-// utils functions
-float sigmoid(float x) { return 1 / (1 + std::exp(-x)); }
-
-float mean(float *arr, size_t count) {
-  float acc = 0;
-  for (size_t i = 0; i < count; i++) {
-    acc += arr[i];
-  }
-  return acc / count;
-}
+///
+/// utils functions
+///
+float activation_function(float x) { return std::max(x, 0.0f); }
+float activation_function_derivative(float x) { return x > 0.0f ? 1.0f : 0.0f; }
 
 ///
 /// TestException
