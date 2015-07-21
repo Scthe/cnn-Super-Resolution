@@ -41,6 +41,7 @@ struct GpuAllocationPool {
 };
 
 struct ParameterSet {
+  // TODO move to ConfigBasedDataPipeline
   ParameterSet(size_t ws1, size_t ws2, size_t ws3,  //
                size_t bs1, size_t bs2, size_t bs3)
       : weights_1(ws1),
@@ -95,8 +96,9 @@ int main(int argc, char** argv) {
   auto forward_in_file = "data\\small2.jpg";
   auto forward_out_file = "data\\result.png";
 
-  // bool train = true;
+  //bool train = true;
   bool train = false;
+  bool write_params_after_training = true;
   const size_t batches_count = 100;
   const size_t validation_set_percent = 25;
   const size_t batches_between_params_store = 5;
@@ -129,12 +131,13 @@ int main(int argc, char** argv) {
   const size_t validation_set_size =
       (size_t)(train_sample_files.size() * validation_set_percent / 100.0f);
   if (validation_set_size == 0) {
-    throw std::runtime_error("Validation set is empty");
+    std::cout << "[WARNING] Validation set is empty" << std::endl;
+  } else {
+    std::cout << "validation_set_size: " << validation_set_size << "/"
+              << train_sample_files.size() << " = "
+              << (validation_set_size * 100.0f / train_sample_files.size())
+              << "%" << std::endl;
   }
-  std::cout << "validation_set_size: " << validation_set_size << "/"
-            << train_sample_files.size() << " = "
-            << (validation_set_size * 100.0f / train_sample_files.size()) << "%"
-            << std::endl;
 
   // read & prepare images
   for (auto& path_pair : train_sample_files) {
@@ -159,6 +162,9 @@ int main(int argc, char** argv) {
          validation_px_count = per_sample_px_count * validation_set_size,
          train_px_count =
              per_sample_px_count * (samples_count - validation_set_size);
+  size_t l1_out_rows = gpu_alloc.samples[0].w - cfg.f1 + 1,
+         l2_out_rows = l1_out_rows - cfg.f2 + 1,
+         l3_out_rows = l2_out_rows - cfg.f3 + 1;
   ParameterSet last_good_parameter_set(data_pipeline.layer_1()->weight_size(),
                                        data_pipeline.layer_2()->weight_size(),
                                        data_pipeline.layer_3()->weight_size(),
@@ -169,7 +175,6 @@ int main(int argc, char** argv) {
   context.block();
 
   // train
-  // bool train_error = false;
   for (size_t batch_id = 0; batch_id < batches_count; batch_id++) {
     std::vector<PerSampleAllocationPool> train_set(samples_count);
     std::vector<PerSampleAllocationPool> validation_set(samples_count);
@@ -185,7 +190,7 @@ int main(int argc, char** argv) {
     }
     // Copy parameters so if we error in next batch we will still have proper
     // values
-    if (batch_id % batches_between_params_store == 0) {
+    if (batch_id > 1 && batch_id % batches_between_params_store == 0) {
       std::cout << "(storing weights)" << std::endl;
       last_good_parameter_set.store(context, gpu_alloc);
     }
@@ -194,12 +199,40 @@ int main(int argc, char** argv) {
                                     gpu_alloc.layer_3, batches_count);
     context.block();
 
+    /* clang-format off */
+    ConfigBasedDataPipeline& d = data_pipeline;
+    // d.print_buffer(gpu_alloc.layer_1.bias, "layer 1 bias", 1);
+    // d.print_buffer(gpu_alloc.layer_2.bias, "layer 2 bias", 1);
+    // d.print_buffer(gpu_alloc.layer_3.bias, "layer 3 bias", 1);
+    // d.print_buffer(gpu_alloc.layer_1.accumulating_grad_b, "layer 1 bias gradients", 1);
+    // d.print_buffer(gpu_alloc.layer_2.accumulating_grad_b, "layer 2 bias gradients", 1);
+    // d.print_buffer(gpu_alloc.layer_3.accumulating_grad_b, "layer 3 bias gradients", 1);
+
+    // d.print_buffer(gpu_alloc.layer_1.weights, "layer 1 weights", cfg.f1*cfg.f1);
+    // d.print_buffer(gpu_alloc.layer_2.weights, "layer 2 weights", cfg.f2*cfg.f2);
+    // d.print_buffer(gpu_alloc.layer_3.weights, "layer 3 weights", cfg.f3*cfg.f3);
+    // d.print_buffer(gpu_alloc.layer_1.accumulating_grad_w, "layer 1 weight gradients", cfg.f1*cfg.f1);
+    // d.print_buffer(gpu_alloc.layer_2.accumulating_grad_w, "layer 2 weight gradients", cfg.f2*cfg.f2);
+    // d.print_buffer(gpu_alloc.layer_3.accumulating_grad_w, "layer 3 weight gradients", cfg.f3*cfg.f3);
+
+    // d.print_buffer(gpu_alloc.layer_1.output, "layer 1 out", l1_out_rows);
+    // d.print_buffer(gpu_alloc.layer_2.output, "layer 2 out", l2_out_rows);
+    // d.print_buffer(gpu_alloc.layer_3.output, "layer 3 out", l3_out_rows);
+    // d.print_buffer(gpu_alloc.layer_1.deltas, "layer 1 deltas", l1_out_rows);
+    // d.print_buffer(gpu_alloc.layer_2.deltas, "layer 2 deltas", l2_out_rows);
+    // d.print_buffer(gpu_alloc.layer_3.deltas, "layer 3 deltas", l3_out_rows);
+    /* clang-format on */
+
     float validation_squared_error =
         execute_batch(false, data_pipeline, gpu_alloc, validation_set);
 
     // (we are printing per pixel values because they are easier to remember)
     float mean_train_err = train_squared_error / train_set.size(),
           mean_valid_err = validation_squared_error / validation_set.size();
+    // std::cout << "[" << batch_id << "] "  //
+    // << "mean train error: " << mean_train_err << " ("
+    // << (mean_train_err / train_px_count) << " per px)" << std::endl;
+
     std::cout << "[" << batch_id << "] "  //
               /*<< "mean train error: " << mean_train_err << " ("
               << (mean_train_err / train_px_count) << " per px), "*/
@@ -210,12 +243,14 @@ int main(int argc, char** argv) {
     context.block();
   }
 
-  data_pipeline.write_params_to_file(
-      success_params_file,  //
-      last_good_parameter_set.weights_1, last_good_parameter_set.weights_2,
-      last_good_parameter_set.weights_3,  //
-      last_good_parameter_set.bias_1, last_good_parameter_set.bias_2,
-      last_good_parameter_set.bias_3);
+  if (write_params_after_training) {
+    data_pipeline.write_params_to_file(
+        success_params_file,  //
+        last_good_parameter_set.weights_1, last_good_parameter_set.weights_2,
+        last_good_parameter_set.weights_3,  //
+        last_good_parameter_set.bias_1, last_good_parameter_set.bias_2,
+        last_good_parameter_set.bias_3);
+  }
 
   std::cout << "DONE" << std::endl;
   exit(EXIT_SUCCESS);
@@ -311,12 +346,12 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
       auto weight_decay_value = data_pipeline.weight_decay(
           gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
           cfg->weight_decay_parameter, &forward_ev);
-      auto finish_token4 = data_pipeline.backpropagate(
-          gpu_alloc.layer_1,  //
-          gpu_alloc.layer_2,  //
-          gpu_alloc.layer_3,  //
-          sample.input_luma, sample.expected_output_luma, w, h,
-          weight_decay_value);
+      data_pipeline.backpropagate(gpu_alloc.layer_1,  //
+                                  gpu_alloc.layer_2,  //
+                                  gpu_alloc.layer_3,  //
+                                  sample.input_luma,
+                                  sample.expected_output_luma, w, h,
+                                  weight_decay_value);
     }
     context->block();
   }
