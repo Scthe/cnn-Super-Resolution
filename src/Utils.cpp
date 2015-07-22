@@ -2,9 +2,11 @@
 
 #include <string>
 #include <fstream>
+#include <iostream>
 #include <stdexcept>  // std::runtime_error
 #include <ios>        // std::ios_base::failure
 #include <dirent.h>   // list files in directory
+#include <cstdlib>    // for string -> number conversion
 
 #include "json/gason.h"
 
@@ -33,7 +35,7 @@ void list_files(const char* const path, std::vector<std::string>& target) {
     while ((dir = readdir(d)) != NULL) {
       target.push_back(dir->d_name);
       // if (dir->d_type == DT_REG) { // regular (non dirs/links)
-        // printf("%s\n", dir->d_name);
+      // printf("%s\n", dir->d_name);
       // }
       // printf("%s\n", dir->d_name);
     }
@@ -93,6 +95,214 @@ void read_json_file(const char* const file, JsonValue& value,
   if (value.getTag() != root_type) {
     throw std::runtime_error("Expected root of JSON file had invalid type");
   }
+}
+
+///
+/// Cmd line args parsing
+///
+
+ArgOption& ArgOption::help(const char* text) {
+  _help.assign(text);
+  return *this;
+}
+
+ArgOption& ArgOption::required() {
+  _required = true;
+  return *this;
+}
+
+Argparse::Argparse(const char* exec, const char* help)
+    : _general_help(help), _exec_name(exec) {
+  add_argument("help", "-h").help("Print this help");
+}
+
+ArgOption& Argparse::add_argument(const char* m1) {
+  return add_argument(1, &m1);
+}
+
+ArgOption& Argparse::add_argument(const char* m1, const char* m2) {
+  const char* tmp[2] = {m1, m2};
+  return add_argument(2, tmp);
+}
+
+bool is_valid_arg(size_t len, const char* ms) {
+  bool valid = len > 0;
+  for (size_t i = 0; i < len; i++) {
+    auto c = ms[i];
+    valid &= isalpha(c) || (c == '-');
+  }
+  if (!valid) std::cout << "'" << ms << "' is not valid mnemonic" << std::endl;
+  return valid;
+}
+
+ArgOption& Argparse::add_argument(size_t mlen, const char** ms) {
+  _options.push_back(ArgOption());
+  ArgOption& opt = _options.back();
+  for (size_t i = 0; i < mlen; i++) {
+    auto mnemonic = const_cast<char*>(ms[i]);
+    // std::cout << mnemonic << std::endl;
+    auto len = strlen(mnemonic);
+    if (!is_valid_arg(len, mnemonic)) continue;
+
+    char* name = nullptr;
+    if (mnemonic[0] != '-')
+      name = mnemonic;
+    else if (len > 2 && mnemonic[0] == '-' && mnemonic[1] == '-')
+      name = mnemonic + 2;
+    // name = mnemonic;
+    if (name) {
+      opt._name.assign(name);
+      // std::cout << "NAME: " << name << std::endl;
+    }
+
+    opt._mnemonics.push_back(std::string(mnemonic));
+  }
+  if (opt._mnemonics.empty())
+    throw std::runtime_error("Argument does not have valid mnemonic");
+  if (opt._name.empty())
+    throw std::runtime_error(
+        "Argument does not have valid name (at least one mnemonic should: not "
+        "have '-' prefix or start with '--')");
+  return opt;
+}
+
+bool Argparse::parse(size_t argc, char** argv) {
+  _values.clear();
+  for (size_t i = 1; i < argc; i++) {  // skip file name
+    auto arg = argv[i];
+    // std::cout << "[" << i << "]" << arg << std::endl;
+
+    // find ArgOption
+    ArgOption* opt = nullptr;
+    for (auto& o : _options) {
+      for (auto& mnemonic : o._mnemonics) {
+        // std::cout << "\t" << arg << " vs " << mnemonic << std::endl;
+        if (mnemonic.compare(arg) == 0) opt = &o;
+      }
+      if (opt) break;
+    }
+    if (!opt) {
+      std::cout << "Unrecognised argument: '" << arg << "'" << std::endl;
+      continue;
+    }
+
+    // read value
+    bool has_value = opt->_mnemonics[0][0] == '-';
+    if (!has_value) {
+      _values.push_back(ArgValue(opt, ""));
+    } else if (i + 1 < argc) {
+      ++i;
+      auto val = argv[i];
+      _values.push_back(ArgValue(opt, std::string(val)));
+    } else {
+      std::cout << "Expected value for: '" << opt->_name << "'" << std::endl;
+      continue;
+    }
+
+    // ArgValue& val = _values.back();
+    // std::cout << "Arg [" << val.first->_name << "] '" << val.second << "'"
+    // << std::endl;
+  }
+
+  auto only_help = has_arg("help");
+  if (only_help) {
+    print_help();
+    return false;
+  }
+
+  // check required args - all should be provided
+  for (auto& o : _options) {
+    if (!o._required) continue;
+    bool provided = false;
+    for (auto& val : _values) {
+      if (val.first == &o) provided |= true;
+    }
+    if (!provided) {
+      char buf[255];
+      snprintf(buf, 255, "Value not provided for argument: '%s'",
+               o._name.c_str());
+      throw std::runtime_error(buf);
+    }
+  }
+
+  return true;
+}
+
+void print_argument(std::ostream& os, ArgOption& opt) {
+  // print mnemonics
+  // bool has_value = opt._name.compare(0, 2, "--") == 0;
+  bool has_value = opt._mnemonics[0][0] == '-';
+  std::string name_upper = opt._name;
+  for (auto& c : name_upper) c = toupper(c);
+
+  for (size_t i = 0; i < opt._mnemonics.size(); i++) {
+    auto& mnemonic = opt._mnemonics[i];
+    os << "  " << mnemonic;
+    if (has_value) os << " " << name_upper;
+
+    if (i != opt._mnemonics.size() - 1) os << ", ";
+  }
+
+  // print help
+  os << std::endl
+     << "                 "  // this makes things easier
+     << opt._help;
+}
+
+void Argparse::print_help() {
+  std::ostream& os = std::cout;
+  os << _exec_name;
+
+  // print args line
+  for (auto& opt : _options) {
+    os << " ";
+    if (!opt._required) os << "[";
+    // if (!opt._name.empty())
+    // os << opt._name;
+    // else
+    // os << opt._mnemonics[0];
+    os << opt._mnemonics.back();
+    if (!opt._required) os << "]";
+  }
+
+  // print description
+  os << std::endl
+     << std::endl
+     << _general_help << std::endl
+     << std::endl;
+
+  // arguments
+  os << "arguments:" << std::endl;
+  for (auto& opt : _options) {
+    print_argument(os, opt);
+    os << std::endl;
+  }
+}
+
+Argparse::ArgValue* Argparse::get_value(const char* arg_name) {
+  Argparse::ArgValue* v = nullptr;
+  for (auto& val : _values) {
+    if (val.first->_name.compare(arg_name) == 0) {
+      v = &val;
+      break;
+    }
+  }
+  return v;
+}
+
+bool Argparse::has_arg(const char* arg_name) {
+  return get_value(arg_name) != nullptr;
+}
+
+const char* Argparse::value(const char* arg_name) {
+  auto v = get_value(arg_name);
+  return v != nullptr ? v->second.c_str() : nullptr;
+}
+
+void Argparse::value(const char* arg_name, size_t& val) {
+  auto v = get_value(arg_name);
+  if (!v) return;
+  val = atoi(v->second.c_str());  // ignore value overflow..
 }
 
 //

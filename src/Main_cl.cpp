@@ -91,24 +91,53 @@ void execute_forward(ConfigBasedDataPipeline&, GpuAllocationPool&,
 int main(int argc, char** argv) {
   std::srand(std::time(0));
 
-  auto train_samples_dir = "data\\train_samples";
-  auto success_params_file = "data\\success_params_file.json";
-  auto forward_in_file = "data\\small2.jpg";
-  auto forward_out_file = "data\\result.png";
+  cnn_sr::utils::Argparse argparse("cnn", "????");
+  /* clang-format off */
+  argparse.add_argument("train").help("Train mode");
+  argparse.add_argument("dry").help("Do not store result");
+  argparse.add_argument("-c", "--config").required().help("CNN configuration");
+  // argparse.add_argument("-p", "--parameters-file").help("Override parameters file provided in config");
+  argparse.add_argument("-i", "--in").required().help("Image during forward, samples directory during training");
+  argparse.add_argument("-o", "--out").help("Output file path (either result image or new parameters)");
+  argparse.add_argument("-e", "--epochs").help("Number of epochs during training");
+  /* clang-format on */
 
-  //bool train = true;
-  bool train = false;
-  bool write_params_after_training = true;
-  const size_t batches_count = 100;
-  const size_t validation_set_percent = 25;
+  if (!argparse.parse(argc, argv)) {
+    exit(EXIT_SUCCESS);  // EXIT_FAILURE?
+  }
+
+  bool train = argparse.has_arg("train");
+  bool dry = argparse.has_arg("dry");
+  auto config_path = argparse.value("config");
+  // auto pars_file_path = argparse.value("parameters-file");
+  auto in_path = argparse.value("in");
+  auto out_path = dry ? nullptr : argparse.value("out");
+  size_t epochs;
+  argparse.value("epochs", epochs);
+
+  if (!dry && !out_path) {
+    std::cout << "Either provide out path or do the dry run" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  // print base info
+  if (train) {
+    std::cout << "Training mode, epochs: " << epochs << std::endl
+              << "Training samples directory: " << in_path << std::endl
+              << "Output: " << (out_path ? out_path : "-") << std::endl;
+  } else {
+    std::cout << "Forward mode" << std::endl
+              << "Input image: " << in_path << std::endl
+              << "Output: " << (out_path ? out_path : "-") << std::endl;
+  }
+
+  // other config variables
+  const size_t validation_set_percent = 25;  // TODO move to cfg
   const size_t batches_between_params_store = 5;
-
-  const char* const cfg_file =
-      train ? "data\\config.json" : "data\\config_f.json";
 
   // read config
   ConfigReader reader;
-  Config cfg = reader.read(cfg_file);
+  Config cfg = reader.read(config_path);
   std::cout << cfg << std::endl;
 
   // opencl context
@@ -119,15 +148,14 @@ int main(int argc, char** argv) {
   GpuAllocationPool gpu_alloc;
 
   if (!train) {
-    execute_forward(data_pipeline, gpu_alloc, forward_in_file,
-                    forward_out_file);
+    execute_forward(data_pipeline, gpu_alloc, in_path, out_path);
     exit(EXIT_SUCCESS);
   }
 
   // training mode:
   // read training samples
   std::vector<TrainSampleFiles> train_sample_files;
-  get_training_samples(train_samples_dir, train_sample_files);
+  get_training_samples(in_path, train_sample_files);
   const size_t validation_set_size =
       (size_t)(train_sample_files.size() * validation_set_percent / 100.0f);
   if (validation_set_size == 0) {
@@ -175,7 +203,7 @@ int main(int argc, char** argv) {
   context.block();
 
   // train
-  for (size_t batch_id = 0; batch_id < batches_count; batch_id++) {
+  for (size_t batch_id = 0; batch_id < epochs; batch_id++) {
     std::vector<PerSampleAllocationPool> train_set(samples_count);
     std::vector<PerSampleAllocationPool> validation_set(samples_count);
     divide_samples(validation_set_size, gpu_alloc, train_set, validation_set);
@@ -196,11 +224,11 @@ int main(int argc, char** argv) {
     }
 
     data_pipeline.update_parameters(gpu_alloc.layer_1, gpu_alloc.layer_2,
-                                    gpu_alloc.layer_3, batches_count);
+                                    gpu_alloc.layer_3, train_set.size());
     context.block();
 
     /* clang-format off */
-    ConfigBasedDataPipeline& d = data_pipeline;
+    // ConfigBasedDataPipeline& d = data_pipeline;
     // d.print_buffer(gpu_alloc.layer_1.bias, "layer 1 bias", 1);
     // d.print_buffer(gpu_alloc.layer_2.bias, "layer 2 bias", 1);
     // d.print_buffer(gpu_alloc.layer_3.bias, "layer 3 bias", 1);
@@ -243,13 +271,14 @@ int main(int argc, char** argv) {
     context.block();
   }
 
-  if (write_params_after_training) {
-    data_pipeline.write_params_to_file(
-        success_params_file,  //
-        last_good_parameter_set.weights_1, last_good_parameter_set.weights_2,
-        last_good_parameter_set.weights_3,  //
-        last_good_parameter_set.bias_1, last_good_parameter_set.bias_2,
-        last_good_parameter_set.bias_3);
+  if (out_path) {
+    data_pipeline.write_params_to_file(out_path,
+                                       last_good_parameter_set.weights_1,  //
+                                       last_good_parameter_set.weights_2,
+                                       last_good_parameter_set.weights_3,
+                                       last_good_parameter_set.bias_1,
+                                       last_good_parameter_set.bias_2,  //
+                                       last_good_parameter_set.bias_3);
   }
 
   std::cout << "DONE" << std::endl;
@@ -294,16 +323,18 @@ void execute_forward(ConfigBasedDataPipeline& data_pipeline,
   // data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2", h);
   data_pipeline.print_buffer(gpu_alloc.layer_3.output, "OUT", h);
 
-  // read image
-  size_t result_size = w * h * 3;  // 3 channels
-  opencl::MemoryHandle gpu_buf_target = gpu_nullptr;
-  data_pipeline.swap_luma(input_img, input_data, gpu_alloc.layer_3.output,
-                          gpu_buf_target, luma_w, luma_h);
-  std::vector<unsigned char> result(result_size);
-  context->read_buffer(gpu_buf_target, (void*)&result[0], true);
+  if (out_path) {
+    // read image
+    size_t result_size = w * h * 3;  // 3 channels
+    opencl::MemoryHandle gpu_buf_target = gpu_nullptr;
+    data_pipeline.swap_luma(input_img, input_data, gpu_alloc.layer_3.output,
+                            gpu_buf_target, luma_w, luma_h);
+    std::vector<unsigned char> result(result_size);
+    context->read_buffer(gpu_buf_target, (void*)&result[0], true);
 
-  opencl::utils::ImageData res_img(w, h, 3, &result[0]);
-  opencl::utils::write_image(out_path, res_img);
+    opencl::utils::ImageData res_img(w, h, 3, &result[0]);
+    opencl::utils::write_image(out_path, res_img);
+  }
 }
 
 ///

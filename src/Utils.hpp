@@ -33,8 +33,48 @@ template <typename T>
 inline bool is_even(T x) {
   return !is_odd(x);
 }
+
+///
+/// Cmd line args parsing
+///
+struct ArgOption {
+  bool _required = false;
+  std::string _name = "";
+  std::string _help = "";
+  std::vector<std::string> _mnemonics;
+
+  ArgOption& help(const char*);
+  ArgOption& required();
+};
+
+class Argparse {
+  typedef std::pair<ArgOption*, std::string> ArgValue;
+ public:
+  Argparse(const char*,const char*);
+
+  ArgOption& add_argument(const char*);
+  ArgOption& add_argument(const char*, const char*);
+  bool parse(size_t, char**);
+  void print_help();
+
+  bool has_arg(const char*);
+  const char* value(const char*);
+  void value(const char*, size_t&);
+
+ private:
+  ArgOption& add_argument(size_t, const char**);
+  ArgValue* get_value(const char*);
+
+  const std::string _general_help, _exec_name;
+  std::vector<ArgOption> _options;
+  std::vector<ArgValue> _values;
+};
 }
 }
+
+///
+/// Utils macros
+///
 
 // it's easier then including header file just for one typedef,
 // since we can't typedef member class

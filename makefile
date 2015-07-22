@@ -55,15 +55,25 @@ _TEST_OBJ = TestRunner.o $(__OBJ) \
 TEST_OBJ = $(patsubst %,$(ODIR)/%,$(_TEST_OBJ))
 
 
+# If the first argument is "run"...
+ifeq (run,$(firstword $(MAKECMDGOALS)))
+  # use the rest as arguments for "run"
+  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  # ...and turn them into do-nothing targets
+  $(eval $(RUN_ARGS):;@:)
+endif
+
 
 # default target
 build: $(EXECNAME)
 
 compile: $(OBJ)
 
+# if You pass arguments do it like this:
+# 'make run -- ARGS_HERE'
 run: $(EXECNAME)
 	@echo -----------------------
-	@$(BINDIR)/$<
+	@$(BINDIR)/$< $(RUN_ARGS)
 
 test: $(TEST_OBJ)
 	@echo Linking tests..
