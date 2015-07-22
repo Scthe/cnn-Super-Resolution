@@ -185,8 +185,10 @@ class DataPipeline {
   /// misc. kernels
   ///
 
-  /** Subtract mean value from all elements of the buffer */
-  cl_event subtract_mean(opencl::MemoryHandle, cl_event* ev = nullptr);
+  /** Subtract mean value from all elements of the buffer. The mean parameter
+   * will have the mean value */
+  cl_event subtract_mean(opencl::MemoryHandle, float* mean = nullptr,
+                         cl_event* ev = nullptr);
 
   /**
    * Sum all float in buffer. You may choose to square the values before adding

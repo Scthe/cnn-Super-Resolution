@@ -66,6 +66,11 @@ class ConfigBasedDataPipeline : public DataPipeline {
                          cnn_sr::CnnLayerGpuAllocationPool&, size_t batch_size,
                          cl_event* ev_to_wait_for = nullptr);
 
+  void write_result_image(const char* const, opencl::utils::ImageData&,
+                          opencl::MemoryHandle input_img_3ch,          //
+                          opencl::MemoryHandle input_img_luma, float,  //
+                          opencl::MemoryHandle new_luma, size_t, size_t);
+
   inline const LayerData* layer_1() { return &layer_data_1; }
   inline const LayerData* layer_2() { return &layer_data_2; }
   inline const LayerData* layer_3() { return &layer_data_3; }
@@ -79,6 +84,9 @@ class ConfigBasedDataPipeline : public DataPipeline {
   cl_event last_layer_delta(opencl::MemoryHandle, opencl::MemoryHandle,
                             opencl::MemoryHandle&, float, size_t, size_t,
                             cl_event* ev = nullptr);
+
+  void get_extreme_values(opencl::MemoryHandle, std::vector<float>& target,
+                          float& min, float& max);
 
  private:
   Config* const _config;

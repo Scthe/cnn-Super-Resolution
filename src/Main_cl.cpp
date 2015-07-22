@@ -177,7 +177,7 @@ int main(int argc, char** argv) {
     auto ev1 = prepare_image(&data_pipeline, path_pair.second.c_str(),
                              input_img, sample_alloc_pool.input_data,
                              sample_alloc_pool.input_luma);
-    data_pipeline.subtract_mean(sample_alloc_pool.input_luma, &ev1);
+    data_pipeline.subtract_mean(sample_alloc_pool.input_luma, nullptr, &ev1);
     sample_alloc_pool.w = (size_t)input_img.w;
     sample_alloc_pool.h = (size_t)input_img.h;
     context.block();
@@ -300,10 +300,10 @@ void execute_forward(ConfigBasedDataPipeline& data_pipeline,
   opencl::MemoryHandle input_luma = gpu_nullptr;
   auto ev1 =
       prepare_image(&data_pipeline, in_path, input_img, input_data, input_luma);
-  data_pipeline.subtract_mean(input_luma, &ev1);
-  size_t w = input_img.w,                 //
-      h = input_img.h,                    //
-      luma_w = w - cfg->total_padding(),  //
+  float mean;
+  data_pipeline.subtract_mean(input_luma, &mean, &ev1);
+  size_t w = input_img.w, h = input_img.h,  //
+      luma_w = w - cfg->total_padding(),    //
       luma_h = h - cfg->total_padding();
   context->block();
 
@@ -312,28 +312,15 @@ void execute_forward(ConfigBasedDataPipeline& data_pipeline,
                                           gpu_alloc.layer_2,  //
                                           gpu_alloc.layer_3,  //
                                           input_luma, w, h);
-  auto squared_error = data_pipeline.squared_error(input_luma,                //
-                                                   gpu_alloc.layer_3.output,  //
-                                                   w, h, &forward_ev);
-  std::cout << "Squared error: " << squared_error << " ("
-            << (squared_error / (luma_w * luma_h)) << " per px)" << std::endl;
-
   // dbg output read
   // data_pipeline.print_buffer(gpu_alloc.layer_1.output, "layer 1", h);
   // data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2", h);
-  data_pipeline.print_buffer(gpu_alloc.layer_3.output, "OUT", h);
+  // data_pipeline.print_buffer(gpu_alloc.layer_3.output, "OUT", h);
 
   if (out_path) {
-    // read image
-    size_t result_size = w * h * 3;  // 3 channels
-    opencl::MemoryHandle gpu_buf_target = gpu_nullptr;
-    data_pipeline.swap_luma(input_img, input_data, gpu_alloc.layer_3.output,
-                            gpu_buf_target, luma_w, luma_h);
-    std::vector<unsigned char> result(result_size);
-    context->read_buffer(gpu_buf_target, (void*)&result[0], true);
-
-    opencl::utils::ImageData res_img(w, h, 3, &result[0]);
-    opencl::utils::write_image(out_path, res_img);
+    data_pipeline.write_result_image(out_path, input_img, input_data,
+                                     input_luma, mean,  //
+                                     gpu_alloc.layer_3.output, luma_w, luma_h);
   }
 }
 

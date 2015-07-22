@@ -253,17 +253,18 @@ cl_event DataPipeline::swap_luma(opencl::utils::ImageData &img_data,
   return finish_token;
 }
 
-cl_event DataPipeline::subtract_mean(opencl::MemoryHandle data,
+cl_event DataPipeline::subtract_mean(opencl::MemoryHandle data, float *mean,
                                      cl_event *ev_to_wait_for) {
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
   size_t len = element_count(data, sizeof(cl_float));
 
   // std::cout << "Calcutating mean from " << len << " elements" << std::endl;
   auto buf_sum = sum(data, ev_to_wait_for);
-  float mean = ((float)buf_sum) / len;
+  float mean_v = ((float)buf_sum) / len;
+  if (mean) *mean = mean_v;
   // std::cout << "Mean: " << mean << std::endl;
   // subtract
-  return subtract_from_all(data, mean);
+  return subtract_from_all(data, mean_v);
 }
 
 float DataPipeline::sum(opencl::MemoryHandle data, bool squared,

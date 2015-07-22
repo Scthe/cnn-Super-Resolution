@@ -1,13 +1,15 @@
 #include "ConfigBasedDataPipeline.hpp"
 
-#include <random>   // for std::mt19937
-#include <chrono>   // for random seed
-#include <fstream>  // for parameters dump
+#include <random>     // for std::mt19937
+#include <chrono>     // for random seed
+#include <fstream>    // for parameters dump
+#include <algorithm>  // f.e. std::minmax_element
 #include "json/gason.h"
 
 #include "Config.hpp"
 #include "Utils.hpp"
-#include "opencl/Context.hpp"
+#include "opencl\Context.hpp"
+#include "opencl\UtilsOpenCL.hpp"
 
 auto print_steps = false, print_info2 = false;
 
@@ -343,34 +345,74 @@ void ConfigBasedDataPipeline::write_params_to_file(
               << "}";
 }
 
-/*
-void ConfigBasedDataPipeline::dump_filters(
-    const char *const path, size_t layer_id,
-    cnn_sr::CnnLayerGpuAllocationPool gpu_alloc) {
-  // read
-  auto ws = data.weights_size();
-  std::vector<float> w(ws);
-  context.read_buffer(gpu_alloc.weights, (void *)&w[0], true);
-  // dump
-  char name_buf[255];
-  std::vector<float> tmp(data.f_spatial_size * data.f_spatial_size);
-  for (size_t n = 0; n < data.current_filter_count; n++) {
-    for (size_t k = 0; k < data.n_prev_filter_cnt; k++) {
-      size_t i = 0;
-      for (size_t row = 0; row < data.f_spatial_size; row++) {
-        for (size_t col = 0; col < data.f_spatial_size; col++) {
-          size_t idx = ((row * data.f_spatial_size) + col) *
-                       data.current_filter_count * data.n_prev_filter_cnt;
-          idx += k * data.current_filter_count + n;
-          tmp[i] = ws[idx];
-          ++i;
-        }
-      }
+///
+/// Write image
+///
+void ConfigBasedDataPipeline::get_extreme_values(opencl::MemoryHandle buffer,
+                                                 std::vector<float> &target,
+                                                 float &min, float &max) {
+  auto raw_memory = _context->raw_memory(buffer);
+  size_t len = raw_memory->size / sizeof(cl_float);
+  target.resize(len);
+  _context->read_buffer(buffer, (void *)&target[0], true);
 
-      snprintf(name_buf, 255, "%s__%d_%d.png", path, k, n);
-      dump_image(name_buf, data.f_spatial_size, tmp, true, 255.0f);
-    }
-  }
+  auto min_max_it = std::minmax_element(target.cbegin(), target.cend());
+  min = *min_max_it.first;
+  max = *min_max_it.second;
 }
-*/
+
+void ConfigBasedDataPipeline::write_result_image(
+    const char *const out_path,  //
+    opencl::utils::ImageData &input_img,
+    opencl::MemoryHandle input_img_3ch,  //
+    opencl::MemoryHandle input_img_luma, float input_img_luma_mean,
+    opencl::MemoryHandle new_luma, size_t luma_w, size_t luma_h) {
+  /*
+  // normally the result image will be gray for the most part.
+  // what we have to do is to expand range of luma values
+  // TODO or maybe just do more training ?
+  std::vector<float> luma_values;
+  float input_luma_min_val, input_luma_max_val,  //
+      new_luma_min_val, new_luma_max_val;
+  get_extreme_values(input_img_luma, luma_values,  //
+                     input_luma_min_val, input_luma_max_val);
+  get_extreme_values(new_luma, luma_values, new_luma_min_val, new_luma_max_val);
+  // old luma has subtracted mean, reverse this
+  float input_luma_mean = (input_luma_max_val - input_luma_min_val) / 2;
+  input_luma_min_val += input_img_luma_mean;
+  input_luma_max_val += input_img_luma_mean;
+  std::cout << "old luma: " << input_luma_min_val  //
+            << "\t- " << input_luma_max_val << std::endl;
+  std::cout << "new luma: " << new_luma_min_val  //
+            << "\t- " << new_luma_max_val << std::endl;
+  // normalize luma values
+  float norm_factor = new_luma_max_val - new_luma_min_val;
+  for (float &f : luma_values) {
+    f = (f - new_luma_min_val) / norm_factor;
+    // f = 0.5f;
+    // f = 1.0f;
+  }
+  auto new_luma_after_norm_extr =
+      std::minmax_element(luma_values.cbegin(), luma_values.cend());
+  std::cout << "new: " << *new_luma_after_norm_extr.first << "\t - "
+            << *new_luma_after_norm_extr.second << std::endl;
+
+  _context->block();
+  _context->write_buffer(new_luma, &luma_values[0], true);
+  _context->block();
+  */
+
+  // create result image
+  opencl::MemoryHandle gpu_buf_target = gpu_nullptr;
+  swap_luma(input_img, input_img_3ch, new_luma, gpu_buf_target, luma_w, luma_h);
+
+  // read result
+  size_t result_size = input_img.w * input_img.h * 3;  // 3 channels
+  std::vector<unsigned char> result(result_size);
+  _context->read_buffer(gpu_buf_target, (void *)&result[0], true);
+
+  // write result
+  opencl::utils::ImageData res_img(input_img.w, input_img.h, 3, &result[0]);
+  opencl::utils::write_image(out_path, res_img);
+}
 }

@@ -26,14 +26,15 @@ namespace utils {
  */
 struct ImageData {
   ImageData();
-  ImageData(int,int,int,unsigned char*);
+  ImageData(int, int, int, unsigned char*);
   ~ImageData();
   // TODO do not allow copy !!!
 
   int w, h;
   int bpp;  // bytes per pixel
   unsigned char* data;
-private:
+
+ private:
   bool read_from_file = true;
 };
 
@@ -56,9 +57,6 @@ char* load_file(const char* cFilename, const char* cPreamble,
 void load_image(const char*, ImageData&);
 
 int write_image(const char*, ImageData&);
-
-void dump_image(const char* const file_path, float* source, size_t w, size_t h,
-                bool single_channel, float val_mul);
 
 /**
  * Due too different possible resolutions we may have to recalculate this each
