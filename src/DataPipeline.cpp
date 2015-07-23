@@ -347,7 +347,6 @@ cl_event DataPipeline::execute_layer(
     opencl::MemoryHandle &gpu_buf_in, size_t input_w, size_t input_h,
     cl_event *ev_to_wait_for) {
   pre_execute_layer_validation(data, gpu_buf_in, input_w, input_h);
-  _context->block();
 
   size_t out_size[2];
   data.get_output_dimensions(out_size, input_w, input_h);
@@ -654,8 +653,6 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_out_w);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_out_h);
-
-  _context->block();  // TODO remove
 
   // run
   int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;

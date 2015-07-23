@@ -30,7 +30,7 @@ void ConfigBasedDataPipeline::init(int load_flags) {
   if (_config->parameters_file && strlen(_config->parameters_file) > 0) {
     std::cout << "Loading layer parameters from: '" << _config->parameters_file
               << "'" << std::endl;
-    load_parameters_file(_config->parameters_file);
+    this->epochs = load_parameters_file(_config->parameters_file);
   } else {
     std::cout
         << "No parameters file provided, initializing random weights and biases"
@@ -89,7 +89,6 @@ cl_event ConfigBasedDataPipeline::forward(
   layer_data_1.get_output_dimensions(l1_output_dim, input_w, input_h);
   layer_data_2.get_output_dimensions(l2_output_dim, l1_output_dim[0],
                                      l1_output_dim[1]);
-  _context->block();
 
   // layer 1
   if (print_steps) std::cout << "### Executing layer 1" << std::endl;
@@ -97,7 +96,6 @@ cl_event ConfigBasedDataPipeline::forward(
       execute_layer(*_layer_1_kernel, layer_data_1, layer_1_alloc,  // layer cfg
                     input, input_w, input_h,                        // input
                     ev_to_wait_for);
-  _context->block();
 
   // layer 2
   if (print_steps) std::cout << "### Executing layer 2" << std::endl;
@@ -105,7 +103,6 @@ cl_event ConfigBasedDataPipeline::forward(
       *_layer_2_kernel, layer_data_2, layer_2_alloc,             // layer cfg
       layer_1_alloc.output, l1_output_dim[0], l1_output_dim[1],  // input
       &finish_token1);
-  _context->block();
 
   // layer 3
   if (print_steps) std::cout << "### Executing layer 3" << std::endl;
@@ -113,7 +110,6 @@ cl_event ConfigBasedDataPipeline::forward(
       *_layer_3_kernel, layer_data_3, layer_3_alloc,             // layer cfg
       layer_2_alloc.output, l2_output_dim[0], l2_output_dim[1],  // input
       &finish_token2);
-  _context->block();
 
   return finish_token3;
 }
@@ -167,20 +163,18 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 3rd layer"
               << std::endl;
-  auto event3_1 =
-      DataPipeline::backpropagate(layer_data_3,                            //
-                                  layer_2_alloc.output, layer_3_alloc,     //
-                                  layer_3_out_dim[0], layer_3_out_dim[1],  //
-                                  &event2_3);
+  DataPipeline::backpropagate(layer_data_3,                            //
+                              layer_2_alloc.output, layer_3_alloc,     //
+                              layer_3_out_dim[0], layer_3_out_dim[1],  //
+                              &event2_3);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 2nd layer"
               << std::endl;
-  auto event3_2 =
-      DataPipeline::backpropagate(layer_data_2,                            //
-                                  layer_1_alloc.output, layer_2_alloc,     //
-                                  layer_2_out_dim[0], layer_2_out_dim[1],  //
-                                  &event3_1);
+  DataPipeline::backpropagate(layer_data_2,                            //
+                              layer_1_alloc.output, layer_2_alloc,     //
+                              layer_2_out_dim[0], layer_2_out_dim[1],  //
+                              &event2_3);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 1st layer"
@@ -189,7 +183,8 @@ cl_event ConfigBasedDataPipeline::backpropagate(
       DataPipeline::backpropagate(layer_data_1,                            //
                                   cnn_input, layer_1_alloc,                //
                                   layer_1_out_dim[0], layer_1_out_dim[1],  //
-                                  &event3_2);
+                                  &event2_3);
+  _context->block();
   return event3_3;
 }
 
@@ -198,24 +193,23 @@ void ConfigBasedDataPipeline::update_parameters(
     cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
     cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc, size_t batch_size,
     cl_event *ev_to_wait_for) {
-  // TODO might as well run all in parallel
   if (print_steps)
     std::cout << "### Updating weights and biases - 3rd layer" << std::endl;
-  auto event1 = DataPipeline::update_parameters(
-      layer_data_3, layer_3_alloc, batch_size, _config->momentum,
-      _config->learning_rate[2], ev_to_wait_for);
+  DataPipeline::update_parameters(layer_data_3, layer_3_alloc, batch_size,
+                                  _config->momentum, _config->learning_rate[2],
+                                  ev_to_wait_for);
 
   if (print_steps)
     std::cout << "### Updating weights and biases - 2nd layer" << std::endl;
-  auto event2 = DataPipeline::update_parameters(
-      layer_data_2, layer_2_alloc, batch_size, _config->momentum,
-      _config->learning_rate[1], &event1);
+  DataPipeline::update_parameters(layer_data_2, layer_2_alloc, batch_size,
+                                  _config->momentum, _config->learning_rate[1],
+                                  ev_to_wait_for);
 
   if (print_steps)
     std::cout << "### Updating weights and biases - 1st layer" << std::endl;
   DataPipeline::update_parameters(layer_data_1, layer_1_alloc, batch_size,
                                   _config->momentum, _config->learning_rate[0],
-                                  &event2);
+                                  ev_to_wait_for);
 
   _context->block();
   _context->zeros_float(layer_1_alloc.accumulating_grad_w, true);
@@ -224,6 +218,8 @@ void ConfigBasedDataPipeline::update_parameters(
   _context->zeros_float(layer_1_alloc.accumulating_grad_b, true);
   _context->zeros_float(layer_2_alloc.accumulating_grad_b, true);
   _context->zeros_float(layer_3_alloc.accumulating_grad_b, true);
+
+  ++epochs;
 }
 
 float ConfigBasedDataPipeline::squared_error(
@@ -275,8 +271,9 @@ void load_layer_parameters(JsonNode *node, LayerData &data) {
   }
 }
 
-void ConfigBasedDataPipeline::load_parameters_file(
+size_t ConfigBasedDataPipeline::load_parameters_file(
     const char *const file_path) {
+  size_t epochs = 0;
   JsonValue value;
   JsonAllocator allocator;
   std::string source;
@@ -286,7 +283,9 @@ void ConfigBasedDataPipeline::load_parameters_file(
     auto key = node->key;
     // std::cout << key << std::endl;
 
-    if (strcmp(key, layer_parameters_key[0]) == 0) {
+    if (strcmp(key, "epoch") == 0 && node->value.getTag() == JSON_NUMBER) {
+      epochs = (unsigned int)node->value.toNumber();
+    } else if (strcmp(key, layer_parameters_key[0]) == 0) {
       load_layer_parameters(node, layer_data_1);
     } else if (strcmp(key, layer_parameters_key[1]) == 0) {
       load_layer_parameters(node, layer_data_2);
@@ -300,6 +299,7 @@ void ConfigBasedDataPipeline::load_parameters_file(
                 << layer_parameters_key[2] << "' are allowed" << std::endl;
     }
   }
+  return epochs;
 }
 
 ///
@@ -319,28 +319,36 @@ void dump_layer_parameters(std::ostream &os, const char *const key,
 }
 
 void ConfigBasedDataPipeline::write_params_to_file(
-    const char *const file_path,    //
-    std::vector<float> &weights_1,  //
-    std::vector<float> &weights_2,  //
-    std::vector<float> &weights_3,  //
-    std::vector<float> &bias_1,     //
-    std::vector<float> &bias_2,     //
-    std::vector<float> &bias_3) {
+    const char *const file_path,
+    cnn_sr::CnnLayerGpuAllocationPool layer_1_alloc,
+    cnn_sr::CnnLayerGpuAllocationPool layer_2_alloc,
+    cnn_sr::CnnLayerGpuAllocationPool layer_3_alloc) {
   std::cout << "Saving parameters to: '" << file_path << "'" << std::endl;
-  _context->block();
+  // read weights
+  /* clang-format off */
+  _context->read_buffer(layer_1_alloc.weights, (void *)&layer_data_1.weights[0], true);
+  _context->read_buffer(layer_2_alloc.weights, (void *)&layer_data_2.weights[0], true);
+  _context->read_buffer(layer_3_alloc.weights, (void *)&layer_data_3.weights[0], true);
+  _context->read_buffer(layer_1_alloc.bias, (void *)&layer_data_1.bias[0], true);
+  _context->read_buffer(layer_2_alloc.bias, (void *)&layer_data_2.bias[0], true);
+  _context->read_buffer(layer_3_alloc.bias, (void *)&layer_data_3.bias[0], true);
+  /* clang-format on */
 
   // write to file
   std::ofstream params_file;
   params_file.open(file_path);
-  params_file << "{" << std::endl;
-  dump_layer_parameters(params_file, layer_parameters_key[0], weights_1,
-                        bias_1);
+  params_file << "{" << std::endl
+              << "  \"epochs\": " << this->epochs << "," << std::endl
+              << std::endl;
+
+  /* clang-format off */
+  dump_layer_parameters(params_file, layer_parameters_key[0], layer_data_1.weights, layer_data_1.bias);
   params_file << "," << std::endl;
-  dump_layer_parameters(params_file, layer_parameters_key[1], weights_2,
-                        bias_2);
+  dump_layer_parameters(params_file, layer_parameters_key[1], layer_data_2.weights, layer_data_2.bias);
   params_file << "," << std::endl;
-  dump_layer_parameters(params_file, layer_parameters_key[2], weights_3,
-                        bias_3);
+  dump_layer_parameters(params_file, layer_parameters_key[2], layer_data_3.weights, layer_data_3.bias);
+  /* clang-format on */
+
   params_file << std::endl
               << "}";
 }

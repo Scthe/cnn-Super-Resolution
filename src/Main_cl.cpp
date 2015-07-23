@@ -5,7 +5,7 @@
 #include <utility>    // for std::pair
 #include <cmath>      // for std::isnan
 #include <unordered_map>
-#
+
 #include "Config.hpp"
 #include "LayerData.hpp"
 #include "ConfigBasedDataPipeline.hpp"
@@ -38,30 +38,6 @@ struct GpuAllocationPool {
   CnnLayerGpuAllocationPool layer_3;
 
   std::vector<PerSampleAllocationPool> samples;
-};
-
-struct ParameterSet {
-  // TODO move to ConfigBasedDataPipeline
-  ParameterSet(size_t ws1, size_t ws2, size_t ws3,  //
-               size_t bs1, size_t bs2, size_t bs3)
-      : weights_1(ws1),
-        weights_2(ws2),
-        weights_3(ws3),
-        bias_1(bs1),
-        bias_2(bs2),
-        bias_3(bs3) {}
-
-  void store(opencl::Context& context, GpuAllocationPool& gpu_alloc) {
-    context.read_buffer(gpu_alloc.layer_1.weights, (void*)&weights_1[0], true);
-    context.read_buffer(gpu_alloc.layer_2.weights, (void*)&weights_2[0], true);
-    context.read_buffer(gpu_alloc.layer_3.weights, (void*)&weights_3[0], true);
-    context.read_buffer(gpu_alloc.layer_1.bias, (void*)&bias_1[0], true);
-    context.read_buffer(gpu_alloc.layer_2.bias, (void*)&bias_2[0], true);
-    context.read_buffer(gpu_alloc.layer_3.bias, (void*)&bias_3[0], true);
-  }
-
-  std::vector<float> weights_1, weights_2, weights_3;
-  std::vector<float> bias_1, bias_2, bias_3;
 };
 
 ///
@@ -133,7 +109,6 @@ int main(int argc, char** argv) {
 
   // other config variables
   const size_t validation_set_percent = 25;  // TODO move to cfg
-  const size_t batches_between_params_store = 5;
 
   // read config
   ConfigReader reader;
@@ -190,19 +165,12 @@ int main(int argc, char** argv) {
          validation_px_count = per_sample_px_count * validation_set_size,
          train_px_count =
              per_sample_px_count * (samples_count - validation_set_size);
-  size_t l1_out_rows = gpu_alloc.samples[0].w - cfg.f1 + 1,
-         l2_out_rows = l1_out_rows - cfg.f2 + 1,
-         l3_out_rows = l2_out_rows - cfg.f3 + 1;
-  ParameterSet last_good_parameter_set(data_pipeline.layer_1()->weight_size(),
-                                       data_pipeline.layer_2()->weight_size(),
-                                       data_pipeline.layer_3()->weight_size(),
-                                       data_pipeline.layer_1()->bias_size(),
-                                       data_pipeline.layer_2()->bias_size(),
-                                       data_pipeline.layer_3()->bias_size());
 
   context.block();
 
-  // train
+  ///
+  /// train
+  ///
   for (size_t batch_id = 0; batch_id < epochs; batch_id++) {
     std::vector<PerSampleAllocationPool> train_set(samples_count);
     std::vector<PerSampleAllocationPool> validation_set(samples_count);
@@ -216,40 +184,10 @@ int main(int argc, char** argv) {
       std::cout << "Error: squared error is NAN" << std::endl;
       break;
     }
-    // Copy parameters so if we error in next batch we will still have proper
-    // values
-    if (batch_id > 1 && batch_id % batches_between_params_store == 0) {
-      std::cout << "(storing weights)" << std::endl;
-      last_good_parameter_set.store(context, gpu_alloc);
-    }
 
     data_pipeline.update_parameters(gpu_alloc.layer_1, gpu_alloc.layer_2,
                                     gpu_alloc.layer_3, train_set.size());
     context.block();
-
-    /* clang-format off */
-    // ConfigBasedDataPipeline& d = data_pipeline;
-    // d.print_buffer(gpu_alloc.layer_1.bias, "layer 1 bias", 1);
-    // d.print_buffer(gpu_alloc.layer_2.bias, "layer 2 bias", 1);
-    // d.print_buffer(gpu_alloc.layer_3.bias, "layer 3 bias", 1);
-    // d.print_buffer(gpu_alloc.layer_1.accumulating_grad_b, "layer 1 bias gradients", 1);
-    // d.print_buffer(gpu_alloc.layer_2.accumulating_grad_b, "layer 2 bias gradients", 1);
-    // d.print_buffer(gpu_alloc.layer_3.accumulating_grad_b, "layer 3 bias gradients", 1);
-
-    // d.print_buffer(gpu_alloc.layer_1.weights, "layer 1 weights", cfg.f1*cfg.f1);
-    // d.print_buffer(gpu_alloc.layer_2.weights, "layer 2 weights", cfg.f2*cfg.f2);
-    // d.print_buffer(gpu_alloc.layer_3.weights, "layer 3 weights", cfg.f3*cfg.f3);
-    // d.print_buffer(gpu_alloc.layer_1.accumulating_grad_w, "layer 1 weight gradients", cfg.f1*cfg.f1);
-    // d.print_buffer(gpu_alloc.layer_2.accumulating_grad_w, "layer 2 weight gradients", cfg.f2*cfg.f2);
-    // d.print_buffer(gpu_alloc.layer_3.accumulating_grad_w, "layer 3 weight gradients", cfg.f3*cfg.f3);
-
-    // d.print_buffer(gpu_alloc.layer_1.output, "layer 1 out", l1_out_rows);
-    // d.print_buffer(gpu_alloc.layer_2.output, "layer 2 out", l2_out_rows);
-    // d.print_buffer(gpu_alloc.layer_3.output, "layer 3 out", l3_out_rows);
-    // d.print_buffer(gpu_alloc.layer_1.deltas, "layer 1 deltas", l1_out_rows);
-    // d.print_buffer(gpu_alloc.layer_2.deltas, "layer 2 deltas", l2_out_rows);
-    // d.print_buffer(gpu_alloc.layer_3.deltas, "layer 3 deltas", l3_out_rows);
-    /* clang-format on */
 
     float validation_squared_error =
         execute_batch(false, data_pipeline, gpu_alloc, validation_set);
@@ -257,13 +195,7 @@ int main(int argc, char** argv) {
     // (we are printing per pixel values because they are easier to remember)
     float mean_train_err = train_squared_error / train_set.size(),
           mean_valid_err = validation_squared_error / validation_set.size();
-    // std::cout << "[" << batch_id << "] "  //
-    // << "mean train error: " << mean_train_err << " ("
-    // << (mean_train_err / train_px_count) << " per px)" << std::endl;
-
     std::cout << "[" << batch_id << "] "  //
-              /*<< "mean train error: " << mean_train_err << " ("
-              << (mean_train_err / train_px_count) << " per px), "*/
               << "mean validation error: " << mean_valid_err << " ("
               << (mean_valid_err / validation_px_count) << " per px)"
               << std::endl;
@@ -271,19 +203,20 @@ int main(int argc, char** argv) {
     context.block();
   }
 
+  ///
+  /// write parameters to file
+  ///
   if (out_path) {
-    data_pipeline.write_params_to_file(out_path,
-                                       last_good_parameter_set.weights_1,  //
-                                       last_good_parameter_set.weights_2,
-                                       last_good_parameter_set.weights_3,
-                                       last_good_parameter_set.bias_1,
-                                       last_good_parameter_set.bias_2,  //
-                                       last_good_parameter_set.bias_3);
+    data_pipeline.write_params_to_file(out_path, gpu_alloc.layer_1,
+                                       gpu_alloc.layer_2, gpu_alloc.layer_3);
   }
+  context.block();
 
   std::cout << "DONE" << std::endl;
   exit(EXIT_SUCCESS);
 }
+
+// ######################################################################
 
 ///
 /// Forward
@@ -308,10 +241,8 @@ void execute_forward(ConfigBasedDataPipeline& data_pipeline,
   context->block();
 
   // process with layers
-  auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
-                                          gpu_alloc.layer_2,  //
-                                          gpu_alloc.layer_3,  //
-                                          input_luma, w, h);
+  data_pipeline.forward(gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
+                        input_luma, w, h);
   // dbg output read
   // data_pipeline.print_buffer(gpu_alloc.layer_1.output, "layer 1", h);
   // data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2", h);

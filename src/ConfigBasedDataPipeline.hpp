@@ -55,10 +55,9 @@ class ConfigBasedDataPipeline : public DataPipeline {
   /* clang-format on */
 
   void write_params_to_file(const char* const file_path,  //
-                            std::vector<float>& w1, std::vector<float>& w2,
-                            std::vector<float>& w3,  //
-                            std::vector<float>& b1, std::vector<float>& b2,
-                            std::vector<float>& b3);
+                            cnn_sr::CnnLayerGpuAllocationPool,
+                            cnn_sr::CnnLayerGpuAllocationPool,
+                            cnn_sr::CnnLayerGpuAllocationPool);
 
   /** update weights and biases*/
   void update_parameters(cnn_sr::CnnLayerGpuAllocationPool&,
@@ -80,7 +79,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
 
  private:
   void fill_random_parameters(LayerData&, ParametersDistribution&);
-  void load_parameters_file(const char* const);
+  size_t load_parameters_file(const char* const);
   cl_event last_layer_delta(opencl::MemoryHandle, opencl::MemoryHandle,
                             opencl::MemoryHandle&, float, size_t, size_t,
                             cl_event* ev = nullptr);
@@ -93,6 +92,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
   LayerData layer_data_1;
   LayerData layer_data_2;
   LayerData layer_data_3;
+  size_t epochs = 0;
 
   opencl::Kernel* _layer_1_kernel = nullptr;
   opencl::Kernel* _layer_2_kernel = nullptr;
