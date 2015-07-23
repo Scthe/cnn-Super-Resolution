@@ -153,11 +153,14 @@ void DataPipeline::load_kernels(int load_flags) {
   }
 }
 
-opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d) {
+opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d,
+                                                  bool skip_relu) {
   // TODO current_filter_count=64 causes errors:
   // CL_INVALID_COMMAND_QUEUE (maybe gpu memory alloc?)
   char buf[255];
-  snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.current_filter_count);
+  auto defs = skip_relu ? "-D CURRENT_FILTER_COUNT=%d -D SKIP_RELU"
+                        : "-D CURRENT_FILTER_COUNT=%d";
+  snprintf(buf, 255, defs, d.current_filter_count);
   return _context->create_kernel(layer_kernel_file, buf);
 }
 

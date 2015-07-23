@@ -85,8 +85,11 @@ void main(__read_only __global float* input,
       // add bias and write cached results to target buffer
       for (size_t filter_id = 0; filter_id < CURRENT_FILTER_COUNT; filter_id++) {
         float result = vals_by_filter[filter_id] + B[filter_id];
-        // apply RELU
+#ifdef SKIP_RELU
+        target[out_idx + filter_id] = result;
+#else
         target[out_idx + filter_id] = max(result, 0.0f);
+#endif // SKIP_RELU
       }
   }
 }

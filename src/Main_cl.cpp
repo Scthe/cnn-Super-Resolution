@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
   }
 
   // other config variables
-  const size_t validation_set_percent = 25;  // TODO move to cfg
+  const size_t validation_set_percent = 20;  // TODO move to cfg
 
   // read config
   ConfigReader reader;

@@ -60,9 +60,9 @@ void ConfigBasedDataPipeline::load_kernels(int load_flags) {
 
   if (load_layers) {
     /* clang-format off */
-    if (!_layer_1_kernel) _layer_1_kernel = create_layer_kernel(layer_data_1);
-    if (!_layer_2_kernel) _layer_2_kernel = create_layer_kernel(layer_data_2);
-    if (!_layer_3_kernel) _layer_3_kernel = create_layer_kernel(layer_data_3);
+    if (!_layer_1_kernel) _layer_1_kernel = create_layer_kernel(layer_data_1, false);
+    if (!_layer_2_kernel) _layer_2_kernel = create_layer_kernel(layer_data_2, false);
+    if (!_layer_3_kernel) _layer_3_kernel = create_layer_kernel(layer_data_3, true);
     /* clang-format on */
   }
 
@@ -283,7 +283,7 @@ size_t ConfigBasedDataPipeline::load_parameters_file(
     auto key = node->key;
     // std::cout << key << std::endl;
 
-    if (strcmp(key, "epoch") == 0 && node->value.getTag() == JSON_NUMBER) {
+    if (strcmp(key, "epochs") == 0 && node->value.getTag() == JSON_NUMBER) {
       epochs = (unsigned int)node->value.toNumber();
     } else if (strcmp(key, layer_parameters_key[0]) == 0) {
       load_layer_parameters(node, layer_data_1);
