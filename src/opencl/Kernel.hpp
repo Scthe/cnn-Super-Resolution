@@ -4,6 +4,8 @@
 #include "CL/opencl.h"
 #include <iostream>  // for std::ostream& operator<<(..)
 
+#define MAX_KERNEL_IDENTIFIER_SIZE 128
+
 namespace opencl {
 
 // forward declaration
@@ -12,7 +14,8 @@ typedef size_t MemoryHandle;
 
 class Kernel {
  public:
-  void init(Context *, cl_kernel, cl_program);
+  void init(Context *, cl_kernel, cl_program,  //
+            const char *, const char *);
   void cleanup();
   friend std::ostream &operator<<(std::ostream &os, opencl::Kernel &p);
 
@@ -58,6 +61,10 @@ class Kernel {
 
   inline size_t get_max_work_group_size() const { return max_work_group_size; }
   inline Context *get_context() const { return context; }
+  inline cl_ulong get_total_execution_time() const {
+    return execution_time_sum;
+  }
+  inline const char *get_human_identifier() const { return human_identifier; }
 
  private:
   /**
@@ -81,6 +88,10 @@ class Kernel {
   size_t arg_stack_size;
   size_t assigned_local_memory;  // by hand, since it does always work
   bool initialized = false;
+
+  /** meaningful only if context->is_running_profile_mode */
+  cl_ulong execution_time_sum = 0;
+  char human_identifier[MAX_KERNEL_IDENTIFIER_SIZE];
 };
 
 //

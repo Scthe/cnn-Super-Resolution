@@ -73,7 +73,7 @@ class Context {
  public:
   Context();
   ~Context();
-  void init();
+  void init(bool profile = false);
   void check_error(bool, char const*);
   void check_error(cl_int, char const*);
   void print_app_memory_usage();
@@ -241,7 +241,7 @@ class Context {
   /**
    * was context initialized ? AKA can I use any cmds beside info gathering ?
    */
-  bool was_initialized() { return initialized; }
+  bool is_initialized() { return initialized; }
 
   /**
    * device that this context is bound to
@@ -252,6 +252,9 @@ class Context {
    * platform that this context is bound to
    */
   PlatformInfo platform() { return _platform; }
+
+  /** code profile mode - kernel execution timings etc. */
+  bool is_running_profile_mode() { return _profiling; }
 
   /**
    * command queue. This may be called leaky abstraction, but it's not like
@@ -274,6 +277,7 @@ class Context {
   bool initialized;
   cl_context _clcontext;
   cl_command_queue _clcommand_queue;
+  bool _profiling;
 
   DeviceInfo _device;
   PlatformInfo _platform;

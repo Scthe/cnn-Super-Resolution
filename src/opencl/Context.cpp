@@ -42,9 +42,10 @@ Context::Context() : initialized(false) {}
 
 Context::~Context() { this->_cleanup(); }
 
-void Context::init() {
+void Context::init(bool profile) {
   // TODO ad ability to select platform & device
   cl_int ciErr1;
+  _profiling = profile;
 
   // Get an OpenCL platform
   cl_platform_id platform_id;
@@ -67,7 +68,8 @@ void Context::init() {
 
   // Create a command-queue
   _clcommand_queue =
-      clCreateCommandQueue(_clcontext, _device.device_id, 0, &ciErr1);
+      clCreateCommandQueue(_clcontext, _device.device_id,
+                           _profiling ? CL_QUEUE_PROFILING_ENABLE : 0, &ciErr1);
   check_error(ciErr1, "Error in clCreateCommandQueue");
 
   _kernels.reserve(max_resources_per_type);
@@ -77,8 +79,22 @@ void Context::init() {
 }
 
 void Context::_cleanup() {
+  // can be called only once
+  if (!initialized) return;
+  initialized = false;
+  this->block();
+
   // kernels
   for (auto kernel = begin(_kernels); kernel != end(_kernels); ++kernel) {
+    // we are done with the kernel, print it's execution time sum
+    if (_profiling) {
+      auto timer = kernel->get_total_execution_time();
+      auto timer_in_s = timer / 1000000000.0;
+      std::cout << "Kernel " << kernel->get_human_identifier()
+                << " total execution time: " << timer << "ns = " << timer_in_s
+                << "s" << std::endl;
+    }
+
     kernel->cleanup();
   }
 
@@ -206,7 +222,7 @@ Kernel* Context::create_kernel(char const* file_path, char const* cmp_opt,
   cl_kernel kernel_id = clCreateKernel(program_id, main_f, &ciErr1);
   check_error(ciErr1, "Error in clCreateKernel");
 
-  kernel_ptr->init(this, kernel_id, program_id);
+  kernel_ptr->init(this, kernel_id, program_id, file_path, cmp_opt);
 
   return kernel_ptr;
 }

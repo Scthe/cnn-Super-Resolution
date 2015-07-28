@@ -6,7 +6,8 @@
 
 namespace opencl {
 
-void Kernel::init(Context *ctx, cl_kernel k, cl_program p) {
+void Kernel::init(Context *ctx, cl_kernel k, cl_program p, const char *file,
+                  const char *args) {
   if (initialized) cleanup();
   this->context = ctx;
   this->kernel_id = k;
@@ -27,6 +28,13 @@ void Kernel::init(Context *ctx, cl_kernel k, cl_program p) {
                                CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
                                1024, &pref_work_group_multiple, nullptr);
   context->check_error(ciErr1, "Could not get kernel informations");
+
+  file = file == nullptr ? "??" : file;
+  args = args == nullptr ? "--" : args;
+  if (file != nullptr && args != nullptr) {
+    snprintf(this->human_identifier, MAX_KERNEL_IDENTIFIER_SIZE, "'%s'[%s]",
+             file, args);
+  }
 }
 
 void Kernel::cleanup() {
@@ -68,7 +76,7 @@ cl_event Kernel::execute(cl_uint work_dim,                //
                          int events_to_wait_for_count) {
   // TODO get work_dim from sizeof ?
   // TODO assert sizeof(global) == sizeof(local)
-  context->check_error(context->was_initialized(),
+  context->check_error(context->is_initialized(),
                        "Context was not initialized");
   check_work_parameters(work_dim, global_work_size, local_work_size);
 
@@ -98,6 +106,17 @@ cl_event Kernel::execute(cl_uint work_dim,                //
       events_to_wait_for_count, events_to_wait_for,  // sync events
       &finish_token);
   context->check_error(ciErr1, "Error in clEnqueueNDRangeKernel");
+
+  if (context->is_running_profile_mode()) {
+    clWaitForEvents(1, &finish_token);
+    cl_ulong start = 0, end = 0;
+    clGetEventProfilingInfo(finish_token, CL_PROFILING_COMMAND_START,
+                            sizeof(cl_ulong), &start, NULL);
+    clGetEventProfilingInfo(finish_token, CL_PROFILING_COMMAND_END,
+                            sizeof(cl_ulong), &end, NULL);
+    execution_time_sum += (end - start);
+  }
+
   return finish_token;
 }
 

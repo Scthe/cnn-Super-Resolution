@@ -71,6 +71,7 @@ int main(int argc, char** argv) {
   /* clang-format off */
   argparse.add_argument("train").help("Train mode");
   argparse.add_argument("dry").help("Do not store result");
+  argparse.add_argument("profile").help("Print kernel execution times");
   argparse.add_argument("-c", "--config").required().help("CNN configuration");
   // argparse.add_argument("-p", "--parameters-file").help("Override parameters file provided in config");
   argparse.add_argument("-i", "--in").required().help("Image during forward, samples directory during training");
@@ -84,6 +85,7 @@ int main(int argc, char** argv) {
 
   bool train = argparse.has_arg("train");
   bool dry = argparse.has_arg("dry");
+  bool profile = argparse.has_arg("profile");
   auto config_path = argparse.value("config");
   // auto pars_file_path = argparse.value("parameters-file");
   auto in_path = argparse.value("in");
@@ -94,6 +96,12 @@ int main(int argc, char** argv) {
   if (!dry && !out_path) {
     std::cout << "Either provide out path or do the dry run" << std::endl;
     exit(EXIT_FAILURE);
+  }
+
+  if (profile) {
+    std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl
+              << "!!! RUNNING IN PROFILING MODE !!!" << std::endl
+              << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
   }
 
   // print base info
@@ -119,7 +127,7 @@ int main(int argc, char** argv) {
 
   // opencl context
   opencl::Context context;
-  context.init();
+  context.init(profile);
   ConfigBasedDataPipeline data_pipeline(cfg, &context);
   data_pipeline.init();
   GpuAllocationPool gpu_alloc;
