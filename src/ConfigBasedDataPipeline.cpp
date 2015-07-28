@@ -154,8 +154,6 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                    layer_2_out_dim[0], layer_2_out_dim[1],  //
                                    &event2_2);
 
-  _context->block();  // TODO remove - run backp after leayer's delta
-
   // gradient w, gradient b for all layers
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 3rd layer"
@@ -163,7 +161,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   DataPipeline::backpropagate(layer_data_3,                            //
                               layer_2_alloc.output, layer_3_alloc,     //
                               layer_3_out_dim[0], layer_3_out_dim[1],  //
-                              &event2_3);
+                              &event2_1);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 2nd layer"
@@ -171,7 +169,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   DataPipeline::backpropagate(layer_data_2,                            //
                               layer_1_alloc.output, layer_2_alloc,     //
                               layer_2_out_dim[0], layer_2_out_dim[1],  //
-                              &event2_3);
+                              &event2_2);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 1st layer"

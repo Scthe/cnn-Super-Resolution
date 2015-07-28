@@ -181,18 +181,17 @@ int main(int argc, char** argv) {
     float train_squared_error =
         execute_batch(true, data_pipeline, gpu_alloc, train_set);
 
-    // if error happened we stop the training.
-    if (std::isnan(train_squared_error)) {
-      std::cout << "Error: squared error is NAN" << std::endl;
-      break;
-    }
-
     data_pipeline.update_parameters(gpu_alloc.layer_1, gpu_alloc.layer_2,
                                     gpu_alloc.layer_3, train_set.size());
-    context.block();
 
     float validation_squared_error =
         execute_batch(false, data_pipeline, gpu_alloc, validation_set);
+
+    // if error happened we stop the training.
+    if (std::isnan(validation_squared_error)) {
+      std::cout << "Error: squared error is NAN" << std::endl;
+      break;
+    }
 
     // (we are printing per pixel values because they are easier to remember)
     float mean_train_err = train_squared_error / train_set.size(),
@@ -221,6 +220,8 @@ int main(int argc, char** argv) {
   context.block();
 
   std::cout << "DONE" << std::endl;
+  // calling exit does not call Context's destructor - do this by hand
+  context.~Context();
   exit(EXIT_SUCCESS);
 }
 
@@ -288,16 +289,20 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
                                             gpu_alloc.layer_3,  //
                                             sample.input_luma, w, h);
     // squared difference
-    squared_error += data_pipeline.squared_error(
-        sample.input_luma, gpu_alloc.layer_3.output, w, h, &forward_ev);
-    if (std::isnan(squared_error)) {
-      return squared_error;
+    if (!backpropagate) {
+      // we are ignoring train error anyway
+      squared_error += data_pipeline.squared_error(
+          sample.input_luma, gpu_alloc.layer_3.output, w, h, &forward_ev);
+      if (std::isnan(squared_error)) {
+        return squared_error;
+      }
     }
 
     if (backpropagate) {
-      auto weight_decay_value = data_pipeline.weight_decay(
-          gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
-          cfg->weight_decay_parameter, &forward_ev);
+      // auto weight_decay_value = data_pipeline.weight_decay(
+      // gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
+      // cfg->weight_decay_parameter, &forward_ev);
+      auto weight_decay_value = 0.0f;
       data_pipeline.backpropagate(gpu_alloc.layer_1,  //
                                   gpu_alloc.layer_2,  //
                                   gpu_alloc.layer_3,  //
