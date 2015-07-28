@@ -29,7 +29,7 @@ __OBJ = Config.o \
 	LayerData.o \
 	DataPipeline.o \
 	ConfigBasedDataPipeline.o \
-	Utils.o \
+	pch.o \
 	Context.o \
 	UtilsOpenCL.o \
 	Kernel.o \
@@ -40,6 +40,7 @@ OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ)) # append ODIR to each entry
 
 # _TEST_OBJ = TestRunner.o $(__OBJ) TestDataProvider.o LayerDeltasTest.o BackpropagationTest.o
 _TEST_OBJ = TestRunner.o $(__OBJ) \
+	TestCase.o \
 	ExtractLumaTest.o \
 	SwapLumaTest.o \
 	SquaredErrorTest.o \

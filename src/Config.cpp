@@ -1,13 +1,9 @@
 #include "Config.hpp"
-#include <iostream>   // for std::cout
-#include <stdexcept>  // std::runtime_error
-#include <cmath>      // for std::abs
-#include <array>
-#include <sstream>
-#include <vector>  // TODO remove when json parsing is changed
+#include <cmath>    // for std::abs
+#include <cstring>  // for strcmp when reading json
+#include <vector>   // TODO remove when json parsing is changed
 
 #include "json/gason.h"
-#include "Utils.hpp"
 
 namespace cnn_sr {
 using namespace utils;
@@ -19,34 +15,6 @@ const char* const parameters_keys[3] = {"parameters_distribution_1",
 ParametersDistribution::ParametersDistribution(float mean_w, float mean_b,
                                                float sd_w, float sd_b)
     : mean_w(mean_w), sd_w(sd_w), mean_b(mean_b), sd_b(sd_b) {}
-
-///
-/// Vaildation macros. @see Config::validate
-/// TODO change to functions, move to utils like rest of asserts
-///
-#define GT_ZERO(VALUE)                                                  \
-  if (VALUE <= 0) {                                                     \
-    is_correct = false;                                                 \
-    err_stream << "Value of " << #VALUE                                 \
-               << "should be greater then zero, meanwhile is " << VALUE \
-               << std::endl;                                            \
-  }
-
-#define GTE_ZERO(VALUE)                                                        \
-  if (VALUE < 0) {                                                             \
-    is_correct = false;                                                        \
-    err_stream << "Value of " << #VALUE                                        \
-               << "should be greater/equall then zero, meanwhile is " << VALUE \
-               << std::endl;                                                   \
-  }
-
-#define IS_ODD(VALUE)                                                \
-  if (!is_odd(VALUE)) {                                              \
-    is_correct = false;                                              \
-    err_stream << "Value of " << #VALUE                              \
-               << " should be an odd number, meanwhile is " << VALUE \
-               << std::endl;                                         \
-  }
 
 ///
 /// Config
@@ -65,59 +33,44 @@ Config::Config(size_t n1, size_t n2,                                       //
       f3(f3),
       momentum(momentum),
       weight_decay_parameter(weight_decay),
-      // learning_rate{learning_rates[0], learning_rates[1], learning_rates[2]},
+      parameters_file(parameters_file),
       params_distr_1(pd1),
       params_distr_2(pd2),
       params_distr_3(pd3) {
   for (size_t i = 0; i < 3; i++) {
     this->learning_rate[i] = learning_rates[i];
   }
-  if (parameters_file) {
-    auto len = strlen(parameters_file);
-    this->parameters_file = new char[len + 1];
-    strncpy(this->parameters_file, parameters_file, len);
-    this->parameters_file[len] = '\0';
-  }
 }
-
-Config::~Config() { delete[] this->parameters_file; }
 
 size_t Config::total_padding() const { return f1 + f2 + f3 - 3; }
 
 void Config::validate(Config& config) {
-  std::stringstream err_stream;
-  bool is_correct = true;
   // spatial size works best if is odd number
-  IS_ODD(config.f1)
-  IS_ODD(config.f2)
-  IS_ODD(config.f3)
+  utils::require(is_odd(config.f1), "f1 should be odd");
+  utils::require(is_odd(config.f2), "f2 should be odd");
+  utils::require(is_odd(config.f3), "f3 should be odd");
   // both filter count and spatial size cannot be 0
-  GT_ZERO(config.n1)
-  GT_ZERO(config.n2)
-  GT_ZERO(config.f1)
-  GT_ZERO(config.f2)
-  GT_ZERO(config.f3)
+  utils::require(config.n1 > 0, "n1 should be >0");
+  utils::require(config.n2 > 0, "n2 should be >0");
+  utils::require(config.f1 > 0, "f1 should be >0");
+  utils::require(config.f2 > 0, "f2 should be >0");
+  utils::require(config.f3 > 0, "f3 should be >0");
 
-  GT_ZERO(config.momentum)
-  GTE_ZERO(config.weight_decay_parameter)
-  GT_ZERO(config.learning_rate[0])
-  GT_ZERO(config.learning_rate[1])
-  GT_ZERO(config.learning_rate[2])
+  utils::require(config.f3 > 0, "f3 should be >0");
+  utils::require(config.weight_decay_parameter >= 0,
+                 "weight_decay should be >0");
+  utils::require(config.learning_rate[0] > 0 && config.learning_rate[1] > 0 &&
+                     config.learning_rate[2] > 0,
+                 "All learning rates should be >0");
 
   // ParametersDistribution
-  std::array<ParametersDistribution*, 3> pds = {{&config.params_distr_1,  //
-                                                 &config.params_distr_2,  //
-                                                 &config.params_distr_3}};
-  for (auto e = begin(pds); e != end(pds); ++e) {
-    auto params_distr = *e;
-    GTE_ZERO(params_distr->mean_w)
-    GTE_ZERO(params_distr->mean_b)
-    GT_ZERO(params_distr->sd_w)
-    GTE_ZERO(params_distr->sd_b)
-  }
-
-  if (!is_correct) {
-    throw std::runtime_error(err_stream.str());
+  ParametersDistribution* pd_arr[3] = {&config.params_distr_1,  //
+                                       &config.params_distr_2,  //
+                                       &config.params_distr_3};
+  for (auto i = 0; i < 3; i++) {
+    auto pd = pd_arr[i];
+    utils::require(pd->sd_w > 0, "std dev. for weights should be > 0");
+    utils::require(pd->sd_b >= 0, "std dev. for bias should be >= 0");
   }
 }
 
@@ -128,11 +81,11 @@ void Config::validate(Config& config) {
 struct ConfigHelper {
   size_t n1, n2, f1, f2, f3;
   float momentum, weight_decay, lr1, lr2, lr3;
-  const char* parameters_file = nullptr;
+  std::string parameters_file = "";
   std::vector<float> learning_rates;
 };
 
-void fix_params_dist(ParametersDistribution& d) {
+void fix_params_distribution(ParametersDistribution& d) {
   d.mean_w = std::abs(d.mean_w);
   d.mean_b = std::abs(d.mean_b);
   d.sd_w = std::abs(d.sd_w);
@@ -141,16 +94,14 @@ void fix_params_dist(ParametersDistribution& d) {
 
 void load_parameters_distr(JsonNode* node, ParametersDistribution& data) {
   for (auto subnode : node->value) {
-    JSON_READ_FLOAT(subnode, data.mean_w, "mean_w")
-    JSON_READ_FLOAT(subnode, data.mean_b, "mean_b")
-    JSON_READ_FLOAT(subnode, data.sd_w, "std_deviation_w")
-    JSON_READ_FLOAT(subnode, data.sd_b, "std_deviation_b")
+    utils::try_read_float(*subnode, data.mean_w, "mean_w");
+    utils::try_read_float(*subnode, data.mean_b, "mean_b");
+    utils::try_read_float(*subnode, data.sd_w, "std_deviation_w");
+    utils::try_read_float(*subnode, data.sd_b, "std_deviation_b");
   }
 }
 
 Config ConfigReader::read(const char* const file) {
-  std::cout << "Loading config from: '" << file << "'" << std::endl;
-
   JsonValue value;
   JsonAllocator allocator;
   std::string source;
@@ -160,15 +111,16 @@ Config ConfigReader::read(const char* const file) {
   ParametersDistribution pd1, pd2, pd3;
   for (auto node : value) {
     auto key = node->key;
-    JSON_READ_UINT(node, cfg_h, n1)
-    JSON_READ_UINT(node, cfg_h, n2)
-    JSON_READ_UINT(node, cfg_h, f1)
-    JSON_READ_UINT(node, cfg_h, f2)
-    JSON_READ_UINT(node, cfg_h, f3)
-    JSON_READ_FLOAT(node, cfg_h.momentum, "momentum")
-    JSON_READ_FLOAT(node, cfg_h.weight_decay, "weight_decay_parameter")
-    JSON_READ_STR(node, cfg_h, parameters_file)
-    JSON_READ_NUM_ARRAY(node, cfg_h, learning_rates)
+    utils::try_read_uint(*node, cfg_h.n1, "n1");
+    utils::try_read_uint(*node, cfg_h.n2, "n2");
+    utils::try_read_uint(*node, cfg_h.f1, "f1");
+    utils::try_read_uint(*node, cfg_h.f2, "f2");
+    utils::try_read_uint(*node, cfg_h.f3, "f3");
+    utils::try_read_float(*node, cfg_h.momentum, "momentum");
+    utils::try_read_float(*node, cfg_h.weight_decay, "weight_decay_parameter");
+    utils::try_read_string(*node, cfg_h.parameters_file, "parameters_file");
+    utils::try_read_vector(*node, cfg_h.learning_rates, "learning_rates");
+
     if (strcmp(key, parameters_keys[0]) == 0) {
       load_parameters_distr(node, pd1);
     } else if (strcmp(key, parameters_keys[1]) == 0) {
@@ -178,19 +130,18 @@ Config ConfigReader::read(const char* const file) {
     }
   }
 
-  fix_params_dist(pd1);
-  fix_params_dist(pd2);
-  fix_params_dist(pd3);
-  if (cfg_h.learning_rates.size() < 3)
-    throw std::runtime_error(
-        "[Warning] Expected 3 learning rates (one per layer) to be provided");
+  fix_params_distribution(pd1);
+  fix_params_distribution(pd2);
+  fix_params_distribution(pd3);
+  utils::require(cfg_h.learning_rates.size() == 3,
+                 "Expected 3 learning rates (one per layer) to be provided");
 
   Config cfg(cfg_h.n1, cfg_h.n2,            //
              cfg_h.f1, cfg_h.f2, cfg_h.f3,  //
              cfg_h.momentum, cfg_h.weight_decay,
              &cfg_h.learning_rates[0],  //
              pd1, pd2, pd3,             //
-             cfg_h.parameters_file);
+             cfg_h.parameters_file.c_str());
   Config::validate(cfg);
 
   return cfg;
@@ -209,7 +160,7 @@ std::ostream& operator<<(std::ostream& os,
 std::ostream& operator<<(std::ostream& os, const cnn_sr::Config& cfg) {
   /* clang-format off */
   os << "Config {" << std::endl
-     << "  parameters file: '" << (cfg.parameters_file? cfg.parameters_file : "") << "'" << std::endl
+     << "  parameters file: '" << cfg.parameters_file << "'" << std::endl
      << "  momentum: " << cfg.momentum << std::endl
      << "  learning rates: { " << cfg.learning_rate[0] << ", "
                                << cfg.learning_rate[1] << ", "

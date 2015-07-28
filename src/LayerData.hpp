@@ -52,7 +52,9 @@ struct LayerData {
   const size_t current_filter_count;
   const size_t f_spatial_size;
 
+  /** stale */
   std::vector<float> weights;
+  /** stale */
   std::vector<float> bias;
 };
 }

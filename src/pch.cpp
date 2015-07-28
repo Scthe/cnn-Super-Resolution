@@ -1,18 +1,58 @@
-#include "Utils.hpp"
+#include "pch.hpp"
 
-#include <string>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>  // std::runtime_error
 #include <ios>        // std::ios_base::failure
 #include <dirent.h>   // list files in directory
 #include <cstdlib>    // for string -> number conversion
-
+#include <cstring>    // for strcmp/strlen when reading json
+#
 #include "json/gason.h"
 
 namespace cnn_sr {
 namespace utils {
 
+///
+/// Utils
+///
+void require(bool check, const char* msg) {
+  if (!check) {
+    throw std::runtime_error(msg);
+  }
+}
+
+void dump_vector(std::ostream& os, std::vector<float>& data,
+                 const char* line_prefix, size_t per_line,
+                 bool add_line_numbers) {
+  auto len = data.size();
+  size_t lines;
+  if (per_line == 0) {
+    lines = 1;
+    per_line = len;
+  } else {
+    lines = len / per_line;
+  }
+
+  line_prefix = line_prefix ? line_prefix : "";
+
+  for (size_t i = 0; i < lines; i++) {
+    os << line_prefix;
+    if (add_line_numbers) os << "[" << i << "] ";
+
+    for (size_t j = 0; j < per_line; j++) {
+      size_t idx = i * per_line + j;
+      if (idx < len) os << data[idx];
+      if (j + 1 < per_line) os << ", ";
+    }
+    if (i + 1 < lines) os << std::endl;
+  }
+}
+
+///
+/// File system
+///
 void get_file_content(const char* const filename, std::stringstream& sstr) {
   // TODO use to load kernel file too
   std::fstream file(filename);
@@ -44,33 +84,9 @@ void list_files(const char* const path, std::vector<std::string>& target) {
   }
 }
 
-void dump_vector(std::ostream& os, std::vector<float>& data,
-                 const char* line_prefix, size_t per_line,
-                 bool add_line_numbers) {
-  auto len = data.size();
-  size_t lines;
-  if (per_line == 0) {
-    lines = 1;
-    per_line = len;
-  } else {
-    lines = len / per_line;
-  }
-
-  line_prefix = line_prefix ? line_prefix : "";
-
-  for (size_t i = 0; i < lines; i++) {
-    os << line_prefix;
-    if (add_line_numbers) os << "[" << i << "] ";
-
-    for (size_t j = 0; j < per_line; j++) {
-      size_t idx = i * per_line + j;
-      if (idx < len) os << data[idx];
-      if (j + 1 < per_line) os << ", ";
-    }
-    if (i + 1 < lines) os << std::endl;
-  }
-}
-
+///
+/// Json utils
+///
 void read_json_file(const char* const file, JsonValue& value,
                     JsonAllocator& allocator, std::string& file_content,
                     int root_type) {
@@ -95,6 +111,45 @@ void read_json_file(const char* const file, JsonValue& value,
   if (value.getTag() != root_type) {
     throw std::runtime_error("Expected root of JSON file had invalid type");
   }
+}
+
+bool try_read_float(JsonNode& node, float& lhs, const char* key) {
+  if (strcmp(node.key, key) == 0 && node.value.getTag() == JSON_NUMBER) {
+    lhs = (float)node.value.toNumber();
+    return true;
+  }
+  return false;
+}
+
+bool try_read_uint(JsonNode& node, unsigned int& lhs, const char* key) {
+  if (strcmp(node.key, key) == 0 && node.value.getTag() == JSON_NUMBER) {
+    lhs = (unsigned int)node.value.toNumber();
+    return true;
+  }
+  return false;
+}
+
+bool try_read_vector(JsonNode& node, std::vector<float>& lhs, const char* key) {
+  // std::cout << "key >> '" << node.key << "' vs '" << key
+  // << "' == " << (strcmp(node.key, key)) << std::endl;
+  if (strcmp(node.key, key) == 0 && node.value.getTag() == JSON_ARRAY) {
+    auto arr_raw = node.value;
+    for (auto val : arr_raw) {
+      /* ASSERT(val->value.getTag() == JSON_NUMBER);*/
+      float v = (float)val->value.toNumber();
+      lhs.push_back(v);
+    }
+    return true;
+  }
+  return false;
+}
+
+bool try_read_string(JsonNode& node, std::string& lhs, const char* key) {
+  if (strcmp(node.key, key) == 0 && node.value.getTag() == JSON_STRING) {
+    lhs.assign(node.value.toString());
+    return true;
+  }
+  return false;
 }
 
 ///
@@ -161,7 +216,8 @@ ArgOption& Argparse::add_argument(size_t mlen, const char** ms) {
     throw std::runtime_error("Argument does not have valid mnemonic");
   if (opt._name.empty())
     throw std::runtime_error(
-        "Argument does not have valid name (at least one mnemonic should: not "
+        "Argument does not have valid name (at least one mnemonic should: "
+        "not "
         "have '-' prefix or start with '--')");
   return opt;
 }

@@ -1,9 +1,5 @@
 #include "TestSpecsDeclarations.hpp"
-
-#include <cstring>  // for strcmp
 #include "../../src/Config.hpp"
-#include "../../src/Utils.hpp"
-#include "../TestException.hpp"
 
 namespace test {
 namespace specs {
@@ -95,7 +91,7 @@ bool ConfigTest::operator()(size_t data_set_id,
                 "learning rate does not match");
     // std::cout << c1.parameters_file << "'" << std::endl;
     // std::cout << c2.parameters_file << "'" << std::endl;
-    assert_true(strcmp(c1.parameters_file, c2.parameters_file) == 0,
+    assert_true(c1.parameters_file.compare(c2.parameters_file) == 0,
                 "parameters_file does not match");
     assert_true(params_cmp(c1.params_distr_1, c2.params_distr_1),
                 "parameters distribution 1 does not match");
@@ -109,9 +105,9 @@ bool ConfigTest::operator()(size_t data_set_id,
   } catch (IOException& e) {
     std::cout << e.what() << std::endl;
     io_err = true;
-  }/* catch (...) {
-    assert_true(false, "Unknown error");
-  }*/
+  } /* catch (...) {
+     assert_true(false, "Unknown error");
+   }*/
 
   assert_true(io_err == data.expect_io_error, "Expected IO error");
   assert_true(invalid_val == data.expect_invalid_val,

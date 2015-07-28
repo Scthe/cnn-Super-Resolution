@@ -1,28 +1,9 @@
-#ifndef TEST_RUNNER_H
-#define TEST_RUNNER_H
+#ifndef TEST_CASE_H
+#define TEST_CASE_H
 
-///
-/// This file contains various definitions to make tests more concise
-///
-
-#include <string>
-#include <vector>
-
-///
-/// macro - utils
-///
-#define STRINGIFY2(s) #s
-#define STRINGIFY(s) STRINGIFY2(s)
-
-#define CONCATENATE_DETAIL(x, y) x##y
-#define CONCATENATE(x, y) CONCATENATE_DETAIL(x, y)
-
-namespace cnn_sr {
-class DataPipeline;
-}
-namespace opencl {
-typedef size_t MemoryHandle;
-}
+#include "../src/pch.hpp"
+#include <stdexcept>
+#include <sstream>
 
 namespace test {
 
@@ -33,15 +14,30 @@ namespace test {
 float activation_function(float);
 float activation_function_derivative(float);
 
+///
+///  TestException
+///
+class TestException : public std::runtime_error {
+ public:
+  TestException();
+  TestException(const char *);
+  TestException(const TestException &);
+
+  virtual const char *what() const throw();
+
+ private:
+  std::ostringstream cnvt;
+};
+
+///
+/// TestCase etc.
+///
 struct DataSet {
   DataSet(std::string name) : name(name) {}
   DataSet() {}
   std::string name;
 };
 
-/**
- * main test class to inherit from
- */
 class TestCase {
  public:
   ~TestCase() {}
@@ -63,9 +59,6 @@ class TestCase {
 
   template <typename T>
   void assert_not_null(T *, const char *msg = nullptr);
-
- private:
-  char msg_buffer[255];  // TODO remove
 };
 
 ///
@@ -79,4 +72,4 @@ void TestCase::assert_not_null(T *ptr, const char *msg) {
 }
 }
 
-#endif /* TEST_RUNNER_H   */
+#endif /* TEST_CASE_H   */

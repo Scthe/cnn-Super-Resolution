@@ -9,7 +9,7 @@
 #include "Config.hpp"
 #include "LayerData.hpp"
 #include "ConfigBasedDataPipeline.hpp"
-#include "Utils.hpp"
+#include "pch.hpp"
 #include "opencl\Context.hpp"
 #include "opencl\UtilsOpenCL.hpp"
 

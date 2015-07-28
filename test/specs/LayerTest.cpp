@@ -9,7 +9,6 @@
 
 #include "../../src/DataPipeline.hpp"
 #include "../../src/LayerData.hpp"
-#include "../../src/Utils.hpp"
 
 auto test_data_file = "test/data/test_cases.json";
 
@@ -135,17 +134,18 @@ bool LayerTest::operator()(size_t data_set_id,
 
 bool read_layer_data(const JsonValue& object, LayerDataSet& data) {
   // ASSERT(object.getTag() == JSON_TAG_OBJECT);
+  using namespace cnn_sr::utils;
 
   for (auto node : object) {
-    JSON_READ_UINT(node, data, n_prev_filter_cnt)
-    JSON_READ_UINT(node, data, f_spatial_size)
-    JSON_READ_UINT(node, data, current_filter_count)
-    JSON_READ_UINT(node, data, input_w)
-    JSON_READ_UINT(node, data, input_h)
-    JSON_READ_NUM_ARRAY(node, data, input)
-    JSON_READ_NUM_ARRAY(node, data, output)
-    JSON_READ_NUM_ARRAY(node, data, weights)
-    JSON_READ_NUM_ARRAY(node, data, bias)
+    try_read_uint(*node, data.n_prev_filter_cnt, "n_prev_filter_cnt");
+    try_read_uint(*node, data.f_spatial_size, "f_spatial_size");
+    try_read_uint(*node, data.current_filter_count, "current_filter_count");
+    try_read_uint(*node, data.input_w, "input_w");
+    try_read_uint(*node, data.input_h, "input_h");
+    try_read_vector(*node, data.input, "input");
+    try_read_vector(*node, data.output, "output");
+    try_read_vector(*node, data.weights, "weights");
+    try_read_vector(*node, data.bias, "bias");
   }
 
   return true;
