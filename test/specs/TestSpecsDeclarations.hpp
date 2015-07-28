@@ -1,9 +1,8 @@
 #ifndef TEST_SPECS_DECL_H
 #define TEST_SPECS_DECL_H
 
-#include "../TestRunner.hpp"
+#include "../TestCase.hpp"
 #include "../../src/opencl/Context.hpp"
-#include <string>
 
 #define DECLARE_TEST_SPEC(X, ...)                                              \
   struct CONCATENATE(X, Impl);                                                 \

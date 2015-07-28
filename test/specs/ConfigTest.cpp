@@ -1,7 +1,5 @@
 #include "TestSpecsDeclarations.hpp"
-
 #include "../../src/Config.hpp"
-#include "../TestException.hpp"
 
 namespace test {
 namespace specs {

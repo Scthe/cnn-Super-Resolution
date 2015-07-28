@@ -40,6 +40,7 @@ OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ)) # append ODIR to each entry
 
 # _TEST_OBJ = TestRunner.o $(__OBJ) TestDataProvider.o LayerDeltasTest.o BackpropagationTest.o
 _TEST_OBJ = TestRunner.o $(__OBJ) \
+	TestCase.o \
 	ExtractLumaTest.o \
 	SwapLumaTest.o \
 	SquaredErrorTest.o \

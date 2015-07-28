@@ -1,11 +1,9 @@
-#ifndef TEST_RUNNER_H
-#define TEST_RUNNER_H
+#ifndef TEST_CASE_H
+#define TEST_CASE_H
 
 #include "../src/pch.hpp"
-
-///
-/// This file contains various definitions to make tests more concise
-///
+#include <stdexcept>
+#include <sstream>
 
 namespace test {
 
@@ -16,15 +14,30 @@ namespace test {
 float activation_function(float);
 float activation_function_derivative(float);
 
+///
+///  TestException
+///
+class TestException : public std::runtime_error {
+ public:
+  TestException();
+  TestException(const char *);
+  TestException(const TestException &);
+
+  virtual const char *what() const throw();
+
+ private:
+  std::ostringstream cnvt;
+};
+
+///
+/// TestCase etc.
+///
 struct DataSet {
   DataSet(std::string name) : name(name) {}
   DataSet() {}
   std::string name;
 };
 
-/**
- * main test class to inherit from
- */
 class TestCase {
  public:
   ~TestCase() {}
@@ -46,9 +59,6 @@ class TestCase {
 
   template <typename T>
   void assert_not_null(T *, const char *msg = nullptr);
-
- private:
-  char msg_buffer[255];  // TODO remove
 };
 
 ///
@@ -62,4 +72,4 @@ void TestCase::assert_not_null(T *ptr, const char *msg) {
 }
 }
 
-#endif /* TEST_RUNNER_H   */
+#endif /* TEST_CASE_H   */

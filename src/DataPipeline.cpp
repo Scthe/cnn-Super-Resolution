@@ -55,11 +55,9 @@ void DataPipeline::check_initialized(int kernel_load_flags) {
   this->load_kernels(kernel_load_flags);
 }
 
-#define xstr(s) str(s)
-#define str(s) #s
 #define ALLOCATION_HAS_RIGHT_SIZE(ALLOC_VAR, ALLOC_SIZE)              \
   (this->allocation_has_right_size__(ALLOC_VAR, ALLOC_SIZE, __LINE__, \
-                                     xstr(ALLOC_VAR)))
+                                     STRINGIFY(ALLOC_VAR)))
 
 bool DataPipeline::allocation_has_right_size__(opencl::MemoryHandle alloc,
                                                size_t size, size_t line,

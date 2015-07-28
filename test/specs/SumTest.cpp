@@ -1,8 +1,5 @@
 #include "TestSpecsDeclarations.hpp"
-
 #include <cstdio>  // snprintf
-
-#include "../TestException.hpp"
 #include "../../src/DataPipeline.hpp"
 
 namespace test {
