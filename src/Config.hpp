@@ -1,10 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include <cstddef>  // for size_t
+#include "pch.hpp"
 #include <ostream>  // for std::ostream& operator<<(..)
-
-union JsonValue;
 
 namespace cnn_sr {
 
@@ -22,7 +20,6 @@ struct Config {
          float, float, float*,    //
          ParametersDistribution, ParametersDistribution, ParametersDistribution,
          const char* const = nullptr);
-  ~Config();
 
   static void validate(Config&);
 
@@ -33,7 +30,7 @@ struct Config {
   const size_t f1, f2, f3;
   const float momentum, weight_decay_parameter;
   float learning_rate[3];
-  char* parameters_file = nullptr;
+  std::string parameters_file = "";
 
   // random parameters(weights/biases)
   ParametersDistribution params_distr_1;

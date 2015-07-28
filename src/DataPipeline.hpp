@@ -1,26 +1,12 @@
 #ifndef DATA_PIPELINE_H
 #define DATA_PIPELINE_H
 
-#include <cstddef>  // for size_t
-
-typedef struct _cl_event* cl_event;
-
-namespace opencl {
-class Kernel;
-typedef size_t MemoryHandle;
-class Context;
-
-namespace utils {
-struct ImageData;
-}
-}
+#include "pch.hpp"
 
 // TODO move this to opencl::Context
 const opencl::MemoryHandle gpu_nullptr = 1 << 30;
 
 namespace cnn_sr {
-
-struct LayerData;
 
 // TODO CnnLayerGpuAllocationPool is mouthful
 /* clang-format off */
@@ -35,9 +21,9 @@ struct CnnLayerGpuAllocationPool {
   /** Backpropagation: Deltas for this layer, size: out_w*out_h*n */
   opencl::MemoryHandle deltas = gpu_nullptr;
   /** Backpropagation: Through single batch execution we are going to acumulate grads, size: f*f*n*k */
-  opencl::MemoryHandle accumulating_grad_w = gpu_nullptr; // formely: grad_w
+  opencl::MemoryHandle accumulating_grad_w = gpu_nullptr;
   /** Backpropagation: Through single batch execution we are going to acumulate grads, size: f*f*n*k */
-  opencl::MemoryHandle accumulating_grad_b = gpu_nullptr; // formely: grad_b
+  opencl::MemoryHandle accumulating_grad_b = gpu_nullptr;
   /** Backpropagation: Deltas that we had after previous batch, size: f*f*n*k */
   opencl::MemoryHandle previous_batch_delta_w = gpu_nullptr;
   /** Backpropagation: Deltas that we had after previous batch, size: f*f*n*k */

@@ -2,12 +2,10 @@
 
 #include <stdexcept>  // std::runtime_error
 #include <cstdio>     // snprintf
-#include <vector>     // to hold subresults during cpu step of backpropagation
 
 #include "LayerData.hpp"
 #include "opencl/Context.hpp"
 #include "opencl/UtilsOpenCL.hpp"
-#include "Utils.hpp"  // only for DataPipeline::print_buffer(..) ?
 
 const bool print_work_dimensions = false;
 

@@ -29,7 +29,7 @@ __OBJ = Config.o \
 	LayerData.o \
 	DataPipeline.o \
 	ConfigBasedDataPipeline.o \
-	Utils.o \
+	pch.o \
 	Context.o \
 	UtilsOpenCL.o \
 	Kernel.o \

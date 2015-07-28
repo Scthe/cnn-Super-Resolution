@@ -3,14 +3,15 @@
 #include <random>   // for std::mt19937
 #include <chrono>   // for random seed
 #include <fstream>  // for parameters dump
+#include <cstring>  // for strcmp when reading json
 #include "json/gason.h"
 
 #include "Config.hpp"
-#include "Utils.hpp"
+#include "pch.hpp"
 #include "opencl\Context.hpp"
 #include "opencl\UtilsOpenCL.hpp"
 
-auto print_steps = false, print_info2 = false;
+auto print_steps = false;
 
 const char *const layer_parameters_key[3] = {"layer1", "layer2", "layer3"};
 
@@ -26,10 +27,11 @@ ConfigBasedDataPipeline::ConfigBasedDataPipeline(Config &cfg,
 
 void ConfigBasedDataPipeline::init(int load_flags) {
   // init weights/bias
-  if (_config->parameters_file && strlen(_config->parameters_file) > 0) {
+  if (!_config->parameters_file.empty()) {
     std::cout << "Loading layer parameters from: '" << _config->parameters_file
               << "'" << std::endl;
-    this->epochs = load_parameters_file(_config->parameters_file);
+    this->epochs = load_parameters_file(_config->parameters_file.c_str());
+    std::cout << "Previous epochs:  " << this->epochs << std::endl;
   } else {
     std::cout
         << "No parameters file provided, initializing random weights and biases"
@@ -38,38 +40,35 @@ void ConfigBasedDataPipeline::init(int load_flags) {
     fill_random_parameters(layer_data_2, _config->params_distr_2);
     fill_random_parameters(layer_data_3, _config->params_distr_3);
   }
-
-  load_kernels(load_flags);
-  _initialized = true;
-
-  if (print_info2) std::cout << layer_data_1 << std::endl;
-  if (print_info2) std::cout << layer_data_2 << std::endl;
-  if (print_info2) std::cout << layer_data_3 << std::endl;
   LayerData::validate(layer_data_1);
   LayerData::validate(layer_data_2);
   LayerData::validate(layer_data_3);
+
+  load_kernels(load_flags);
+
+  _initialized = true;
 }
 
 void ConfigBasedDataPipeline::load_kernels(int load_flags) {
-  // call super
   DataPipeline::load_kernels(load_flags);
 
   bool load_layers = (load_flags & DataPipeline::LOAD_KERNEL_LAYERS) != 0,
        load_backp = (load_flags & DataPipeline::LOAD_KERNEL_BACKPROPAGATE) != 0;
 
   if (load_layers) {
-    /* clang-format off */
-    if (!_layer_1_kernel) _layer_1_kernel = create_layer_kernel(layer_data_1, false);
-    if (!_layer_2_kernel) _layer_2_kernel = create_layer_kernel(layer_data_2, false);
-    if (!_layer_3_kernel) _layer_3_kernel = create_layer_kernel(layer_data_3, true);
-    /* clang-format on */
+    if (!_layer_1_kernel)
+      _layer_1_kernel = create_layer_kernel(layer_data_1, false);
+    if (!_layer_2_kernel)
+      _layer_2_kernel = create_layer_kernel(layer_data_2, false);
+    if (!_layer_3_kernel)
+      _layer_3_kernel = create_layer_kernel(layer_data_3, true);
   }
 
   if (load_backp) {
-    /* clang-format off */
-    if (!_layer_1_deltas_kernel) _layer_1_deltas_kernel = create_deltas_kernel(layer_data_1);
-    if (!_layer_2_deltas_kernel) _layer_2_deltas_kernel = create_deltas_kernel(layer_data_2);
-    /* clang-format on */
+    if (!_layer_1_deltas_kernel)
+      _layer_1_deltas_kernel = create_deltas_kernel(layer_data_1);
+    if (!_layer_2_deltas_kernel)
+      _layer_2_deltas_kernel = create_deltas_kernel(layer_data_2);
   }
 }
 
@@ -155,10 +154,9 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                    layer_2_out_dim[0], layer_2_out_dim[1],  //
                                    &event2_2);
 
-  _context->block();
+  _context->block();  // TODO remove - run backp after leayer's delta
 
   // gradient w, gradient b for all layers
-  // TODO might as well run all in parallel
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 3rd layer"
               << std::endl;
@@ -265,8 +263,8 @@ void ConfigBasedDataPipeline::fill_random_parameters(
 
 void load_layer_parameters(JsonNode *node, LayerData &data) {
   for (auto subnode : node->value) {
-    JSON_READ_NUM_ARRAY(subnode, data, weights);
-    JSON_READ_NUM_ARRAY(subnode, data, bias);
+    utils::try_read_vector(*subnode, data.weights, "weights");
+    utils::try_read_vector(*subnode, data.bias, "bias");
   }
 }
 
@@ -282,8 +280,8 @@ size_t ConfigBasedDataPipeline::load_parameters_file(
     auto key = node->key;
     // std::cout << key << std::endl;
 
-    if (strcmp(key, "epochs") == 0 && node->value.getTag() == JSON_NUMBER) {
-      epochs = (unsigned int)node->value.toNumber();
+    if (utils::try_read_uint(*node, epochs, "epochs")) {
+      continue;
     } else if (strcmp(key, layer_parameters_key[0]) == 0) {
       load_layer_parameters(node, layer_data_1);
     } else if (strcmp(key, layer_parameters_key[1]) == 0) {
@@ -291,11 +289,8 @@ size_t ConfigBasedDataPipeline::load_parameters_file(
     } else if (strcmp(key, layer_parameters_key[2]) == 0) {
       load_layer_parameters(node, layer_data_3);
     } else {
-      std::cout << "[Warning] Unknown key '" << key
-                << "' in parameters file, only: '"    //
-                << layer_parameters_key[0] << "', '"  //
-                << layer_parameters_key[1] << "', '"  //
-                << layer_parameters_key[2] << "' are allowed" << std::endl;
+      std::cout << "[Warning] Unknown key '" << key << "' in parameters file"
+                << std::endl;
     }
   }
   return epochs;

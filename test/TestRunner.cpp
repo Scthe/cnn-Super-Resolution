@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <cmath>   // std::exp
 #include <cstdio>  // snprintf
 

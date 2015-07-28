@@ -1,28 +1,11 @@
 #ifndef TEST_RUNNER_H
 #define TEST_RUNNER_H
 
+#include "../src/pch.hpp"
+
 ///
 /// This file contains various definitions to make tests more concise
 ///
-
-#include <string>
-#include <vector>
-
-///
-/// macro - utils
-///
-#define STRINGIFY2(s) #s
-#define STRINGIFY(s) STRINGIFY2(s)
-
-#define CONCATENATE_DETAIL(x, y) x##y
-#define CONCATENATE(x, y) CONCATENATE_DETAIL(x, y)
-
-namespace cnn_sr {
-class DataPipeline;
-}
-namespace opencl {
-typedef size_t MemoryHandle;
-}
 
 namespace test {
 

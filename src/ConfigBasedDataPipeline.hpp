@@ -6,9 +6,6 @@
 
 namespace cnn_sr {
 
-struct ParametersDistribution;
-struct Config;
-
 class ConfigBasedDataPipeline : public DataPipeline {
  public:
   ConfigBasedDataPipeline(Config&, opencl::Context*);
