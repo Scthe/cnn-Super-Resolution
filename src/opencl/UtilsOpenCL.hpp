@@ -58,6 +58,8 @@ void load_image(const char*, ImageData&);
 
 int write_image(const char*, ImageData&);
 
+void write_image(const char* const, float*, size_t, size_t);
+
 /**
  * Due too different possible resolutions we may have to recalculate this each
  * time.

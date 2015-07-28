@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <strings.h>
 #include <stdexcept>
+#include <algorithm>  // f.e. std::minmax_element
 
 #define STBI_FAILURE_USERMSG
 #define STB_IMAGE_IMPLEMENTATION
@@ -95,6 +96,33 @@ int write_image(const char *filename, ImageData &data) {
   return stbi_write_png(filename, data.w, data.h, data.bpp, data.data, 0);
 }
 
+void write_image(const char *const file_path, float *source,  //
+                 size_t w, size_t h) {
+  size_t px_cnt = w * h;
+  // normalize values: 0..1
+  auto min_max_it = std::minmax_element(source, source + px_cnt);
+  float min = *min_max_it.first, max = *min_max_it.second,
+        norm_factor = max - min;
+  for (size_t i = 0; i < px_cnt; i++) {
+    source[i] = (source[i] - min) / norm_factor;
+  }
+
+  std::cout << "writing image(" << w << "x" << h << ") to: '" << file_path
+            << "'" << std::endl;
+  std::vector<unsigned char> data(px_cnt * 3);
+  for (size_t row = 0; row < h; row++) {
+    for (size_t col = 0; col < w; col++) {
+      size_t idx = row * w + col;
+      float val = source[idx] * 255;
+      for (size_t k = 0; k < 3; k++) {
+        data[idx * 3 + k] = (unsigned char)val;
+      }
+    }
+  }
+
+  ImageData dd(w, h, sizeof(unsigned char) * 3, &data[0]);
+  opencl::utils::write_image(file_path, dd);
+}
 
 ///
 /// misc

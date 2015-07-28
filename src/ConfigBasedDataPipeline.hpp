@@ -66,8 +66,8 @@ class ConfigBasedDataPipeline : public DataPipeline {
                          cl_event* ev_to_wait_for = nullptr);
 
   void write_result_image(const char* const, opencl::utils::ImageData&,
-                          opencl::MemoryHandle input_img_3ch,          //
-                          opencl::MemoryHandle input_img_luma, float,  //
+                          opencl::MemoryHandle input_img_3ch,   //
+                          opencl::MemoryHandle input_img_luma,  //
                           opencl::MemoryHandle new_luma, size_t, size_t);
 
   inline const LayerData* layer_1() { return &layer_data_1; }
@@ -78,14 +78,21 @@ class ConfigBasedDataPipeline : public DataPipeline {
   void load_kernels(int load_flags);
 
  private:
-  void fill_random_parameters(LayerData&, ParametersDistribution&);
-  size_t load_parameters_file(const char* const);
   cl_event last_layer_delta(opencl::MemoryHandle, opencl::MemoryHandle,
                             opencl::MemoryHandle&, float, size_t, size_t,
                             cl_event* ev = nullptr);
 
-  void get_extreme_values(opencl::MemoryHandle, std::vector<float>& target,
-                          float& min, float& max);
+  void fill_random_parameters(LayerData&, ParametersDistribution&);
+
+  size_t load_parameters_file(const char* const);
+
+  void create_luma_image(const char* const, opencl::MemoryHandle, size_t,
+                         size_t);
+
+  void create_lumas_delta_image(const char* const,
+                                opencl::MemoryHandle expected_luma, size_t,
+                                size_t,  //
+                                opencl::MemoryHandle luma, size_t, size_t);
 
  private:
   Config* const _config;

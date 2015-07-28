@@ -109,6 +109,8 @@ int main(int argc, char** argv) {
 
   // other config variables
   const size_t validation_set_percent = 20;  // TODO move to cfg
+  auto backup_weights_file = "weights_tmp.json";
+  int backup_weights_rate = 200;  // #epochs between emergency backup
 
   // read config
   ConfigReader reader;
@@ -171,7 +173,7 @@ int main(int argc, char** argv) {
   ///
   /// train
   ///
-  for (size_t batch_id = 0; batch_id < epochs; batch_id++) {
+  for (size_t epoch_id = 0; epoch_id < epochs; epoch_id++) {
     std::vector<PerSampleAllocationPool> train_set(samples_count);
     std::vector<PerSampleAllocationPool> validation_set(samples_count);
     divide_samples(validation_set_size, gpu_alloc, train_set, validation_set);
@@ -195,12 +197,18 @@ int main(int argc, char** argv) {
     // (we are printing per pixel values because they are easier to remember)
     float mean_train_err = train_squared_error / train_set.size(),
           mean_valid_err = validation_squared_error / validation_set.size();
-    std::cout << "[" << batch_id << "] "  //
+    std::cout << "[" << epoch_id << "] "  //
               << "mean validation error: " << mean_valid_err << " ("
               << (mean_valid_err / validation_px_count) << " per px)"
               << std::endl;
 
     context.block();
+
+    if (!dry && epoch_id > 0 && (epoch_id % backup_weights_rate) == 0) {
+      data_pipeline.write_params_to_file(backup_weights_file, gpu_alloc.layer_1,
+                                         gpu_alloc.layer_2, gpu_alloc.layer_3);
+      context.block();
+    }
   }
 
   ///
@@ -233,8 +241,7 @@ void execute_forward(ConfigBasedDataPipeline& data_pipeline,
   opencl::MemoryHandle input_luma = gpu_nullptr;
   auto ev1 =
       prepare_image(&data_pipeline, in_path, input_img, input_data, input_luma);
-  float mean;
-  data_pipeline.subtract_mean(input_luma, &mean, &ev1);
+  data_pipeline.subtract_mean(input_luma, nullptr, &ev1);
   size_t w = input_img.w, h = input_img.h,  //
       luma_w = w - cfg->total_padding(),    //
       luma_h = h - cfg->total_padding();
@@ -243,14 +250,10 @@ void execute_forward(ConfigBasedDataPipeline& data_pipeline,
   // process with layers
   data_pipeline.forward(gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
                         input_luma, w, h);
-  // dbg output read
-  // data_pipeline.print_buffer(gpu_alloc.layer_1.output, "layer 1", h);
-  // data_pipeline.print_buffer(gpu_alloc.layer_2.output, "layer 2", h);
-  // data_pipeline.print_buffer(gpu_alloc.layer_3.output, "OUT", h);
 
   if (out_path) {
-    data_pipeline.write_result_image(out_path, input_img, input_data,
-                                     input_luma, mean,  //
+    data_pipeline.write_result_image(out_path,                           //
+                                     input_img, input_data, input_luma,  //
                                      gpu_alloc.layer_3.output, luma_w, luma_h);
   }
 }

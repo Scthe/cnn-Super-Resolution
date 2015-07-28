@@ -1,9 +1,8 @@
 #include "ConfigBasedDataPipeline.hpp"
 
-#include <random>     // for std::mt19937
-#include <chrono>     // for random seed
-#include <fstream>    // for parameters dump
-#include <algorithm>  // f.e. std::minmax_element
+#include <random>   // for std::mt19937
+#include <chrono>   // for random seed
+#include <fstream>  // for parameters dump
 #include "json/gason.h"
 
 #include "Config.hpp"
@@ -356,60 +355,34 @@ void ConfigBasedDataPipeline::write_params_to_file(
 ///
 /// Write image
 ///
-void ConfigBasedDataPipeline::get_extreme_values(opencl::MemoryHandle buffer,
-                                                 std::vector<float> &target,
-                                                 float &min, float &max) {
-  auto raw_memory = _context->raw_memory(buffer);
-  size_t len = raw_memory->size / sizeof(cl_float);
-  target.resize(len);
-  _context->read_buffer(buffer, (void *)&target[0], true);
+void ConfigBasedDataPipeline::create_lumas_delta_image(
+    const char *const out_path,  //
+    opencl::MemoryHandle expected_luma, size_t expected_luma_w,
+    size_t expected_luma_h,  //
+    opencl::MemoryHandle luma, size_t luma_w, size_t luma_h) {
+  opencl::MemoryHandle target = gpu_nullptr;
+  // debug - last layer deltas
+  auto event2_1 = last_layer_delta(expected_luma, luma, target, 0.0f,
+                                   expected_luma_w, expected_luma_h);
+  std::vector<float> delta_values(luma_w * luma_h);
+  _context->read_buffer(target, (void *)&delta_values[0], true, &event2_1);
+  opencl::utils::write_image(out_path, &delta_values[0], luma_w, luma_h);
+}
 
-  auto min_max_it = std::minmax_element(target.cbegin(), target.cend());
-  min = *min_max_it.first;
-  max = *min_max_it.second;
+void ConfigBasedDataPipeline::create_luma_image(const char *const out_path,
+                                                opencl::MemoryHandle buffer,
+                                                size_t luma_w, size_t luma_h) {
+  std::vector<float> luma_data(luma_w * luma_h);
+  _context->read_buffer(buffer, (void *)&luma_data[0], true);
+  opencl::utils::write_image(out_path, &luma_data[0], luma_w, luma_h);
 }
 
 void ConfigBasedDataPipeline::write_result_image(
     const char *const out_path,  //
     opencl::utils::ImageData &input_img,
-    opencl::MemoryHandle input_img_3ch,  //
-    opencl::MemoryHandle input_img_luma, float input_img_luma_mean,
+    opencl::MemoryHandle input_img_3ch,   //
+    opencl::MemoryHandle input_img_luma,  //
     opencl::MemoryHandle new_luma, size_t luma_w, size_t luma_h) {
-  /*
-  // normally the result image will be gray for the most part.
-  // what we have to do is to expand range of luma values
-  // TODO or maybe just do more training ?
-  std::vector<float> luma_values;
-  float input_luma_min_val, input_luma_max_val,  //
-      new_luma_min_val, new_luma_max_val;
-  get_extreme_values(input_img_luma, luma_values,  //
-                     input_luma_min_val, input_luma_max_val);
-  get_extreme_values(new_luma, luma_values, new_luma_min_val, new_luma_max_val);
-  // old luma has subtracted mean, reverse this
-  float input_luma_mean = (input_luma_max_val - input_luma_min_val) / 2;
-  input_luma_min_val += input_img_luma_mean;
-  input_luma_max_val += input_img_luma_mean;
-  std::cout << "old luma: " << input_luma_min_val  //
-            << "\t- " << input_luma_max_val << std::endl;
-  std::cout << "new luma: " << new_luma_min_val  //
-            << "\t- " << new_luma_max_val << std::endl;
-  // normalize luma values
-  float norm_factor = new_luma_max_val - new_luma_min_val;
-  for (float &f : luma_values) {
-    f = (f - new_luma_min_val) / norm_factor;
-    // f = 0.5f;
-    // f = 1.0f;
-  }
-  auto new_luma_after_norm_extr =
-      std::minmax_element(luma_values.cbegin(), luma_values.cend());
-  std::cout << "new: " << *new_luma_after_norm_extr.first << "\t - "
-            << *new_luma_after_norm_extr.second << std::endl;
-
-  _context->block();
-  _context->write_buffer(new_luma, &luma_values[0], true);
-  _context->block();
-  */
-
   // create result image
   opencl::MemoryHandle gpu_buf_target = gpu_nullptr;
   swap_luma(input_img, input_img_3ch, new_luma, gpu_buf_target, luma_w, luma_h);
@@ -422,5 +395,11 @@ void ConfigBasedDataPipeline::write_result_image(
   // write result
   opencl::utils::ImageData res_img(input_img.w, input_img.h, 3, &result[0]);
   opencl::utils::write_image(out_path, res_img);
+
+  // debug images
+  create_luma_image("data\\result_luma.png", new_luma, luma_w, luma_h);
+  create_lumas_delta_image("data\\result_deltas.png",                 //
+                           input_img_luma, input_img.w, input_img.h,  //
+                           new_luma, luma_w, luma_h);
 }
 }
