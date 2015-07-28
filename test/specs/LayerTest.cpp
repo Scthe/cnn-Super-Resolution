@@ -121,8 +121,7 @@ bool LayerTest::operator()(size_t data_set_id,
   _context->write_buffer(gpu_buf_in, (void*)&data->input[0], true);
 
   // create kernel & run
-  auto kernel =
-      pipeline->create_layer_kernel(layer_data);
+  auto kernel = pipeline->create_layer_kernel(layer_data, false);
   pipeline->execute_layer(*kernel, layer_data, gpu_alloc, gpu_buf_in,
                           data->input_w, data->input_h);
   assert_equals(pipeline, data->output, gpu_alloc.output);

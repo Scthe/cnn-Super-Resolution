@@ -203,6 +203,7 @@ class DataPipeline {
   ///
   /// kernel creation - ones that are not created during standard init
   ///
+  /** @param  skip_relu:bool skip relu step, writing raw result */
   opencl::Kernel* create_layer_kernel(const LayerData&, bool);
   opencl::Kernel* create_deltas_kernel(const LayerData&);
 
