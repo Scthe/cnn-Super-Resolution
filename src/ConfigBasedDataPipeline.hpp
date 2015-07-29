@@ -9,7 +9,8 @@ namespace cnn_sr {
 class ConfigBasedDataPipeline : public DataPipeline {
  public:
   ConfigBasedDataPipeline(Config&, opencl::Context*);
-  void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
+  void init(bool _optimize_for_small_data = false,
+            int load_flags = DataPipeline::LOAD_KERNEL_ALL);
   inline const Config* config() { return _config; }
 
   cl_event forward(cnn_sr::CnnLayerGpuAllocationPool&,  //

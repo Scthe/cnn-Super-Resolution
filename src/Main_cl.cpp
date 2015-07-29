@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
   opencl::Context context;
   context.init(profile);
   ConfigBasedDataPipeline data_pipeline(cfg, &context);
-  data_pipeline.init();
+  data_pipeline.init(train);
   GpuAllocationPool gpu_alloc;
 
   if (!train) {
@@ -181,6 +181,7 @@ int main(int argc, char** argv) {
   ///
   /// train
   ///
+  bool error = false;
   for (size_t epoch_id = 0; epoch_id < epochs; epoch_id++) {
     std::vector<PerSampleAllocationPool> train_set(samples_count);
     std::vector<PerSampleAllocationPool> validation_set(samples_count);
@@ -197,7 +198,9 @@ int main(int argc, char** argv) {
 
     // if error happened we stop the training.
     if (std::isnan(validation_squared_error)) {
-      std::cout << "Error: squared error is NAN" << std::endl;
+      std::cout << "Error: squared error is NAN, after " << epoch_id << "/"
+                << epochs << " epochs" << std::endl;
+      error = true;
       break;
     }
 
@@ -230,7 +233,7 @@ int main(int argc, char** argv) {
   std::cout << "DONE" << std::endl;
   // calling exit does not call Context's destructor - do this by hand
   context.~Context();
-  exit(EXIT_SUCCESS);
+  exit(error ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 // ######################################################################
@@ -318,7 +321,7 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
                                   sample.expected_output_luma, w, h,
                                   weight_decay_value);
     }
-    context->block();
+    context->block();  // TODO REMOVE THIS BLOCK !!!
   }
   return squared_error;
 }

@@ -50,6 +50,17 @@ void dump_vector(std::ostream& os, std::vector<float>& data,
   }
 }
 
+size_t closest_power_of_2(int x) {
+  if (x < 0) return 0;
+  --x;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  return static_cast<size_t>(x + 1);
+}
+
 ///
 /// File system
 ///

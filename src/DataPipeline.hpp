@@ -48,7 +48,8 @@ class DataPipeline {
 
   DataPipeline(opencl::Context*);
   virtual ~DataPipeline() {}
-  virtual void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
+  virtual void init(bool _optimize_for_small_data = false,
+                    int load_flags = DataPipeline::LOAD_KERNEL_ALL);
   opencl::Context* context();
 
   /**
@@ -214,9 +215,22 @@ class DataPipeline {
                                     size_t, size_t);
   size_t element_count(opencl::MemoryHandle, size_t el_size);
 
+  /** General version. quite slow */
+  cl_event execute_layer_full(opencl::Kernel&, const LayerData&,
+                              cnn_sr::CnnLayerGpuAllocationPool&,
+                              opencl::MemoryHandle&, size_t, size_t,
+                              cl_event* ev = nullptr);
+
+  /** version optimized for case f_spatial_size==1 */
+  cl_event execute_layer__f_e1_1(opencl::Kernel&, const LayerData&,
+                                 cnn_sr::CnnLayerGpuAllocationPool&,
+                                 opencl::MemoryHandle&, size_t, size_t,
+                                 cl_event* ev = nullptr);
+
  protected:
   opencl::Context* const _context;
   bool _initialized;
+  bool _optimize_for_small_data;
 
   /** Single float. Quite useful. */
   opencl::MemoryHandle _tmp_gpu_float = gpu_nullptr;

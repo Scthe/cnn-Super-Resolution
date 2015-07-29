@@ -25,7 +25,10 @@ ConfigBasedDataPipeline::ConfigBasedDataPipeline(Config &cfg,
       layer_data_2(cfg.n1, cfg.n2, cfg.f2),
       layer_data_3(cfg.n2, 1, cfg.f3) {}
 
-void ConfigBasedDataPipeline::init(int load_flags) {
+void ConfigBasedDataPipeline::init(bool optimize_for_small_data,
+                                   int load_flags) {
+  DataPipeline::init(optimize_for_small_data, load_flags);
+
   // init weights/bias
   if (!_config->parameters_file.empty()) {
     std::cout << "Loading layer parameters from: '" << _config->parameters_file
@@ -43,10 +46,6 @@ void ConfigBasedDataPipeline::init(int load_flags) {
   LayerData::validate(layer_data_1);
   LayerData::validate(layer_data_2);
   LayerData::validate(layer_data_3);
-
-  load_kernels(load_flags);
-
-  _initialized = true;
 }
 
 void ConfigBasedDataPipeline::load_kernels(int load_flags) {

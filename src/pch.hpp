@@ -60,6 +60,8 @@ inline bool is_even(T x) {
   return !is_odd(x);
 }
 
+size_t closest_power_of_2(int);
+
 ///
 /// Utils - macros
 ///
