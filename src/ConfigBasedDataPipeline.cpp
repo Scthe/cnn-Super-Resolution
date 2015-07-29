@@ -15,6 +15,8 @@ auto print_steps = false;
 
 const char *const layer_parameters_key[3] = {"layer1", "layer2", "layer3"};
 
+using namespace cnn_sr;
+
 namespace cnn_sr {
 
 ConfigBasedDataPipeline::ConfigBasedDataPipeline(Config &cfg,
@@ -75,53 +77,52 @@ void ConfigBasedDataPipeline::load_kernels(int load_flags) {
 /// Pipeline: forward/backward
 ///
 cl_event ConfigBasedDataPipeline::forward(
-    cnn_sr::CnnLayerGpuAllocationPool &layer_1_alloc,
-    cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
-    cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc,
-    opencl::MemoryHandle input, size_t input_w, size_t input_h,
-    cl_event *ev_to_wait_for) {
+    LayerAllocationPool &layer_1_alloc,  //
+    LayerAllocationPool &layer_2_alloc,  //
+    LayerAllocationPool &layer_3_alloc,  //
+    SampleAllocationPool &sample, cl_event *ev_to_wait_for) {
   //
   check_initialized(DataPipeline::LOAD_KERNEL_LAYERS);
   size_t l1_output_dim[2], l2_output_dim[2];
-  layer_data_1.get_output_dimensions(l1_output_dim, input_w, input_h);
-  layer_data_2.get_output_dimensions(l2_output_dim, l1_output_dim[0],
-                                     l1_output_dim[1]);
+  layer_data_1.get_output_dimensions(l1_output_dim,  //
+                                     sample.input_w, sample.input_h);
+  layer_data_2.get_output_dimensions(l2_output_dim,  //
+                                     l1_output_dim[0], l1_output_dim[1]);
 
   // layer 1
   if (print_steps) std::cout << "### Executing layer 1" << std::endl;
   cl_event finish_token1 =
       execute_layer(*_layer_1_kernel, layer_data_1, layer_1_alloc,  // layer cfg
-                    input, input_w, input_h,                        // input
-                    ev_to_wait_for);
+                    sample.input_luma, sample.input_w, sample.input_h,  // input
+                    sample.layer_1_output, ev_to_wait_for);
 
   // layer 2
   if (print_steps) std::cout << "### Executing layer 2" << std::endl;
   cl_event finish_token2 = execute_layer(
-      *_layer_2_kernel, layer_data_2, layer_2_alloc,             // layer cfg
-      layer_1_alloc.output, l1_output_dim[0], l1_output_dim[1],  // input
-      &finish_token1);
+      *_layer_2_kernel, layer_data_2, layer_2_alloc,              // layer cfg
+      sample.layer_1_output, l1_output_dim[0], l1_output_dim[1],  // input
+      sample.layer_2_output, &finish_token1);
 
   // layer 3
   if (print_steps) std::cout << "### Executing layer 3" << std::endl;
   cl_event finish_token3 = execute_layer(
-      *_layer_3_kernel, layer_data_3, layer_3_alloc,             // layer cfg
-      layer_2_alloc.output, l2_output_dim[0], l2_output_dim[1],  // input
-      &finish_token2);
+      *_layer_3_kernel, layer_data_3, layer_3_alloc,              // layer cfg
+      sample.layer_2_output, l2_output_dim[0], l2_output_dim[1],  // input
+      sample.layer_3_output, &finish_token2);
 
   return finish_token3;
 }
 
 cl_event ConfigBasedDataPipeline::backpropagate(
-    cnn_sr::CnnLayerGpuAllocationPool &layer_1_alloc,
-    cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
-    cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc,
-    opencl::MemoryHandle cnn_input, opencl::MemoryHandle gpu_buf_ground_truth,
-    size_t ground_truth_w, size_t ground_truth_h,  //
+    cnn_sr::LayerAllocationPool &layer_1_alloc,
+    cnn_sr::LayerAllocationPool &layer_2_alloc,
+    cnn_sr::LayerAllocationPool &layer_3_alloc,  //
+    SampleAllocationPool &sample,                //
     float weight_decay_value, cl_event *ev_to_wait_for) {
   // dimensions
   size_t layer_1_out_dim[2], layer_2_out_dim[2], layer_3_out_dim[2];
   layer_data_1.get_output_dimensions(layer_1_out_dim,  //
-                                     ground_truth_w, ground_truth_h);
+                                     sample.input_w, sample.input_h);
   layer_data_2.get_output_dimensions(layer_2_out_dim,  //
                                      layer_1_out_dim[0], layer_1_out_dim[1]);
   layer_data_3.get_output_dimensions(layer_3_out_dim,  //
@@ -130,43 +131,42 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   // propagate deltas
   if (print_steps)
     std::cout << "### Calculating deltas for last layer" << std::endl;
-  auto event2_1 =
-      last_layer_delta(gpu_buf_ground_truth,  //
-                       layer_3_alloc.output,  //
-                       layer_3_alloc.deltas,  //
-                       weight_decay_value,    //
-                       ground_truth_w, ground_truth_h, ev_to_wait_for);
+  auto event2_1 = last_layer_delta(sample, weight_decay_value, ev_to_wait_for);
 
   if (print_steps)
     std::cout << "### Calculating deltas for 2nd layer" << std::endl;
-  auto event2_2 = calculate_deltas(*_layer_2_deltas_kernel,                 //
-                                   layer_data_2, layer_data_3,              //
-                                   layer_2_alloc, layer_3_alloc,            //
+  auto event2_2 = calculate_deltas(*_layer_2_deltas_kernel,     //
+                                   layer_data_2, layer_data_3,  //
+                                   layer_3_alloc,               //
+                                   sample.layer_2_deltas, sample.layer_3_deltas,
                                    layer_3_out_dim[0], layer_3_out_dim[1],  //
-                                   &event2_1);
+                                   sample.layer_2_output, &event2_1);
 
   if (print_steps)
     std::cout << "### Calculating deltas for 1nd layer" << std::endl;
-  auto event2_3 = calculate_deltas(*_layer_1_deltas_kernel,                 //
-                                   layer_data_1, layer_data_2,              //
-                                   layer_1_alloc, layer_2_alloc,            //
+  auto event2_3 = calculate_deltas(*_layer_1_deltas_kernel,     //
+                                   layer_data_1, layer_data_2,  //
+                                   layer_2_alloc,               //
+                                   sample.layer_1_deltas, sample.layer_2_deltas,
                                    layer_2_out_dim[0], layer_2_out_dim[1],  //
-                                   &event2_2);
+                                   sample.layer_1_output, &event2_2);
 
   // gradient w, gradient b for all layers
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 3rd layer"
               << std::endl;
-  DataPipeline::backpropagate(layer_data_3,                            //
-                              layer_2_alloc.output, layer_3_alloc,     //
+  DataPipeline::backpropagate(layer_data_3,  //
+                              sample.layer_2_output, sample.layer_3_deltas,
+                              layer_3_alloc,                           //
                               layer_3_out_dim[0], layer_3_out_dim[1],  //
                               &event2_1);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 2nd layer"
               << std::endl;
-  DataPipeline::backpropagate(layer_data_2,                            //
-                              layer_1_alloc.output, layer_2_alloc,     //
+  DataPipeline::backpropagate(layer_data_2,  //
+                              sample.layer_1_output, sample.layer_2_deltas,
+                              layer_2_alloc,                           //
                               layer_2_out_dim[0], layer_2_out_dim[1],  //
                               &event2_2);
 
@@ -175,7 +175,9 @@ cl_event ConfigBasedDataPipeline::backpropagate(
               << std::endl;
   auto event3_3 =
       DataPipeline::backpropagate(layer_data_1,                            //
-                                  cnn_input, layer_1_alloc,                //
+                                  sample.input_luma,                       //
+                                  sample.layer_1_deltas,                   //
+                                  layer_1_alloc,                           //
                                   layer_1_out_dim[0], layer_1_out_dim[1],  //
                                   &event2_3);
   _context->block();
@@ -183,9 +185,9 @@ cl_event ConfigBasedDataPipeline::backpropagate(
 }
 
 void ConfigBasedDataPipeline::update_parameters(
-    cnn_sr::CnnLayerGpuAllocationPool &layer_1_alloc,
-    cnn_sr::CnnLayerGpuAllocationPool &layer_2_alloc,
-    cnn_sr::CnnLayerGpuAllocationPool &layer_3_alloc, size_t batch_size,
+    cnn_sr::LayerAllocationPool &layer_1_alloc,
+    cnn_sr::LayerAllocationPool &layer_2_alloc,
+    cnn_sr::LayerAllocationPool &layer_3_alloc, size_t batch_size,
     cl_event *ev_to_wait_for) {
   if (print_steps)
     std::cout << "### Updating weights and biases - 3rd layer" << std::endl;
@@ -216,28 +218,24 @@ void ConfigBasedDataPipeline::update_parameters(
   ++epochs;
 }
 
-float ConfigBasedDataPipeline::squared_error(
-    opencl::MemoryHandle gpu_buf_ground_truth,
-    opencl::MemoryHandle gpu_buf_algo_res,  //
-    size_t ground_truth_w, size_t ground_truth_h, cl_event *ev_to_wait_for) {
+float ConfigBasedDataPipeline::squared_error(SampleAllocationPool &sample,
+                                             cl_event *ev_to_wait_for) {
   //
   size_t padding = layer_data_1.f_spatial_size + layer_data_2.f_spatial_size +
                    layer_data_3.f_spatial_size - 3;
-  return DataPipeline::squared_error(gpu_buf_ground_truth, gpu_buf_algo_res,
-                                     ground_truth_w, ground_truth_h, padding,
-                                     ev_to_wait_for);
+  return DataPipeline::squared_error(sample.expected_luma, sample.input_w,
+                                     sample.input_h, sample.layer_3_output,
+                                     padding, ev_to_wait_for);
 }
 
-cl_event ConfigBasedDataPipeline::last_layer_delta(
-    opencl::MemoryHandle gpu_buf_ground_truth,
-    opencl::MemoryHandle gpu_buf_algo_res, opencl::MemoryHandle &gpu_buf_target,
-    float weight_decay,  //
-    size_t ground_truth_w, size_t ground_truth_h, cl_event *ev) {
+cl_event ConfigBasedDataPipeline::last_layer_delta(SampleAllocationPool &sample,
+                                                   float weight_decay,
+                                                   cl_event *ev) {
   //
   size_t padding = _config->total_padding();
   return DataPipeline::last_layer_delta(
-      gpu_buf_ground_truth, gpu_buf_algo_res, gpu_buf_target, weight_decay,
-      ground_truth_w, ground_truth_h, padding, ev);
+      sample.expected_luma, sample.input_w, sample.input_h,  //
+      sample.layer_3_output, sample.layer_3_deltas, weight_decay, padding, ev);
 }
 
 ///
@@ -310,10 +308,10 @@ void dump_layer_parameters(std::ostream &os, const char *const key,
 }
 
 void ConfigBasedDataPipeline::write_params_to_file(
-    const char *const file_path,
-    cnn_sr::CnnLayerGpuAllocationPool layer_1_alloc,
-    cnn_sr::CnnLayerGpuAllocationPool layer_2_alloc,
-    cnn_sr::CnnLayerGpuAllocationPool layer_3_alloc) {
+    const char *const file_path,  //
+    cnn_sr::LayerAllocationPool layer_1_alloc,
+    cnn_sr::LayerAllocationPool layer_2_alloc,
+    cnn_sr::LayerAllocationPool layer_3_alloc) {
   std::cout << "Saving parameters to: '" << file_path << "'" << std::endl;
   // read weights
   /* clang-format off */
@@ -348,16 +346,20 @@ void ConfigBasedDataPipeline::write_params_to_file(
 /// Write image
 ///
 void ConfigBasedDataPipeline::create_lumas_delta_image(
-    const char *const out_path,  //
-    opencl::MemoryHandle expected_luma, size_t expected_luma_w,
-    size_t expected_luma_h,  //
-    opencl::MemoryHandle luma, size_t luma_w, size_t luma_h) {
+    const char *const out_path, SampleAllocationPool &sample) {
   opencl::MemoryHandle target = gpu_nullptr;
+  size_t luma_w = sample.input_w - _config->total_padding(),
+         luma_h = sample.input_h - _config->total_padding();
   // debug - last layer deltas
-  auto event2_1 = last_layer_delta(expected_luma, luma, target, 0.0f,
-                                   expected_luma_w, expected_luma_h);
+  // NOTE we do not have true expected luma, only one we started with
+  size_t padding = _config->total_padding();
+  auto event2_1 = DataPipeline::last_layer_delta(
+      sample.input_luma, sample.input_w, sample.input_h,  //
+      sample.layer_3_output, target, 0.0f, padding);
+  // read values
   std::vector<float> delta_values(luma_w * luma_h);
   _context->read_buffer(target, (void *)&delta_values[0], true, &event2_1);
+  // write
   opencl::utils::write_image(out_path, &delta_values[0], luma_w, luma_h);
 }
 
@@ -371,13 +373,14 @@ void ConfigBasedDataPipeline::create_luma_image(const char *const out_path,
 
 void ConfigBasedDataPipeline::write_result_image(
     const char *const out_path,  //
-    opencl::utils::ImageData &input_img,
-    opencl::MemoryHandle input_img_3ch,   //
-    opencl::MemoryHandle input_img_luma,  //
-    opencl::MemoryHandle new_luma, size_t luma_w, size_t luma_h) {
+    opencl::utils::ImageData &input_img, SampleAllocationPool &sample) {
+  std::cout << "Saving result image to: '" << out_path << "'" << std::endl;
+  size_t luma_w = input_img.w - _config->total_padding(),
+         luma_h = input_img.h - _config->total_padding();
   // create result image
   opencl::MemoryHandle gpu_buf_target = gpu_nullptr;
-  swap_luma(input_img, input_img_3ch, new_luma, gpu_buf_target, luma_w, luma_h);
+  swap_luma(input_img, sample.input_data, sample.layer_3_output, gpu_buf_target,
+            luma_w, luma_h);
 
   // read result
   size_t result_size = input_img.w * input_img.h * 3;  // 3 channels
@@ -389,9 +392,11 @@ void ConfigBasedDataPipeline::write_result_image(
   opencl::utils::write_image(out_path, res_img);
 
   // debug images
-  create_luma_image("data\\result_luma.png", new_luma, luma_w, luma_h);
-  create_lumas_delta_image("data\\result_deltas.png",                 //
-                           input_img_luma, input_img.w, input_img.h,  //
-                           new_luma, luma_w, luma_h);
+  std::cout << "[DEBUG] creating debug luma image" << std::endl;
+  create_luma_image("data\\result_luma.png", sample.layer_3_output, luma_w,
+                    luma_h);
+  std::cout << "[DEBUG] creating debug delta image (input vs output)"
+            << std::endl;
+  create_lumas_delta_image("data\\result_deltas.png", sample);
 }
 }

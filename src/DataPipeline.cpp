@@ -23,6 +23,8 @@ const char *const subtract_from_all_kernel_file = "src/kernel/subtract_from_all.
 const char *const update_parameters_kernel_file = "src/kernel/update_parameters.cl";
 /* clang-format on */
 
+using namespace cnn_sr;
+
 namespace cnn_sr {
 
 int DataPipeline::LOAD_KERNEL_LUMA = 1;
@@ -64,7 +66,10 @@ void DataPipeline::check_initialized(int kernel_load_flags) {
 bool DataPipeline::allocation_has_right_size__(opencl::MemoryHandle alloc,
                                                size_t size, size_t line,
                                                const char *variable_name) {
-  if (alloc == gpu_nullptr) return false;
+  if (alloc == gpu_nullptr) {
+    // std::cout << variable_name << " is NULL" << std::endl;
+    return false;
+  }
   auto raw_mem = _context->raw_memory(alloc);
   if (raw_mem->size == size) return true;
 
@@ -73,7 +78,8 @@ bool DataPipeline::allocation_has_right_size__(opencl::MemoryHandle alloc,
                "buffer of right size, so You only need to explictly set "
                "MemoryHandle to gpu_nullptr. Code line: " << line
             << ", variable: '" << variable_name << "'" << std::endl;
-  raw_mem->release();
+  throw std::runtime_error(
+      "Was forced to realocate gpu buffer due too difference in sizes.");
   return false;
 }
 
@@ -347,11 +353,13 @@ void DataPipeline::pre_execute_layer_validation(const LayerData &data,
   }
 }
 
-cl_event DataPipeline::execute_layer(
-    opencl::Kernel &kernel,                                               //
-    const LayerData &data, cnn_sr::CnnLayerGpuAllocationPool &gpu_alloc,  //
-    opencl::MemoryHandle &gpu_buf_in, size_t input_w, size_t input_h,
-    cl_event *ev_to_wait_for) {
+cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
+                                     const LayerData &data,
+                                     LayerAllocationPool &gpu_alloc,  //
+                                     opencl::MemoryHandle &gpu_buf_in,
+                                     size_t input_w, size_t input_h,
+                                     opencl::MemoryHandle &gpu_buf_out,
+                                     cl_event *ev_to_wait_for) {
   pre_execute_layer_validation(data, gpu_buf_in, input_w, input_h);
 
   size_t out_size[2];
@@ -374,32 +382,36 @@ cl_event DataPipeline::execute_layer(
     gpu_alloc.bias = _context->allocate(CL_MEM_READ_WRITE, bias_alloc_size);
     _context->write_buffer(gpu_alloc.bias, (void *)data.bias_ptr(), true);
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.output, out_alloc_size)) {
-    gpu_alloc.output = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
+  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_out, out_alloc_size)) {
+    gpu_buf_out = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
   }
-  _context->zeros_float(gpu_alloc.output, true);
+  _context->zeros_float(gpu_buf_out, true);       // TODO remove ?
 
   // std::cout << "opt: " << _optimize_for_small_data
-            // << "  f: " << data.f_spatial_size
-            // << ", kernel:" << kernel.get_human_identifier() << std::endl;
+  // << "  f: " << data.f_spatial_size
+  // << ", kernel:" << kernel.get_human_identifier() << std::endl;
   // execute - if f_spatial_size==1 use special optimized version
   if (_optimize_for_small_data && data.f_spatial_size == 1) {
-    return this->execute_layer__f_e1_1(kernel, data, gpu_alloc, gpu_buf_in,
-                                       input_w, input_h, ev_to_wait_for);
+    return this->execute_layer__f_eq_1(kernel, data, gpu_alloc, gpu_buf_in,
+                                       input_w, input_h, gpu_buf_out,
+                                       ev_to_wait_for);
   } else {
     return this->execute_layer_full(kernel, data, gpu_alloc, gpu_buf_in,
-                                    input_w, input_h, ev_to_wait_for);
+                                    input_w, input_h, gpu_buf_out,
+                                    ev_to_wait_for);
   }
 }
 
-cl_event DataPipeline::execute_layer_full(
-    opencl::Kernel &kernel,                                               //
-    const LayerData &data, cnn_sr::CnnLayerGpuAllocationPool &gpu_alloc,  //
-    opencl::MemoryHandle &gpu_buf_in, size_t input_w, size_t input_h,
-    cl_event *ev_to_wait_for) {
+cl_event DataPipeline::execute_layer_full(opencl::Kernel &kernel,  //
+                                          const LayerData &data,
+                                          LayerAllocationPool &gpu_alloc,  //
+                                          opencl::MemoryHandle &gpu_buf_in,
+                                          size_t input_w, size_t input_h,
+                                          opencl::MemoryHandle &gpu_buf_out,
+                                          cl_event *ev_to_wait_for) {
   // args
   kernel.push_arg(gpu_buf_in);
-  kernel.push_arg(gpu_alloc.output);
+  kernel.push_arg(gpu_buf_out);
   kernel.push_arg(gpu_alloc.weights);
   kernel.push_arg(gpu_alloc.bias);
   kernel.push_arg(sizeof(cl_uint), (void *)&data.n_prev_filter_cnt);
@@ -417,14 +429,16 @@ cl_event DataPipeline::execute_layer_full(
                         events_to_wait_for_count);
 }
 
-cl_event DataPipeline::execute_layer__f_e1_1(
-    opencl::Kernel &kernel,                                               //
-    const LayerData &data, cnn_sr::CnnLayerGpuAllocationPool &gpu_alloc,  //
-    opencl::MemoryHandle &gpu_buf_in, size_t input_w, size_t input_h,
-    cl_event *ev_to_wait_for) {
+cl_event DataPipeline::execute_layer__f_eq_1(opencl::Kernel &kernel,  //
+                                             const LayerData &data,
+                                             LayerAllocationPool &gpu_alloc,  //
+                                             opencl::MemoryHandle &gpu_buf_in,
+                                             size_t input_w, size_t input_h,
+                                             opencl::MemoryHandle &gpu_buf_out,
+                                             cl_event *ev_to_wait_for) {
   // args
   kernel.push_arg(gpu_buf_in);
-  kernel.push_arg(gpu_alloc.output);
+  kernel.push_arg(gpu_buf_out);
   kernel.push_arg(gpu_alloc.weights);
   kernel.push_arg(gpu_alloc.bias);
   kernel.push_arg(sizeof(cl_uint), (void *)&data.n_prev_filter_cnt);
@@ -455,8 +469,8 @@ cl_event DataPipeline::execute_layer__f_e1_1(
 ///
 
 float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
-                                  opencl::MemoryHandle gpu_buf_algo_res,
                                   size_t ground_truth_w, size_t ground_truth_h,
+                                  opencl::MemoryHandle gpu_buf_algo_res,
                                   size_t total_padding,
                                   cl_event *ev_to_wait_for) {
   //
@@ -509,10 +523,11 @@ float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
 }
 
 cl_event DataPipeline::last_layer_delta(
-    opencl::MemoryHandle gpu_buf_ground_truth,
+    opencl::MemoryHandle gpu_buf_ground_truth,  //
+    size_t ground_truth_w, size_t ground_truth_h,
     opencl::MemoryHandle gpu_buf_algo_res,
     opencl::MemoryHandle &gpu_buf_target,  //
-    float weight_decay, size_t ground_truth_w, size_t ground_truth_h,
+    float weight_decay,                    //
     size_t total_padding, cl_event *ev_to_wait_for) {
   //
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
@@ -554,9 +569,9 @@ cl_event DataPipeline::last_layer_delta(
                                            ev_to_wait_for);
 }
 
-float DataPipeline::weight_decay(cnn_sr::CnnLayerGpuAllocationPool w_layer_1,
-                                 cnn_sr::CnnLayerGpuAllocationPool w_layer_2,
-                                 cnn_sr::CnnLayerGpuAllocationPool w_layer_3,
+float DataPipeline::weight_decay(LayerAllocationPool w_layer_1,
+                                 LayerAllocationPool w_layer_2,
+                                 LayerAllocationPool w_layer_3,
                                  float weight_decay_parameter,
                                  cl_event *ev_to_wait_for) {
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
@@ -587,10 +602,10 @@ float DataPipeline::weight_decay(cnn_sr::CnnLayerGpuAllocationPool w_layer_1,
 cl_event DataPipeline::calculate_deltas(
     opencl::Kernel &kernel,  //
     const LayerData &curr_layer, const LayerData &next_layer,
-    CnnLayerGpuAllocationPool &curr_gpu_alloc,
-    CnnLayerGpuAllocationPool &next_gpu_alloc,  //
+    LayerAllocationPool &next_gpu_alloc,  //
+    opencl::MemoryHandle &curr_deltas, opencl::MemoryHandle next_deltas,
     size_t next_layer_out_w, size_t next_layer_out_h,
-    cl_event *ev_to_wait_for) {
+    opencl::MemoryHandle curr_output, cl_event *ev_to_wait_for) {
   //
   // @pre validation
   LayerData::validate(next_layer);
@@ -616,7 +631,7 @@ cl_event DataPipeline::calculate_deltas(
   //   next_gpu_alloc.weights
   //   curr_layer.output <- this is input for current layer (used for activation_func_derivative)
   //   curr_layer.deltas <- as target
-  if (!ALLOCATION_HAS_RIGHT_SIZE(next_gpu_alloc.deltas, next_out_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(next_deltas, next_out_alloc_size)) {
     throw std::runtime_error(
         "Tried to calculate deltas for previous layer, but deltas for current layer are not valid !");
   }
@@ -624,21 +639,21 @@ cl_event DataPipeline::calculate_deltas(
     next_gpu_alloc.weights = _context->allocate(CL_MEM_READ_WRITE, weights_alloc_size);
     _context->write_buffer(next_gpu_alloc.weights, (void *)next_layer.weights_ptr(), true);
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_gpu_alloc.output, out_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_output, out_alloc_size)) {
     throw std::runtime_error(
         "Tried to calculate deltas for previous layer, but there are no previous layer output values."
         "They are normally allocated during forward step.");
   }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_gpu_alloc.deltas, out_alloc_size)) {
-    curr_gpu_alloc.deltas = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
+  if (!ALLOCATION_HAS_RIGHT_SIZE(curr_deltas, out_alloc_size)) {
+    curr_deltas = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
   }
-  _context->zeros_float(curr_gpu_alloc.deltas, true);
+  _context->zeros_float(curr_deltas, true); // TODO REMOVE
   /* clang-format on */
 
   // args
-  kernel.push_arg(next_gpu_alloc.deltas);
-  kernel.push_arg(curr_gpu_alloc.output);
-  kernel.push_arg(curr_gpu_alloc.deltas);  // target
+  kernel.push_arg(next_deltas);
+  kernel.push_arg(curr_output);
+  kernel.push_arg(curr_deltas);  // target
   kernel.push_arg(next_gpu_alloc.weights);
   kernel.push_arg(sizeof(cl_uint), (void *)&curr_layer.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&next_layer.f_spatial_size);
@@ -658,7 +673,8 @@ cl_event DataPipeline::calculate_deltas(
 
 cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
                                      opencl::MemoryHandle layer_input,
-                                     CnnLayerGpuAllocationPool &gpu_alloc,
+                                     opencl::MemoryHandle layer_deltas,
+                                     LayerAllocationPool &gpu_alloc,
                                      size_t layer_out_w, size_t layer_out_h,
                                      cl_event *ev_to_wait_for) {
   LayerData::validate(layer_data);
@@ -682,7 +698,7 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
          grad_w_size = sizeof(cl_float) * layer_data.weight_size(),
          grad_b_size = sizeof(cl_float) * layer_data.bias_size();
   /* clang-format off */
-  if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_alloc.deltas, out_alloc_size)) {
+  if (!ALLOCATION_HAS_RIGHT_SIZE(layer_deltas, out_alloc_size)) {
     throw std::runtime_error("Tried to calculate gradients, but deltas for current layer are not valid");
   }
   if (!ALLOCATION_HAS_RIGHT_SIZE(layer_input, in_alloc_size)) {
@@ -701,7 +717,7 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
   /* clang-format on */
 
   // args
-  kernel.push_arg(gpu_alloc.deltas);
+  kernel.push_arg(layer_deltas);
   kernel.push_arg(layer_input);
   kernel.push_arg(gpu_alloc.accumulating_grad_w);
   kernel.push_arg(gpu_alloc.accumulating_grad_b);
@@ -721,7 +737,7 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
 }
 
 cl_event DataPipeline::update_parameters(LayerData &layer_data,  //
-                                         CnnLayerGpuAllocationPool &gpu_alloc,
+                                         LayerAllocationPool &gpu_alloc,
                                          size_t batch_size, float momentum,
                                          float learning_rate,
                                          cl_event *ev_to_wait_for) {
