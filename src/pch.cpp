@@ -12,6 +12,9 @@
 #include "json/gason.h"
 
 namespace cnn_sr {
+
+bool warn_about_blocking_operation = false;
+
 namespace utils {
 
 ///

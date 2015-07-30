@@ -42,6 +42,9 @@ class JsonAllocator;
 /// Utils
 ///
 namespace cnn_sr {
+
+extern bool warn_about_blocking_operation;
+
 namespace utils {
 
 void require(bool, const char*);

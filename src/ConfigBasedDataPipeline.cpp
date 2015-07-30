@@ -119,6 +119,8 @@ cl_event ConfigBasedDataPipeline::backpropagate(
     cnn_sr::LayerAllocationPool &layer_3_alloc,  //
     SampleAllocationPool &sample,                //
     float weight_decay_value, cl_event *ev_to_wait_for) {
+  // TODO a lot can be done in pararell
+
   // dimensions
   size_t layer_1_out_dim[2], layer_2_out_dim[2], layer_3_out_dim[2];
   layer_data_1.get_output_dimensions(layer_1_out_dim,  //
@@ -155,20 +157,22 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 3rd layer"
               << std::endl;
-  DataPipeline::backpropagate(layer_data_3,  //
-                              sample.layer_2_output, sample.layer_3_deltas,
-                              layer_3_alloc,                           //
-                              layer_3_out_dim[0], layer_3_out_dim[1],  //
-                              &event2_1);
+  auto event3_1 =
+      DataPipeline::backpropagate(layer_data_3,  //
+                                  sample.layer_2_output, sample.layer_3_deltas,
+                                  layer_3_alloc,                           //
+                                  layer_3_out_dim[0], layer_3_out_dim[1],  //
+                                  &event2_3);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 2nd layer"
               << std::endl;
-  DataPipeline::backpropagate(layer_data_2,  //
-                              sample.layer_1_output, sample.layer_2_deltas,
-                              layer_2_alloc,                           //
-                              layer_2_out_dim[0], layer_2_out_dim[1],  //
-                              &event2_2);
+  auto event3_2 =
+      DataPipeline::backpropagate(layer_data_2,  //
+                                  sample.layer_1_output, sample.layer_2_deltas,
+                                  layer_2_alloc,                           //
+                                  layer_2_out_dim[0], layer_2_out_dim[1],  //
+                                  &event3_1);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 1st layer"
@@ -179,8 +183,8 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                   sample.layer_1_deltas,                   //
                                   layer_1_alloc,                           //
                                   layer_1_out_dim[0], layer_1_out_dim[1],  //
-                                  &event2_3);
-  _context->block();
+                                  &event3_2);
+
   return event3_3;
 }
 

@@ -281,6 +281,8 @@ cl_event DataPipeline::subtract_mean(opencl::MemoryHandle data, float *mean,
 
 float DataPipeline::sum(opencl::MemoryHandle data, bool squared,
                         cl_event *ev_to_wait_for) {
+  if (cnn_sr::warn_about_blocking_operation)
+    std::cout << "BLOCK: sum" << std::endl;
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
   size_t len = element_count(data, sizeof(cl_float));
   auto *kernel = squared ? _sum_squared_kernel : _sum_kernel;
@@ -385,7 +387,6 @@ cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_out, out_alloc_size)) {
     gpu_buf_out = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
   }
-  _context->zeros_float(gpu_buf_out, true);       // TODO remove ?
 
   // std::cout << "opt: " << _optimize_for_small_data
   // << "  f: " << data.f_spatial_size
@@ -473,6 +474,8 @@ float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
                                   opencl::MemoryHandle gpu_buf_algo_res,
                                   size_t total_padding,
                                   cl_event *ev_to_wait_for) {
+  if (cnn_sr::warn_about_blocking_operation)
+    std::cout << "BLOCK: squared error" << std::endl;
   //
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
   size_t algo_w = ground_truth_w - total_padding,
@@ -493,7 +496,8 @@ float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
   if (!ALLOCATION_HAS_RIGHT_SIZE(_tmp_gpu_float, sizeof(cl_float))) {
     _tmp_gpu_float = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float));
   }
-  _context->write_buffer(_tmp_gpu_float, (void *)&result, true);  // zeroe
+  // TODO copy zero value from some other buffer / nonblocking write
+  _context->write_buffer(_tmp_gpu_float, (void *)&result, true);
   /* clang-format on */
 
   size_t global_work_size[2], local_work_size[2],
@@ -549,7 +553,6 @@ cl_event DataPipeline::last_layer_delta(
     gpu_buf_target = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float) * algo_size);
   }
   /* clang-format on */
-  _context->zeros_float(gpu_buf_target, true);
 
   // kernel args
   _last_layer_delta_kernel->push_arg(gpu_buf_ground_truth);
@@ -574,6 +577,8 @@ float DataPipeline::weight_decay(LayerAllocationPool w_layer_1,
                                  LayerAllocationPool w_layer_3,
                                  float weight_decay_parameter,
                                  cl_event *ev_to_wait_for) {
+  if (cnn_sr::warn_about_blocking_operation)
+    std::cout << "BLOCK: weight_decay" << std::endl;
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
   size_t w1_size = element_count(w_layer_1.weights, sizeof(cl_float)),
          w2_size = element_count(w_layer_2.weights, sizeof(cl_float)),
@@ -647,7 +652,6 @@ cl_event DataPipeline::calculate_deltas(
   if (!ALLOCATION_HAS_RIGHT_SIZE(curr_deltas, out_alloc_size)) {
     curr_deltas = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
   }
-  _context->zeros_float(curr_deltas, true); // TODO REMOVE
   /* clang-format on */
 
   // args

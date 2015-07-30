@@ -105,8 +105,6 @@ int main(int argc, char** argv) {
 
   // other config variables
   const size_t validation_set_percent = 20;  // TODO move to cfg
-  auto backup_weights_file = "weights_tmp.json";
-  int backup_weights_rate = 200;  // #epochs between emergency backup
 
   // read config
   ConfigReader reader;
@@ -203,12 +201,6 @@ int main(int argc, char** argv) {
               << std::endl;
 
     context.block();
-
-    if (!dry && epoch_id > 0 && (epoch_id % backup_weights_rate) == 0) {
-      data_pipeline.write_params_to_file(backup_weights_file, gpu_alloc.layer_1,
-                                         gpu_alloc.layer_2, gpu_alloc.layer_3);
-      context.block();
-    }
   }
 
   ///
@@ -281,16 +273,19 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
                     GpuAllocationPool& gpu_alloc,
                     std::vector<SampleAllocationPool*>& sample_set) {
   auto context = data_pipeline.context();
-
+  int block_stride = sample_set.size() / 10;
   float squared_error = 0;
-  for (SampleAllocationPool* sample_ptr : sample_set) {
-    // std::cout << "-- NEXT (train? - " << backpropagate << ") --" << std::endl;
-    SampleAllocationPool& sample = *sample_ptr;
+  cl_event event;
+  cl_event* event_ptr = nullptr;
+  for (size_t i = 0; i < sample_set.size(); i++) {
+    // std::cout << "-- NEXT (train? - " << backpropagate << ") --" <<
+    // std::endl;
+    SampleAllocationPool& sample = *sample_set[i];
     // process with layers
     auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
                                             gpu_alloc.layer_2,  //
                                             gpu_alloc.layer_3,  //
-                                            sample);
+                                            sample, event_ptr);
     // squared difference
     if (!backpropagate) {
       // we are ignoring train error anyway
@@ -305,12 +300,19 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
       // gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
       // cfg->weight_decay_parameter, &forward_ev);
       auto weight_decay_value = 0.0f;
-      data_pipeline.backpropagate(gpu_alloc.layer_1,  //
-                                  gpu_alloc.layer_2,  //
-                                  gpu_alloc.layer_3,  //
-                                  sample, weight_decay_value, &forward_ev);
+      event =
+          data_pipeline.backpropagate(gpu_alloc.layer_1,  //
+                                      gpu_alloc.layer_2,  //
+                                      gpu_alloc.layer_3,  //
+                                      sample, weight_decay_value, &forward_ev);
+      event_ptr = &event;
     }
-    context->block();  // TODO REMOVE THIS BLOCK !!!
+
+    if (i % block_stride == 0) {
+      // TODO this may not be necessay, but this perspective scares me
+      // std::cout << "[" << i << "] BLOCK" << std::endl;
+      context->block();
+    }
   }
   return squared_error;
 }
