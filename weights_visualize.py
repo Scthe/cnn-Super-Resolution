@@ -105,11 +105,6 @@ if __name__ == '__main__':
   parser.add_argument('--scale', '-s', required=False, default=10, type=int, help='scale factor - cause sometimes 10x10 image is too small')
   args = parser.parse_args()
 
-  print(args.config)
-  print(args.parameters_file)
-  print(args.out_dir)
-  print(args.scale)
-
   with open(args.config) as data_file:
     cfg = json.load(data_file)
   # pprint(cfg)
