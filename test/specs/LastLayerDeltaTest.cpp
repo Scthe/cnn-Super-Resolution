@@ -77,9 +77,10 @@ bool LastLayerDeltaTest::operator()(size_t,
   opencl::MemoryHandle gpu_buf_out = gpu_nullptr;
 
   // exec
-  pipeline->last_layer_delta(gpu_buf_ground_truth, gpu_buf_algo_res,
-                             gpu_buf_out, _impl->weight_decay, ground_truth_w,
-                             ground_truth_h, total_padding);
+  pipeline->last_layer_delta(gpu_buf_ground_truth,            //
+                             ground_truth_w, ground_truth_h,  //
+                             gpu_buf_algo_res, gpu_buf_out, _impl->weight_decay,
+                             total_padding);
   assert_equals(pipeline, cpu_expected, gpu_buf_out);
   return true;
 }

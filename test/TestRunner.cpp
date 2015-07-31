@@ -27,6 +27,8 @@ int main(int argc, char **argv) {
   context.init();
   cnn_sr::DataPipeline pipeline(&context);
   pipeline.init(cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
+  // TODO test opt
+  // pipeline.init(true, cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
 
   //
   //

@@ -168,24 +168,26 @@ bool LayerDeltasTest::operator()(size_t, cnn_sr::DataPipeline *const pipeline) {
   }
 
   // gpu memory alloc
-  cnn_sr::CnnLayerGpuAllocationPool prev_gpu_buf, curr_gpu_buf;
+  cnn_sr::LayerAllocationPool curr_gpu_buf;
+  opencl::MemoryHandle prev_deltas = gpu_nullptr;
   /* clang-format off */
-  curr_gpu_buf.deltas = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * DELTAS_SIZE);
-  prev_gpu_buf.output = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * INPUT_SIZE);
+  auto curr_deltas = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * DELTAS_SIZE);
+  auto prev_output = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * INPUT_SIZE);
   /* clang-format on */
-  context->write_buffer(curr_gpu_buf.deltas, (void *)_impl->deltas, true);
-  context->write_buffer(prev_gpu_buf.output, (void *)output, true);
+  context->write_buffer(curr_deltas, (void *)_impl->deltas, true);
+  context->write_buffer(prev_output, (void *)output, true);
 
   // create kernel & run
   auto kernel = pipeline->create_deltas_kernel(prev_data);
-  pipeline->calculate_deltas(*kernel,                     //
-                             prev_data, curr_data,        //
-                             prev_gpu_buf, curr_gpu_buf,  //
-                             output_dim[0], output_dim[1]);
-  assert_equals(pipeline, _impl->expected_output, prev_gpu_buf.deltas);
+  pipeline->calculate_deltas(*kernel,                   //
+                             prev_data, curr_data,      //
+                             curr_gpu_buf,              //
+                             prev_deltas, curr_deltas,  //
+                             output_dim[0], output_dim[1], prev_output);
+  assert_equals(pipeline, _impl->expected_output, prev_deltas);
 
   // sub test with expected_derivative
-  // assert_equals(pipeline, expected_derivative, prev_gpu_buf.deltas);
+  // assert_equals(pipeline, expected_derivative, prev_deltas);
 
   return true;
 }

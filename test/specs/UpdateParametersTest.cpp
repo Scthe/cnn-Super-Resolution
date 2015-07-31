@@ -76,7 +76,7 @@ bool UpdateParametersTest::operator()(size_t,
   unsigned seed1 = std::chrono::system_clock::now().time_since_epoch().count();
   std::mt19937 generator(seed1);
 
-  CnnLayerGpuAllocationPool gpu_alloc;
+  LayerAllocationPool gpu_alloc;
   std::vector<float> expected_w(ws), current_w(ws), new_deltas_w(ws);
   std::vector<float> expected_b(bs), current_b(bs), new_deltas_b(bs);
   _impl->create_data(generator, context,

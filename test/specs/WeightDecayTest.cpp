@@ -54,7 +54,7 @@ bool WeightDecayTest::operator()(size_t, cnn_sr::DataPipeline *const pipeline) {
   float expected = (res1 + res2 + res3) * _impl->weight_decay_parameter;
 
   // mem alloc
-  cnn_sr::CnnLayerGpuAllocationPool l1_alloc, l2_alloc, l3_alloc;
+  cnn_sr::LayerAllocationPool l1_alloc, l2_alloc, l3_alloc;
 
   /* clang-format off */
   l1_alloc.weights = _context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * _impl->w1_size);
