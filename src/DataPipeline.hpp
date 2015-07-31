@@ -94,10 +94,11 @@ class DataPipeline {
    * @param  total_padding        difference in size between ground_truth image
    *                              and result. Should be equal to f1+f2+f3-3
    */
-  float squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
-                      size_t ground_truth_w, size_t ground_truth_h,
-                      opencl::MemoryHandle gpu_buf_algo_res,
-                      size_t total_padding, cl_event* ev = nullptr);
+  cl_event squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
+                         size_t ground_truth_w, size_t ground_truth_h,
+                         opencl::MemoryHandle gpu_buf_algo_res,
+                         opencl::MemoryHandle& tmp_buffer, float& target,
+                         size_t total_padding, cl_event* ev = nullptr);
 
   /**
    * Glorified sum to calculate weight decay. Important is that:

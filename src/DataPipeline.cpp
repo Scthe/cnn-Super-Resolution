@@ -483,11 +483,12 @@ cl_event DataPipeline::execute_output_layer(opencl::Kernel &kernel,  //
                             work_dims, print_work_dimensions);
   size_t blocks = (global_work_size[0] / local_work_size[0]) *
                   (global_work_size[1] / local_work_size[1]);
-  // std::cout << "global: " << global_work_size[0] << "x" << global_work_size[1]
-            // << std::endl;
+  // std::cout << "global: " << global_work_size[0] << "x" <<
+  // global_work_size[1]
+  // << std::endl;
   // std::cout << "blocks: " << blocks << ", " << local_work_size[0] << "x"
-            // << local_work_size[1] << ", input: " << input_w << "x" << input_h
-            // << std::endl;
+  // << local_work_size[1] << ", input: " << input_w << "x" << input_h
+  // << std::endl;
   size_t ws = data.weight_size() * blocks;
   // args
   kernel.push_arg(gpu_buf_in);
@@ -509,14 +510,13 @@ cl_event DataPipeline::execute_output_layer(opencl::Kernel &kernel,  //
 /// backpropagation
 ///
 
-float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
-                                  size_t ground_truth_w, size_t ground_truth_h,
-                                  opencl::MemoryHandle gpu_buf_algo_res,
-                                  size_t total_padding,
-                                  cl_event *ev_to_wait_for) {
-  if (cnn_sr::warn_about_blocking_operation)
-    std::cout << "BLOCK: squared error" << std::endl;
-  //
+cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
+                                     size_t ground_truth_w,
+                                     size_t ground_truth_h,
+                                     opencl::MemoryHandle gpu_buf_algo_res,
+                                     opencl::MemoryHandle &tmp_buffer,
+                                     float &target, size_t total_padding,
+                                     cl_event *ev_to_wait_for) {
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
   size_t algo_w = ground_truth_w - total_padding,
          algo_h = ground_truth_h - total_padding,  //
@@ -532,13 +532,15 @@ float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
     throw std::runtime_error( "Allocated gpu_buf_algo_res buffer size did not match calculated size");
   }
-  float result = 0;
-  if (!ALLOCATION_HAS_RIGHT_SIZE(_tmp_gpu_float, sizeof(cl_float))) {
-    _tmp_gpu_float = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float));
+  if (!ALLOCATION_HAS_RIGHT_SIZE(tmp_buffer, sizeof(cl_float))) {
+    tmp_buffer = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float));
   }
-  // TODO copy zero value from some other buffer / nonblocking write
-  _context->write_buffer(_tmp_gpu_float, (void *)&result, true);
   /* clang-format on */
+  float zero = 0.0f;
+  auto event_count = ev_to_wait_for == nullptr ? 0 : 1;
+  auto ev_write = _context->write_buffer(tmp_buffer, (void *)&zero, false,
+                                         ev_to_wait_for, event_count);
+  ev_to_wait_for = &ev_write;
 
   size_t global_work_size[2], local_work_size[2],
       work_dims[2] = {algo_w, algo_h};
@@ -549,7 +551,7 @@ float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
   size_t local_mem_size = local_work_size[0] * local_work_size[1];
   _squared_error_kernel->push_arg(gpu_buf_ground_truth);
   _squared_error_kernel->push_arg(gpu_buf_algo_res);
-  _squared_error_kernel->push_arg(_tmp_gpu_float);
+  _squared_error_kernel->push_arg(tmp_buffer);
   _squared_error_kernel->push_arg(sizeof(cl_float) * local_mem_size,
                                   nullptr);  // scratch
   _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
@@ -560,10 +562,8 @@ float DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
   cl_event finish_token = _squared_error_kernel->execute(
       2, global_work_size, local_work_size, ev_to_wait_for);
 
-  _context->read_buffer(_tmp_gpu_float, (void *)&result, true, &finish_token,
-                        1);
-
-  return result;
+  return _context->read_buffer(tmp_buffer, (void *)&target, false,
+                               &finish_token, 1);
 }
 
 cl_event DataPipeline::last_layer_delta(

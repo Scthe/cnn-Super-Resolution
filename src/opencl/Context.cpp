@@ -237,7 +237,7 @@ cl_event Context::read_buffer(MemoryHandle gpu_buffer_handle, size_t offset,
                               size_t size, void* dst, bool block,
                               cl_event* events_to_wait_for,
                               int events_to_wait_for_count) {
-  if (cnn_sr::warn_about_blocking_operation)
+  if (cnn_sr::warn_about_blocking_operation && block)
     std::cout << "BLOCK: read_buffer" << std::endl;
   check_error(initialized, "Context was not initialized");
   auto gpu_buffer = raw_memory(gpu_buffer_handle);
@@ -267,7 +267,7 @@ cl_event Context::write_buffer(MemoryHandle gpu_buffer_handle, size_t offset,
                                size_t size, void* src, bool block,
                                cl_event* events_to_wait_for,
                                int events_to_wait_for_count) {
-  if (cnn_sr::warn_about_blocking_operation)
+  if (cnn_sr::warn_about_blocking_operation && block)
     std::cout << "BLOCK: write_buffer" << std::endl;
   check_error(initialized, "Context was not initialized");
   auto gpu_buffer = raw_memory(gpu_buffer_handle);

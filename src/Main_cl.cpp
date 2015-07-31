@@ -273,29 +273,24 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
                     GpuAllocationPool& gpu_alloc,
                     std::vector<SampleAllocationPool*>& sample_set) {
   auto context = data_pipeline.context();
-  int block_stride = sample_set.size() / 10;
-  float squared_error = 0;
+  int block_stride = std::max(10, (int)sample_set.size() / 3);
   cl_event event;
   cl_event* event_ptr = nullptr;
   for (size_t i = 0; i < sample_set.size(); i++) {
-    // std::cout << "-- NEXT (train? - " << backpropagate << ") --" <<
-    // std::endl;
+    // std::cout << "--[" << i << "] NEXT (train? - " << backpropagate << ") --"
+    // << std::endl;
     SampleAllocationPool& sample = *sample_set[i];
     // process with layers
     auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
                                             gpu_alloc.layer_2,  //
                                             gpu_alloc.layer_3,  //
                                             sample, event_ptr);
-    // squared difference
     if (!backpropagate) {
-      // we are ignoring train error anyway
-      squared_error += data_pipeline.squared_error(sample, &forward_ev);
-      if (std::isnan(squared_error)) {
-        return squared_error;
-      }
-    }
-
-    if (backpropagate) {
+      // we are executing validation set - schedule all squared_error calcs
+      // (samples do not depend on each other, so we ignore event object)
+      data_pipeline.squared_error(sample, &forward_ev);
+    } else {
+      // backpopagate all
       // auto weight_decay_value = data_pipeline.weight_decay(
       // gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
       // cfg->weight_decay_parameter, &forward_ev);
@@ -308,12 +303,25 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
       event_ptr = &event;
     }
 
-    if (i % block_stride == 0) {
-      // TODO this may not be necessay, but this perspective scares me
+    if (i > 0 && i % block_stride == 0) {
       // std::cout << "[" << i << "] BLOCK" << std::endl;
       context->block();
     }
   }
+
+  // only meaningful if executing validation set
+  float squared_error = 0;
+  // wait till all finished, sum the errors
+  context->block();
+  for (size_t i = 0; !backpropagate && i < sample_set.size(); i++) {
+    SampleAllocationPool& sample = *sample_set[i];
+    float squared_error_val = sample.validation_error;
+    if (std::isnan(squared_error_val)) {
+      return squared_error_val;
+    }
+    squared_error += squared_error_val;
+  }
+
   return squared_error;
 }
 

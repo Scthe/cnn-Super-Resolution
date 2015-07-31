@@ -31,9 +31,19 @@ struct SampleAllocationPool {
   /** Training: luma to compare our result to */
   opencl::MemoryHandle expected_luma = gpu_nullptr;
 
+  /** Since memory is lazily allocated, it may happen that we are going
+    * to calculate validation error when other buffers are not 100% ready.
+    * As a result of this we are not reusing other buffers,
+    * even thought we could use f.e. one of deltas
+    * real type: cl_float
+    */
+  opencl::MemoryHandle validation_error_buf = gpu_nullptr;  //
+  /** read target */
+  float validation_error;
+
   SampleAllocationPool() = default;
 
- // private:
+  // private:
   // SampleAllocationPool(const SampleAllocationPool&) = delete;
   // SampleAllocationPool& operator=(const SampleAllocationPool&) = delete;
 };
@@ -54,7 +64,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
                    LayerAllocationPool& layer_3_alloc,  //
                    SampleAllocationPool& sample, cl_event* ev = nullptr);
 
-  float squared_error(SampleAllocationPool& sample, cl_event* ev = nullptr);
+  cl_event squared_error(SampleAllocationPool& sample, cl_event* ev = nullptr);
 
   /* clang-format off */
   /**

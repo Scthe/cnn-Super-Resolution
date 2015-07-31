@@ -1,3 +1,4 @@
+
 #include "ConfigBasedDataPipeline.hpp"
 
 #include <random>   // for std::mt19937
@@ -211,6 +212,7 @@ void ConfigBasedDataPipeline::update_parameters(
                                   _config->momentum, _config->learning_rate[0],
                                   ev_to_wait_for);
 
+  // TODO optimize ?
   _context->block();
   _context->zeros_float(layer_1_alloc.accumulating_grad_w, true);
   _context->zeros_float(layer_2_alloc.accumulating_grad_w, true);
@@ -222,14 +224,16 @@ void ConfigBasedDataPipeline::update_parameters(
   ++epochs;
 }
 
-float ConfigBasedDataPipeline::squared_error(SampleAllocationPool &sample,
-                                             cl_event *ev_to_wait_for) {
+cl_event ConfigBasedDataPipeline::squared_error(SampleAllocationPool &sample,
+                                                cl_event *ev_to_wait_for) {
   //
   size_t padding = layer_data_1.f_spatial_size + layer_data_2.f_spatial_size +
                    layer_data_3.f_spatial_size - 3;
-  return DataPipeline::squared_error(sample.expected_luma, sample.input_w,
-                                     sample.input_h, sample.layer_3_output,
-                                     padding, ev_to_wait_for);
+  return DataPipeline::squared_error(
+      sample.expected_luma,            //
+      sample.input_w, sample.input_h,  //
+      sample.layer_3_output, sample.validation_error_buf,
+      sample.validation_error, padding, ev_to_wait_for);
 }
 
 cl_event ConfigBasedDataPipeline::last_layer_delta(SampleAllocationPool &sample,
