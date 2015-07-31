@@ -228,6 +228,12 @@ class DataPipeline {
                                  opencl::MemoryHandle&, size_t, size_t,
                                  opencl::MemoryHandle&, cl_event* ev = nullptr);
 
+  /** version optimized for case current_filter_count==1 */
+  cl_event execute_output_layer(opencl::Kernel&, const LayerData&,
+                                cnn_sr::LayerAllocationPool&,
+                                opencl::MemoryHandle&, size_t, size_t,
+                                opencl::MemoryHandle&, cl_event* ev = nullptr);
+
  protected:
   opencl::Context* const _context;
   bool _initialized;

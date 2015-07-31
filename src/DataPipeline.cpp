@@ -14,6 +14,7 @@ const char *const luma_kernel_file = "src/kernel/extract_luma.cl";
 const char *const swap_luma_kernel_file = "src/kernel/swap_luma.cl";
 const char *const layer_kernel_file = "src/kernel/layer_uber_kernel.cl";
 const char *const layer__f_e_1__kernel_file = "src/kernel/layer__f_eq_1__kernel.cl";
+const char *const layer_output_kernel_file = "src/kernel/layer_output_kernel.cl";
 const char *const squared_error_kernel_file = "src/kernel/squared_error.cl";
 const char *const sum_kernel_file = "src/kernel/sum.cl";
 const char *const deltas_kernel_file = "src/kernel/layer_deltas.cl";
@@ -163,13 +164,18 @@ opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d,
   // CL_INVALID_COMMAND_QUEUE (maybe gpu memory alloc?)
   char buf[255];
   /* clang-format off */
-  auto defs = skip_relu ? "-D CURRENT_FILTER_COUNT=%d -D PREVIOUS_FILTER_COUNT=%d -D SKIP_RELU"
-                        : "-D CURRENT_FILTER_COUNT=%d -D PREVIOUS_FILTER_COUNT=%d";
+  auto defs = skip_relu ? "-D CURRENT_FILTER_COUNT=%d -D PREVIOUS_FILTER_COUNT=%d -D F_SPATIAL_SIZE=%d -D SKIP_RELU"
+                        : "-D CURRENT_FILTER_COUNT=%d -D PREVIOUS_FILTER_COUNT=%d -D F_SPATIAL_SIZE=%d";
   /* clang-format on */
-  snprintf(buf, 255, defs, d.current_filter_count, d.n_prev_filter_cnt);
-  auto kernel_file = _optimize_for_small_data && d.f_spatial_size == 1
-                         ? layer__f_e_1__kernel_file
-                         : layer_kernel_file;
+  // TODO use F_SPATIAL_SIZE in uber kernel - it is constant after all
+  snprintf(buf, 255, defs, d.current_filter_count, d.n_prev_filter_cnt,
+           d.f_spatial_size);
+  // NOTE following conditions are same as in DataPipeline::execute_layer()
+  bool opt_f1 = _optimize_for_small_data && d.f_spatial_size == 1;
+  bool opt_n1 = _optimize_for_small_data && d.current_filter_count == 1;
+  auto kernel_file =
+      opt_f1 ? layer__f_e_1__kernel_file  //
+             : opt_n1 ? layer_output_kernel_file : layer_kernel_file;
   return _context->create_kernel(kernel_file, buf);
 }
 
@@ -388,14 +394,16 @@ cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
     gpu_buf_out = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
   }
 
-  // std::cout << "opt: " << _optimize_for_small_data
-  // << "  f: " << data.f_spatial_size
-  // << ", kernel:" << kernel.get_human_identifier() << std::endl;
-  // execute - if f_spatial_size==1 use special optimized version
-  if (_optimize_for_small_data && data.f_spatial_size == 1) {
+  bool opt_f1 = _optimize_for_small_data && data.f_spatial_size == 1;
+  bool opt_n1 = _optimize_for_small_data && data.current_filter_count == 1;
+  if (opt_f1) {
     return this->execute_layer__f_eq_1(kernel, data, gpu_alloc, gpu_buf_in,
                                        input_w, input_h, gpu_buf_out,
                                        ev_to_wait_for);
+  } else if (opt_n1) {
+    return this->execute_output_layer(kernel, data, gpu_alloc, gpu_buf_in,
+                                      input_w, input_h, gpu_buf_out,
+                                      ev_to_wait_for);
   } else {
     return this->execute_layer_full(kernel, data, gpu_alloc, gpu_buf_in,
                                     input_w, input_h, gpu_buf_out,
@@ -423,7 +431,7 @@ cl_event DataPipeline::execute_layer_full(opencl::Kernel &kernel,  //
   // run
   int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
   size_t global_work_size[2], local_work_size[2],
-      work_dims[2] = {input_w, input_h};
+      work_dims[2] = {input_w, input_h};  // TODO output_w,output_h ?
   opencl::utils::work_sizes(kernel, 2, global_work_size, local_work_size,
                             work_dims, print_work_dimensions);
   return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
@@ -442,9 +450,6 @@ cl_event DataPipeline::execute_layer__f_eq_1(opencl::Kernel &kernel,  //
   kernel.push_arg(gpu_buf_out);
   kernel.push_arg(gpu_alloc.weights);
   kernel.push_arg(gpu_alloc.bias);
-  kernel.push_arg(sizeof(cl_uint), (void *)&data.n_prev_filter_cnt);
-  kernel.push_arg(sizeof(cl_uint), (void *)&data.current_filter_count);
-  kernel.push_arg(sizeof(cl_uint), (void *)&data.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&input_w);
   kernel.push_arg(sizeof(cl_uint), (void *)&input_h);
 
@@ -462,6 +467,41 @@ cl_event DataPipeline::execute_layer__f_eq_1(opencl::Kernel &kernel,  //
   // std::cout << local_work_size[0] << ", " << local_work_size[1] << ", "
   // << local_work_size[2] << std::endl;
   return kernel.execute(3, global_work_size, local_work_size, ev_to_wait_for,
+                        events_to_wait_for_count);
+}
+
+cl_event DataPipeline::execute_output_layer(opencl::Kernel &kernel,  //
+                                            const LayerData &data,
+                                            LayerAllocationPool &gpu_alloc,  //
+                                            opencl::MemoryHandle &gpu_buf_in,
+                                            size_t input_w, size_t input_h,
+                                            opencl::MemoryHandle &gpu_buf_out,
+                                            cl_event *ev_to_wait_for) {
+  size_t global_work_size[2], local_work_size[2],
+      work_dims[2] = {input_w, input_h};  // TODO output_w,output_h ?
+  opencl::utils::work_sizes(kernel, 2, global_work_size, local_work_size,
+                            work_dims, print_work_dimensions);
+  size_t blocks = (global_work_size[0] / local_work_size[0]) *
+                  (global_work_size[1] / local_work_size[1]);
+  // std::cout << "global: " << global_work_size[0] << "x" << global_work_size[1]
+            // << std::endl;
+  // std::cout << "blocks: " << blocks << ", " << local_work_size[0] << "x"
+            // << local_work_size[1] << ", input: " << input_w << "x" << input_h
+            // << std::endl;
+  size_t ws = data.weight_size() * blocks;
+  // args
+  kernel.push_arg(gpu_buf_in);
+  kernel.push_arg(gpu_buf_out);
+  kernel.push_arg(gpu_alloc.weights);
+  kernel.push_arg(gpu_alloc.bias);
+  kernel.push_arg(sizeof(cl_float) * blocks, nullptr);  // local bias
+  kernel.push_arg(sizeof(cl_float) * ws, nullptr);      // local weights
+  kernel.push_arg(sizeof(cl_uint), (void *)&input_w);
+  kernel.push_arg(sizeof(cl_uint), (void *)&input_h);
+
+  // run
+  int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
+  return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
                         events_to_wait_for_count);
 }
 
