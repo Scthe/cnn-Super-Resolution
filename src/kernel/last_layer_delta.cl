@@ -14,7 +14,6 @@
 __kernel void main(__read_only __global float* ground_truth_image,
                    __read_only __global float* algo_result,
                    __global float* target,       //
-                   __const float weight_decay,   //
                    __const uint ground_truth_w,  //
                    __const uint algo_result_w,   //
                    __const uint algo_result_h) {
@@ -41,6 +40,6 @@ __kernel void main(__read_only __global float* ground_truth_image,
     float relu_deriv = y > 0.0f ? 1.0f : 0.0f;
 
     // write result
-    target[idx] = d * relu_deriv + weight_decay;
+    target[idx] = d * relu_deriv;
   }
 }

@@ -101,19 +101,6 @@ class DataPipeline {
                          size_t total_padding, cl_event* ev = nullptr);
 
   /**
-   * Glorified sum to calculate weight decay. Important is that:
-   * - this function blocks
-   * - this functions applies weight_decay_parameter
-   *
-   * used buffers:
-   * 	in  - layer_1.weights, layer_2.weights, layer_3.weights
-   * 	out - this->_tmp_gpu_float
-   */
-  float weight_decay(cnn_sr::LayerAllocationPool, cnn_sr::LayerAllocationPool,
-                     cnn_sr::LayerAllocationPool, float,
-                     cl_event* ev = nullptr);
-
-  /**
    * Deltas last layer
    *
    * used buffers:
@@ -124,7 +111,6 @@ class DataPipeline {
                             size_t ground_truth_w, size_t ground_truth_h,
                             opencl::MemoryHandle gpu_buf_algo_res,
                             opencl::MemoryHandle& gpu_buf_target,
-                            float weight_decay,  //
                             size_t total_padding, cl_event* ev = nullptr);
 
   /**
@@ -167,7 +153,7 @@ class DataPipeline {
    * 	in/out - layer.previous_delta_w, layer.previous_delta_b
    */
   cl_event update_parameters(LayerData&, LayerAllocationPool&,
-                             size_t batch_size, float momentum,
+                             size_t batch_size, float momentum, float w_decay,
                              float learning_rate, cl_event* ev = nullptr);
 
   ///

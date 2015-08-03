@@ -12,11 +12,13 @@ const bool print_work_dimensions = false;
 /* clang-format off */
 const char *const luma_kernel_file = "src/kernel/extract_luma.cl";
 const char *const swap_luma_kernel_file = "src/kernel/swap_luma.cl";
+const char *const squared_error_kernel_file = "src/kernel/squared_error.cl";
+const char *const sum_kernel_file = "src/kernel/sum.cl";
+// forward:
 const char *const layer_kernel_file = "src/kernel/layer_uber_kernel.cl";
 const char *const layer__f_e_1__kernel_file = "src/kernel/layer__f_eq_1__kernel.cl";
 const char *const layer_output_kernel_file = "src/kernel/layer_output_kernel.cl";
-const char *const squared_error_kernel_file = "src/kernel/squared_error.cl";
-const char *const sum_kernel_file = "src/kernel/sum.cl";
+// backpropagation:
 const char *const deltas_kernel_file = "src/kernel/layer_deltas.cl";
 const char *const last_layer_delta_kernel_file = "src/kernel/last_layer_delta.cl";
 const char *const backpropagate_kernel_file = "src/kernel/backpropagate.cl";
@@ -573,7 +575,6 @@ cl_event DataPipeline::last_layer_delta(
     size_t ground_truth_w, size_t ground_truth_h,
     opencl::MemoryHandle gpu_buf_algo_res,
     opencl::MemoryHandle &gpu_buf_target,  //
-    float weight_decay,                    //
     size_t total_padding, cl_event *ev_to_wait_for) {
   //
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
@@ -600,7 +601,6 @@ cl_event DataPipeline::last_layer_delta(
   _last_layer_delta_kernel->push_arg(gpu_buf_ground_truth);
   _last_layer_delta_kernel->push_arg(gpu_buf_algo_res);
   _last_layer_delta_kernel->push_arg(gpu_buf_target);
-  _last_layer_delta_kernel->push_arg(sizeof(cl_float), (void *)&weight_decay);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&algo_h);
@@ -612,38 +612,6 @@ cl_event DataPipeline::last_layer_delta(
                             local_work_size, work_dims, print_work_dimensions);
   return _last_layer_delta_kernel->execute(2, global_work_size, local_work_size,
                                            ev_to_wait_for);
-}
-
-float DataPipeline::weight_decay(LayerAllocationPool w_layer_1,
-                                 LayerAllocationPool w_layer_2,
-                                 LayerAllocationPool w_layer_3,
-                                 float weight_decay_parameter,
-                                 cl_event *ev_to_wait_for) {
-  if (cnn_sr::warn_about_blocking_operation)
-    std::cout << "BLOCK: weight_decay" << std::endl;
-  check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
-  size_t w1_size = element_count(w_layer_1.weights, sizeof(cl_float)),
-         w2_size = element_count(w_layer_2.weights, sizeof(cl_float)),
-         w3_size = element_count(w_layer_3.weights, sizeof(cl_float));
-
-  // check allocations & other memory stuff
-  /* clang-format off */
-  if (!ALLOCATION_HAS_RIGHT_SIZE(w_layer_1.weights, sizeof(cl_float) * w1_size)) {
-    throw std::runtime_error("Could not calculate weight decay - weights for layer 1 are incorrect");
-  }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(w_layer_2.weights, sizeof(cl_float) * w2_size)) {
-    throw std::runtime_error("Could not calculate weight decay - weights for layer 2 are incorrect");
-  }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(w_layer_3.weights, sizeof(cl_float) * w3_size)) {
-    throw std::runtime_error("Could not calculate weight decay - weights for layer 3 are incorrect");
-  }
-  /* clang-format on */
-
-  float res1 = sum(w_layer_1.weights, true, ev_to_wait_for);
-  float res2 = sum(w_layer_2.weights, true, ev_to_wait_for);
-  float res3 = sum(w_layer_3.weights, true, ev_to_wait_for);
-  float res = res1 + res2 + res3;
-  return res * weight_decay_parameter;
 }
 
 cl_event DataPipeline::calculate_deltas(
@@ -801,7 +769,7 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
 cl_event DataPipeline::update_parameters(LayerData &layer_data,  //
                                          LayerAllocationPool &gpu_alloc,
                                          size_t batch_size, float momentum,
-                                         float learning_rate,
+                                         float w_decay, float learning_rate,
                                          cl_event *ev_to_wait_for) {
   LayerData::validate(layer_data);
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
@@ -847,6 +815,7 @@ cl_event DataPipeline::update_parameters(LayerData &layer_data,  //
   _update_parameters_kernel->push_arg(gpu_alloc.previous_batch_delta_w);
   _update_parameters_kernel->push_arg(gpu_alloc.previous_batch_delta_b);
   _update_parameters_kernel->push_arg(sizeof(cl_float), (void *)&momentum);
+  _update_parameters_kernel->push_arg(sizeof(cl_float), (void *)&w_decay);
   _update_parameters_kernel->push_arg(sizeof(cl_float), (void *)&learning_rate);
   _update_parameters_kernel->push_arg(sizeof(cl_uint), (void *)&batch_size);
   _update_parameters_kernel->push_arg(sizeof(cl_uint), (void *)&weights_size);

@@ -90,7 +90,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
                          cnn_sr::LayerAllocationPool&,
                          cnn_sr::LayerAllocationPool&,
                          SampleAllocationPool &sample,
-                         float, cl_event* ev_to_wait_for = nullptr);
+                         cl_event* ev_to_wait_for = nullptr);
   /* clang-format on */
 
   /** update weights and biases*/
@@ -116,8 +116,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
   void load_kernels(int load_flags);
 
  private:
-  cl_event last_layer_delta(SampleAllocationPool&, float,
-                            cl_event* ev = nullptr);
+  cl_event last_layer_delta(SampleAllocationPool&, cl_event* ev = nullptr);
 
   void fill_random_parameters(LayerData&, ParametersDistribution&);
 

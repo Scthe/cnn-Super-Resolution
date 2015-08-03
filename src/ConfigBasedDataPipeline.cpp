@@ -118,8 +118,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
     cnn_sr::LayerAllocationPool &layer_1_alloc,
     cnn_sr::LayerAllocationPool &layer_2_alloc,
     cnn_sr::LayerAllocationPool &layer_3_alloc,  //
-    SampleAllocationPool &sample,                //
-    float weight_decay_value, cl_event *ev_to_wait_for) {
+    SampleAllocationPool &sample, cl_event *ev_to_wait_for) {
   // TODO a lot can be done in pararell
 
   // dimensions
@@ -134,7 +133,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   // propagate deltas
   if (print_steps)
     std::cout << "### Calculating deltas for last layer" << std::endl;
-  auto event2_1 = last_layer_delta(sample, weight_decay_value, ev_to_wait_for);
+  auto event2_1 = last_layer_delta(sample, ev_to_wait_for);
 
   if (print_steps)
     std::cout << "### Calculating deltas for 2nd layer" << std::endl;
@@ -197,20 +196,23 @@ void ConfigBasedDataPipeline::update_parameters(
   if (print_steps)
     std::cout << "### Updating weights and biases - 3rd layer" << std::endl;
   DataPipeline::update_parameters(layer_data_3, layer_3_alloc, batch_size,
-                                  _config->momentum, _config->learning_rate[2],
-                                  ev_to_wait_for);
+                                  _config->momentum,
+                                  _config->weight_decay_parameter,
+                                  _config->learning_rate[2], ev_to_wait_for);
 
   if (print_steps)
     std::cout << "### Updating weights and biases - 2nd layer" << std::endl;
   DataPipeline::update_parameters(layer_data_2, layer_2_alloc, batch_size,
-                                  _config->momentum, _config->learning_rate[1],
-                                  ev_to_wait_for);
+                                  _config->momentum,
+                                  _config->weight_decay_parameter,
+                                  _config->learning_rate[1], ev_to_wait_for);
 
   if (print_steps)
     std::cout << "### Updating weights and biases - 1st layer" << std::endl;
   DataPipeline::update_parameters(layer_data_1, layer_1_alloc, batch_size,
-                                  _config->momentum, _config->learning_rate[0],
-                                  ev_to_wait_for);
+                                  _config->momentum,
+                                  _config->weight_decay_parameter,
+                                  _config->learning_rate[0], ev_to_wait_for);
 
   // TODO optimize ?
   _context->block();
@@ -237,13 +239,12 @@ cl_event ConfigBasedDataPipeline::squared_error(SampleAllocationPool &sample,
 }
 
 cl_event ConfigBasedDataPipeline::last_layer_delta(SampleAllocationPool &sample,
-                                                   float weight_decay,
                                                    cl_event *ev) {
   //
   size_t padding = _config->total_padding();
   return DataPipeline::last_layer_delta(
       sample.expected_luma, sample.input_w, sample.input_h,  //
-      sample.layer_3_output, sample.layer_3_deltas, weight_decay, padding, ev);
+      sample.layer_3_output, sample.layer_3_deltas, padding, ev);
 }
 
 ///
@@ -363,7 +364,7 @@ void ConfigBasedDataPipeline::create_lumas_delta_image(
   size_t padding = _config->total_padding();
   auto event2_1 = DataPipeline::last_layer_delta(
       sample.input_luma, sample.input_w, sample.input_h,  //
-      sample.layer_3_output, target, 0.0f, padding);
+      sample.layer_3_output, target, padding);
   // read values
   std::vector<float> delta_values(luma_w * luma_h);
   _context->read_buffer(target, (void *)&delta_values[0], true, &event2_1);

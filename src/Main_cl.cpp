@@ -291,15 +291,10 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
       data_pipeline.squared_error(sample, &forward_ev);
     } else {
       // backpopagate all
-      // auto weight_decay_value = data_pipeline.weight_decay(
-      // gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
-      // cfg->weight_decay_parameter, &forward_ev);
-      auto weight_decay_value = 0.0f;
-      event =
-          data_pipeline.backpropagate(gpu_alloc.layer_1,  //
-                                      gpu_alloc.layer_2,  //
-                                      gpu_alloc.layer_3,  //
-                                      sample, weight_decay_value, &forward_ev);
+      event = data_pipeline.backpropagate(gpu_alloc.layer_1,  //
+                                          gpu_alloc.layer_2,  //
+                                          gpu_alloc.layer_3,  //
+                                          sample, &forward_ev);
       event_ptr = &event;
     }
 
