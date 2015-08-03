@@ -20,6 +20,7 @@ const char *const sum_kernel_file = "src/kernel/sum.cl";
 const char *const deltas_kernel_file = "src/kernel/layer_deltas.cl";
 const char *const last_layer_delta_kernel_file = "src/kernel/last_layer_delta.cl";
 const char *const backpropagate_kernel_file = "src/kernel/backpropagate.cl";
+const char *const backpropagate_opt_kernel_file = "src/kernel/backpropagate_opt.cl";
 const char *const subtract_from_all_kernel_file = "src/kernel/subtract_from_all.cl";
 const char *const update_parameters_kernel_file = "src/kernel/update_parameters.cl";
 /* clang-format on */
@@ -146,15 +147,16 @@ void DataPipeline::load_kernels(int load_flags) {
   }
 
   if (load_back) {
+    /* clang-format off */
     if (!_last_layer_delta_kernel)
-      _last_layer_delta_kernel =
-          _context->create_kernel(last_layer_delta_kernel_file);
+      _last_layer_delta_kernel = _context->create_kernel(last_layer_delta_kernel_file);
     if (!_update_parameters_kernel)
-      _update_parameters_kernel =
-          _context->create_kernel(update_parameters_kernel_file);
+      _update_parameters_kernel = _context->create_kernel(update_parameters_kernel_file);
     if (!_backpropagate_kernel)
-      _backpropagate_kernel =
-          _context->create_kernel(backpropagate_kernel_file);
+      _backpropagate_kernel = _context->create_kernel(backpropagate_kernel_file);
+    if (!_backpropagate_kernel_opt && _optimize_for_small_data)
+      _backpropagate_kernel_opt = _context->create_kernel(backpropagate_opt_kernel_file);
+    /* clang-format on */
   }
 }
 
@@ -723,7 +725,6 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
                                      cl_event *ev_to_wait_for) {
   LayerData::validate(layer_data);
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
-  opencl::Kernel &kernel = *_backpropagate_kernel;
 
   size_t input_w = layer_out_w + layer_data.f_spatial_size - 1,
          input_h = layer_out_h + layer_data.f_spatial_size - 1;
@@ -760,6 +761,23 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
   }
   /* clang-format on */
 
+  size_t global_work_size[3], local_work_size[3];
+  // try using optimized kernel
+  const auto available_local_memory = _context->device().local_mem_size;
+  global_work_size[0] = weights_size;
+  local_work_size[0] =
+      layer_data.n_prev_filter_cnt * layer_data.current_filter_count;
+  size_t blocks = global_work_size[0] / local_work_size[0],
+         local_mem_size = layer_out_w * layer_data.current_filter_count *
+                          blocks * sizeof(cl_float);
+  bool use_optimized_kernel =
+      _optimize_for_small_data && available_local_memory >= local_mem_size;
+  opencl::Kernel &kernel = use_optimized_kernel ? *_backpropagate_kernel_opt
+                                                : *_backpropagate_kernel;
+  if (!use_optimized_kernel) {
+    opencl::utils::work_sizes(kernel, 1, global_work_size, local_work_size,
+                              &weights_size, print_work_dimensions);
+  }
   // args
   kernel.push_arg(layer_deltas);
   kernel.push_arg(layer_input);
@@ -770,13 +788,13 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_out_w);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_out_h);
+  if (use_optimized_kernel) {
+    kernel.push_arg(local_mem_size, nullptr);
+  }
 
   // run
   int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
-  size_t global_work_size, local_work_size;
-  opencl::utils::work_sizes(kernel, 1, &global_work_size, &local_work_size,
-                            &weights_size, print_work_dimensions);
-  return kernel.execute(1, &global_work_size, &local_work_size, ev_to_wait_for,
+  return kernel.execute(1, global_work_size, local_work_size, ev_to_wait_for,
                         events_to_wait_for_count);
 }
 

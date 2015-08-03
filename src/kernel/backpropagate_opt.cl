@@ -60,13 +60,16 @@ __kernel void main(__read_only __global float* deltas,       //
                    uint n_current_filter_cnt,                //
                    uint n_prev_filter_cnt,                   //
                    uint f_spatial_size,                      //
-                   uint layer_out_w, uint layer_out_h) {
+                   uint layer_out_w, uint layer_out_h,
+                   __local float* row_deltas) {
   const int id = get_global_id(0);
   const uint input_w = layer_out_w + f_spatial_size - 1;
   // weight dimensions
   const size_t d2 = n_prev_filter_cnt * n_current_filter_cnt,
                d3 = d2 * f_spatial_size;
   const size_t weights_size = d3 * f_spatial_size;
+  const int block_size = get_local_size(0);
+  const int local_id = get_local_id(0);
 
   // reverse id to get weight parameters: a(as dx), b(as dy), n, k
   int w_tmp = id;
@@ -75,32 +78,46 @@ __kernel void main(__read_only __global float* deltas,       //
   const int dx = w_tmp / d2;
   w_tmp -= dx * d2;
   const int k = w_tmp / n_current_filter_cnt;
-  const int n =
-      w_tmp - k * n_current_filter_cnt;  // = id % n_current_filter_cnt
+  const int n = w_tmp - k * n_current_filter_cnt;
+  // n = id % n_current_filter_cnt
+  const bool in_range = id < weights_size;
 
-  if (id < weights_size) {
-    float grad_w = 0.0f, grad_b = 0.0f;
-    for (size_t row = 0; row < layer_out_h; row++) {
-      for (size_t col = 0; col < layer_out_w; col++) {
-        // (1) delta[i,j,n](l)
-        int idx = ((row * layer_out_w) + col) * n_current_filter_cnt;
-        float delta = deltas[idx + n];
-        grad_b += delta;
-
-        // (2) layer_input[i+b,j+a,k]
-        // NOTE: we normally should be subtracting [dx,dy], but it does
-        // depend on indexing
-        int2 prev_layer_pos = {col + dx, row + dy};
-        int prev_layer_idx = ((prev_layer_pos.y * input_w) + prev_layer_pos.x) *
-                             n_prev_filter_cnt;
-
-        float input = layer_input[prev_layer_idx + k];
-        grad_w += input * delta;
-      }
+  float grad_w = 0.0f, grad_b = 0.0f;
+  for (size_t row = 0; row < layer_out_h; row++) {
+    // copy row from deltas to local memory for faster access
+    int row_idx = row * layer_out_w * n_current_filter_cnt;
+    int iidx = local_id;
+    while (iidx < layer_out_w * n_current_filter_cnt) {
+      row_deltas[iidx] = deltas[row_idx + iidx];
+      iidx += block_size;
     }
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-    // write
-    // NOTE: atomic_add_global is custom function, see beginning of the file
+    // range check
+    if (!in_range) continue;
+
+    for (size_t col = 0; col < layer_out_w; col++) {
+      // (1) delta[i,j,n](l)
+      // int idx = ((row * layer_out_w) + col) * n_current_filter_cnt;
+      // float delta = deltas[idx + n];
+      float delta = row_deltas[col * n_current_filter_cnt + n];
+      grad_b += delta;
+
+      // (2) layer_input[i+b,j+a,k]
+      // NOTE: we normally should be subtracting [dx,dy], but it does
+      // depend on indexing
+      int2 prev_layer_pos = {col + dx, row + dy};
+      int prev_layer_idx =
+          ((prev_layer_pos.y * input_w) + prev_layer_pos.x) * n_prev_filter_cnt;
+
+      float input = layer_input[prev_layer_idx + k];
+      grad_w += input * delta;
+    }
+  }
+
+  // write
+  // NOTE: atomic_add_global is custom function, see beginning of the file
+  if (in_range) {
     target_grad_w[id] += grad_w;
     if (k == 0 && dx == 0 && dy == 0)
       atomic_add_global(target_grad_b + n, grad_b);

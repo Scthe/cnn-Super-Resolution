@@ -40,8 +40,8 @@ __kernel void main(__read_only __global float* input,    //
     return;
 
   float sum = *local_bias;
-  for (size_t dy = 0; dy < F_SPATIAL_SIZE; dy++) {
-    for (size_t dx = 0; dx < F_SPATIAL_SIZE; dx++) {
+  for (size_t dx = 0; dx < F_SPATIAL_SIZE; dx++) {
+    for (size_t dy = 0; dy < F_SPATIAL_SIZE; dy++) {
       int2 input_pos = {pos.x + dx, pos.y + dy};
       int input_idx =
           ((input_pos.y * input_w) + input_pos.x) * PREVIOUS_FILTER_COUNT;

@@ -253,6 +253,7 @@ class DataPipeline {
   opencl::Kernel* _last_layer_delta_kernel = nullptr;
   opencl::Kernel* _update_parameters_kernel = nullptr;
   opencl::Kernel* _backpropagate_kernel = nullptr;
+  opencl::Kernel* _backpropagate_kernel_opt = nullptr;
 };
 }
 
