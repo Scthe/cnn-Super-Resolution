@@ -162,7 +162,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                   sample.layer_2_output, sample.layer_3_deltas,
                                   layer_3_alloc,                           //
                                   layer_3_out_dim[0], layer_3_out_dim[1],  //
-                                  &event2_3);
+                                  &event2_1);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 2nd layer"
@@ -172,18 +172,19 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                   sample.layer_1_output, sample.layer_2_deltas,
                                   layer_2_alloc,                           //
                                   layer_2_out_dim[0], layer_2_out_dim[1],  //
-                                  &event3_1);
+                                  &event2_2);
 
   if (print_steps)
     std::cout << "### Backpropagate(weights&bias gradients) - 1st layer"
               << std::endl;
+  cl_event evs[3] = {event2_3, event3_1, event3_2};
   auto event3_3 =
       DataPipeline::backpropagate(layer_data_1,                            //
                                   sample.input_luma,                       //
                                   sample.layer_1_deltas,                   //
                                   layer_1_alloc,                           //
                                   layer_1_out_dim[0], layer_1_out_dim[1],  //
-                                  &event3_2);
+                                  evs, 3);
 
   return event3_3;
 }

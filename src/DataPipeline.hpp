@@ -139,7 +139,7 @@ class DataPipeline {
                          opencl::MemoryHandle layer_deltas,
                          LayerAllocationPool&,  //
                          size_t layer_out_w, size_t layer_out_h,
-                         cl_event* ev = nullptr);
+                         cl_event* ev = nullptr, size_t ev_cnt = 0);
 
   /**
    * Update weights and biases based on gradients and various factors like batch

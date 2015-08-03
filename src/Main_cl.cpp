@@ -152,16 +152,16 @@ int main(int argc, char** argv) {
     sample_alloc_pool.input_w = (size_t)input_img.w;
     sample_alloc_pool.input_h = (size_t)input_img.h;
     context.block();
+    // free 3-channel images
     context.raw_memory(sample_alloc_pool.input_data)->release();
+    context.raw_memory(sample_alloc_pool.expected_data)->release();
     gpu_alloc.samples.push_back(sample_alloc_pool);
   }
 
   size_t samples_count = gpu_alloc.samples.size(),
          per_sample_px_count =
              gpu_alloc.samples[0].input_w * gpu_alloc.samples[0].input_h,
-         validation_px_count = per_sample_px_count * validation_set_size,
-         train_px_count =
-             per_sample_px_count * (samples_count - validation_set_size);
+         validation_px_count = per_sample_px_count * validation_set_size;
 
   context.block();
 
@@ -175,30 +175,32 @@ int main(int argc, char** argv) {
     std::vector<SampleAllocationPool*> validation_set(samples_count);
     divide_samples(validation_set_size, gpu_alloc, train_set, validation_set);
 
-    float train_squared_error =
-        execute_batch(true, data_pipeline, gpu_alloc, train_set);
+    execute_batch(true, data_pipeline, gpu_alloc, train_set);
 
     data_pipeline.update_parameters(gpu_alloc.layer_1, gpu_alloc.layer_2,
                                     gpu_alloc.layer_3, train_set.size());
 
-    float validation_squared_error =
-        execute_batch(false, data_pipeline, gpu_alloc, validation_set);
+    // doing validation every time after training just to print some number
+    // is wasteful
+    if ((epoch_id % 25) == 0) {
+      float validation_squared_error =
+          execute_batch(false, data_pipeline, gpu_alloc, validation_set);
 
-    // if error happened we stop the training.
-    if (std::isnan(validation_squared_error)) {
-      std::cout << "Error: squared error is NAN, after " << epoch_id << "/"
-                << epochs << " epochs" << std::endl;
-      error = true;
-      break;
+      // if error happened we stop the training.
+      if (std::isnan(validation_squared_error)) {
+        std::cout << "Error: squared error is NAN, after " << epoch_id << "/"
+                  << epochs << " epochs" << std::endl;
+        error = true;
+        break;
+      }
+
+      // (we are printing per pixel values because they are easier to remember)
+      float mean_valid_err = validation_squared_error / validation_set.size();
+      std::cout << "[" << epoch_id << "] "  //
+                << "mean validation error: " << mean_valid_err << " ("
+                << (mean_valid_err / validation_px_count) << " per px)"
+                << std::endl;
     }
-
-    // (we are printing per pixel values because they are easier to remember)
-    float mean_train_err = train_squared_error / train_set.size(),
-          mean_valid_err = validation_squared_error / validation_set.size();
-    std::cout << "[" << epoch_id << "] "  //
-              << "mean validation error: " << mean_valid_err << " ("
-              << (mean_valid_err / validation_px_count) << " per px)"
-              << std::endl;
 
     context.block();
   }

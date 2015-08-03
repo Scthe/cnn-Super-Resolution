@@ -690,7 +690,7 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
                                      opencl::MemoryHandle layer_deltas,
                                      LayerAllocationPool &gpu_alloc,
                                      size_t layer_out_w, size_t layer_out_h,
-                                     cl_event *ev_to_wait_for) {
+                                     cl_event *ev_to_wait_for, size_t ev_cnt) {
   LayerData::validate(layer_data);
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
 
@@ -761,7 +761,7 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
   }
 
   // run
-  int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
+  int events_to_wait_for_count = !ev_to_wait_for ? 0 : ev_cnt == 0 ? 1 : ev_cnt;
   return kernel.execute(1, global_work_size, local_work_size, ev_to_wait_for,
                         events_to_wait_for_count);
 }
