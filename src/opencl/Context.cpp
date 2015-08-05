@@ -12,7 +12,6 @@ bool print_info = false;
  * _kernels uses pointers, which makes the wrapper more lightweight.
  * As soon as vector that holds original instances is reloacted
  * the pointers are obsolete.
- * TODO _kernels should not use pointers. Swap for handles system
  */
 const size_t max_resources_per_type = 128;
 

@@ -3,8 +3,8 @@ import time
 import subprocess
 
 epochs = 100
-seconds_per_epoch = 0.3
-cmd = 'bin\\cnn.exe train dry -c data\config.json --epochs {0:} -i data\\train_samples'.format(epochs)
+seconds_per_epoch = 0.236
+cmd = 'bin\\cnn.exe train dry -c data\config.json --epochs {0:} -i data\\train_samples36'.format(epochs)
 
 kernel_profile_regex = "Kernel '.*/(.*?]).*?([\-e.\d]+)ns.*?([\-e.\d]+)s"
 def get_kernel_profiling_info(out):
@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
   est_time = epochs * seconds_per_epoch
   print('Will do {0:} epochs'.format( epochs))
-  print('Estimated required time: {}s = {} min'.format(est_time, est_time//60))
+  print('Estimated required time: {:.3f}s = {:.3f} min'.format(est_time, est_time//60))
 
   start = time.time()
   proc = subprocess.Popen(cmd_, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

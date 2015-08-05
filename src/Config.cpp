@@ -1,7 +1,6 @@
 #include "Config.hpp"
 #include <cmath>    // for std::abs
 #include <cstring>  // for strcmp when reading json
-#include <vector>   // TODO remove when json parsing is changed
 
 #include "json/gason.h"
 

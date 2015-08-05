@@ -58,6 +58,7 @@ def visualize(cfg, params, scale, layer_id, out_path):
   weights = params['layer' + str(layer_id)]['weights']
   min_w, max_w = min(weights), max(weights)
   print('min_w: {}, max_w: {}'.format(min_w, max_w))
+  print('overfit: {}'.format(sum([x*x for x in weights])))
 
   f, l_k, l_n = layer = layer_data(cfg, layer_id)
   cell_size = f * scale + 2 * per_weight_cell_padding

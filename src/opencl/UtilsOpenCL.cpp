@@ -74,7 +74,6 @@ char *load_file(const char *cFilename, const char *cPreamble,
 
 ///
 /// images
-/// TODO move from OpenCL to general utils
 ///
 
 ImageData::ImageData() : w(0), h(0), bpp(0), data(nullptr) {}

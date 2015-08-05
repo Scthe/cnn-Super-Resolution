@@ -119,7 +119,6 @@ cl_event ConfigBasedDataPipeline::backpropagate(
     cnn_sr::LayerAllocationPool &layer_2_alloc,
     cnn_sr::LayerAllocationPool &layer_3_alloc,  //
     SampleAllocationPool &sample, cl_event *ev_to_wait_for) {
-  // TODO a lot can be done in pararell
 
   // dimensions
   size_t layer_1_out_dim[2], layer_2_out_dim[2], layer_3_out_dim[2];

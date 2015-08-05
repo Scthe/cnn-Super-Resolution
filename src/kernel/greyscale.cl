@@ -12,7 +12,6 @@ void main(__read_only image2d_t image,
 	const int2 pos = {get_global_id(0), get_global_id(1)};
 	float2 normCoor = convert_float2(pos) / (float2)( w, h );
 
-	// TODO remember about bpp !!!
 	if(pos.x >= 0 && pos.x < w && pos.y >= 0 && pos.y < h){
 		int idx = pos.y * w + pos.x;
 

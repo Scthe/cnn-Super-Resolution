@@ -18,14 +18,9 @@
  *       delta[i,j,n](l-1) += \
  *         w[abnk](l-1)               # (1) weight of edge between [i,j,n](l-1) and [i+a,j+b,k](l)
  *         * delta[i-a,j-b,k](l)      # (2) error term for [i-a,j-b,k](l). minus since we have point (i,j) and we asking: 'which output point are we affecting with w[a,b,_,_]'
- *         #* f`( x[i+a,j+b,n](l-1) )  # (3) derivative of activation function
  *         * f`(x[i,j,n](l-1) )       # (3) derivative of activation function at measured point
  *
  * TODO in (3) should index be x[i+a,j+b,n] or x[i,j,n]?
- * TODO in popular notation it's [i-a,j-b,_], is this just because matlab's
- *      native conv2 expects transposition ?
- *
- * TODO send layer_out as int2, not pair of ints
  *
  * macros:
  * 	CURRENT_FILTER_COUNT                   filter_count(l-1)

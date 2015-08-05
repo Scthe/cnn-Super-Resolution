@@ -17,8 +17,8 @@ if %errorlevel%==0 (
 epochs_per_iteration = 500
 pars_file = 'data\\parameters.json'
 
-seconds_per_epoch = 0.8 # derived experimentally
-#seconds_per_epoch = 0.28
+seconds_per_epoch = 0.7
+#seconds_per_epoch = 0.236
 
 cmd = 'bin\\cnn.exe train -c data\config.json --epochs {} -i data\\train_samples'.format(epochs_per_iteration)
 
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     total_epochs = int(time_in_s / seconds_per_epoch)
   else:
     total_epochs = args.epochs
-  total_epochs = max(total_epochs, 1)
+  total_epochs = max(total_epochs, epochs_per_iteration)
 
   cmd_ = cmd.split(' ')
   if args.dry:
@@ -68,7 +68,7 @@ if __name__ == '__main__':
   print('Will do {0:} iterations, {1:} epochs per iteration = {2:} total'.format( \
             iters, epochs_per_iteration, iters * epochs_per_iteration))
   est_time = total_epochs * seconds_per_epoch
-  print('Estimated required time: {}s = {} min'.format(est_time, est_time//60))
+  print('Estimated required time: {:.3f}s = {:.3f} min'.format(est_time, est_time//60))
 
   for i in range(iters):
     log_path, tmp_params_path, stamp = get_dst_file_path()
@@ -90,4 +90,4 @@ if __name__ == '__main__':
 
   end = time.time()
   dt = end - start
-  print("Execution time: {:.3}s = {:.2}min ({:.5} s/epoch)".format(dt, dt/60, dt/total_epochs))
+  print("Execution time: {:.3f}s = {:.2f}min ({:.5f} s/epoch)".format(dt, dt/60, dt/total_epochs))

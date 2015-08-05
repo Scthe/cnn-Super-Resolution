@@ -2,8 +2,6 @@
  * Special case of layer/forward kernel - when kernel's spatial size==1
  *
  * run for global:[ow,oh,current_filter_count], local:[_,_,current_filter_count]
- *
- * TODO this kernel may not be choosen during tests
  */
 __kernel void main(__read_only __global float* input,                  //
                    __global float* target,                             //
