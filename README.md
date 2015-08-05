@@ -70,10 +70,8 @@ Start the learning (100 epochs), do not save results: `bin\cnn.exe train -c data
 
 * **[generate_training_samples.py](generate_training_samples.py)** - generate ready to use training samples based on images from provided directory 
 * **[weights_visualize.py](weights_visualize.py)** - present weights as images. Layer 1 is particularly informative
-* **profile.py** - measure total execution time or time spend per OpenCL kernel
-* **schedule_training.py** - executes C++ application, specify number of epochs or how long we want for learning to continue
-
-At the time of writing last 2 scripts are only available on **optimize** branch.
+* **[profile.py](profile.py)** - measure total execution time or time spend per OpenCL kernel
+* **[schedule_training.py](schedule_training.py)** - executes C++ application, specify number of epochs or how long we want for learning to continue
 
 
 #### Config file ([example](example_config.json))
