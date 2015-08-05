@@ -5,6 +5,7 @@ __kernel void main(__read_only __global float* weights,                 //
                    __read_only __global float* previous_delta_weights,  //
                    __read_only __global float* previous_delta_bias,     //
                    __const float momentum,                              //
+                   __const float weight_decay_parameter,                //
                    __const float learning_rate,                         //
                    __const uint batch_size,                             //
                    __const uint weights_size,                           //
@@ -13,9 +14,11 @@ __kernel void main(__read_only __global float* weights,                 //
 
   // update weights
   if (idx < weights_size) {
+    float weight_value = weights[idx];
     float delta_w = momentum * previous_delta_weights[idx] +
-                    learning_rate * grad_weights[idx];
-    weights[idx] -= delta_w / batch_size;
+                    learning_rate * grad_weights[idx] +
+                    weight_decay_parameter * weight_value;
+    weights[idx] = weight_value - delta_w / batch_size;
     previous_delta_weights[idx] = delta_w;
   }
 

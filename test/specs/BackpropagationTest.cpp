@@ -106,9 +106,9 @@ std::string BackpropagationTest::name(size_t data_set_id) {
 
 size_t BackpropagationTest::data_set_count() { return 2; }
 
-void execute(DataPipeline *pipeline, LayerData &data,     //
-             cnn_sr::CnnLayerGpuAllocationPool &gpu_buf,  //
-             float *deltas, float *input, float w_init,   //
+void execute(DataPipeline *pipeline, LayerData &data,    //
+             cnn_sr::LayerAllocationPool &gpu_buf,       //
+             float *deltas, float *input, float w_init,  //
              size_t input_w, size_t input_h) {
   auto context = pipeline->context();
   size_t output_dim[2];
@@ -118,18 +118,17 @@ void execute(DataPipeline *pipeline, LayerData &data,     //
          input_size = data.input_size(input_w, input_h);
 
   // gpu memory alloc
-  opencl::MemoryHandle gpu_buf_layer_input;
   /* clang-format off */
-  gpu_buf.deltas = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * deltas_size);
-  gpu_buf_layer_input = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * input_size);
+  auto gpu_deltas = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * deltas_size);
+  auto gpu_input = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * input_size);
   gpu_buf.accumulating_grad_w = context->allocate(CL_MEM_READ_ONLY, sizeof(cl_float) * data.weight_size());
   /* clang-format on */
-  context->write_buffer(gpu_buf.deltas, (void *)deltas, true);
-  context->write_buffer(gpu_buf_layer_input, (void *)input, true);
+  context->write_buffer(gpu_deltas, (void *)deltas, true);
+  context->write_buffer(gpu_input, (void *)input, true);
   context->fill_float(gpu_buf.accumulating_grad_w, w_init, true);
 
   // run
-  pipeline->backpropagate(data, gpu_buf_layer_input, gpu_buf,  //
+  pipeline->backpropagate(data, gpu_input, gpu_deltas, gpu_buf,  //
                           output_dim[0], output_dim[1]);
 }
 
@@ -137,7 +136,7 @@ bool BackpropagationTest::operator()(size_t data_set_id,
                                      cnn_sr::DataPipeline *const pipeline) {
   assert_not_null(pipeline);
   auto context = pipeline->context();
-  cnn_sr::CnnLayerGpuAllocationPool gpu_buf;
+  cnn_sr::LayerAllocationPool gpu_buf;
 
   if (data_set_id == 0) {
     // data for layer, needs filled up weights&bias to pass validation

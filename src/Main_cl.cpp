@@ -19,25 +19,13 @@ using namespace cnn_sr;
 ///
 /// Util. structures
 ///
-struct PerSampleAllocationPool {
-  /** Raw 3 channel image loaded from hard drive */
-  opencl::MemoryHandle input_data = gpu_nullptr;
-  /** Single channel (luma) of size input_img_w*input_img_h */
-  opencl::MemoryHandle input_luma = gpu_nullptr;
-  /** Raw 3 channel image loaded from disc */
-  opencl::MemoryHandle expected_output_data = gpu_nullptr;
-  /** Used only during training */
-  opencl::MemoryHandle expected_output_luma = gpu_nullptr;
-
-  size_t w, h;
-};
 
 struct GpuAllocationPool {
-  CnnLayerGpuAllocationPool layer_1;
-  CnnLayerGpuAllocationPool layer_2;
-  CnnLayerGpuAllocationPool layer_3;
+  LayerAllocationPool layer_1;
+  LayerAllocationPool layer_2;
+  LayerAllocationPool layer_3;
 
-  std::vector<PerSampleAllocationPool> samples;
+  std::vector<SampleAllocationPool> samples;
 };
 
 ///
@@ -48,15 +36,15 @@ cl_event prepare_image(DataPipeline* const pipeline, const char* const,
                        bool print = false);
 
 void divide_samples(size_t validation_set_size, GpuAllocationPool&,
-                    std::vector<PerSampleAllocationPool>& train_set,
-                    std::vector<PerSampleAllocationPool>& validation_set);
+                    std::vector<SampleAllocationPool*>& train_set,
+                    std::vector<SampleAllocationPool*>& validation_set);
 
 typedef std::pair<std::string, std::string> TrainSampleFiles;
 
 void get_training_samples(std::string, std::vector<TrainSampleFiles>&);
 
 float execute_batch(bool backpropagate, ConfigBasedDataPipeline&,
-                    GpuAllocationPool&, std::vector<PerSampleAllocationPool>);
+                    GpuAllocationPool&, std::vector<SampleAllocationPool*>&);
 
 void execute_forward(ConfigBasedDataPipeline&, GpuAllocationPool&,
                      const char* const in_path, const char* const out_path);
@@ -117,8 +105,6 @@ int main(int argc, char** argv) {
 
   // other config variables
   const size_t validation_set_percent = 20;  // TODO move to cfg
-  auto backup_weights_file = "weights_tmp.json";
-  int backup_weights_rate = 200;  // #epochs between emergency backup
 
   // read config
   ConfigReader reader;
@@ -129,7 +115,7 @@ int main(int argc, char** argv) {
   opencl::Context context;
   context.init(profile);
   ConfigBasedDataPipeline data_pipeline(cfg, &context);
-  data_pipeline.init();
+  data_pipeline.init(train);
   GpuAllocationPool gpu_alloc;
 
   if (!train) {
@@ -155,67 +141,68 @@ int main(int argc, char** argv) {
   // read & prepare images
   for (auto& path_pair : train_sample_files) {
     ImageData expected_output_img, input_img;
-    PerSampleAllocationPool sample_alloc_pool;
+    SampleAllocationPool sample_alloc_pool;
     prepare_image(&data_pipeline, path_pair.first.c_str(), expected_output_img,
-                  sample_alloc_pool.expected_output_data,
-                  sample_alloc_pool.expected_output_luma);
+                  sample_alloc_pool.expected_data,
+                  sample_alloc_pool.expected_luma);
     auto ev1 = prepare_image(&data_pipeline, path_pair.second.c_str(),
                              input_img, sample_alloc_pool.input_data,
                              sample_alloc_pool.input_luma);
     data_pipeline.subtract_mean(sample_alloc_pool.input_luma, nullptr, &ev1);
-    sample_alloc_pool.w = (size_t)input_img.w;
-    sample_alloc_pool.h = (size_t)input_img.h;
+    sample_alloc_pool.input_w = (size_t)input_img.w;
+    sample_alloc_pool.input_h = (size_t)input_img.h;
     context.block();
+    // free 3-channel images
     context.raw_memory(sample_alloc_pool.input_data)->release();
+    context.raw_memory(sample_alloc_pool.expected_data)->release();
     gpu_alloc.samples.push_back(sample_alloc_pool);
   }
 
   size_t samples_count = gpu_alloc.samples.size(),
-         per_sample_px_count = gpu_alloc.samples[0].w * gpu_alloc.samples[0].h,
-         validation_px_count = per_sample_px_count * validation_set_size,
-         train_px_count =
-             per_sample_px_count * (samples_count - validation_set_size);
+         per_sample_px_count =
+             gpu_alloc.samples[0].input_w * gpu_alloc.samples[0].input_h,
+         validation_px_count = per_sample_px_count * validation_set_size;
 
   context.block();
 
   ///
   /// train
   ///
+  bool error = false;
   for (size_t epoch_id = 0; epoch_id < epochs; epoch_id++) {
-    std::vector<PerSampleAllocationPool> train_set(samples_count);
-    std::vector<PerSampleAllocationPool> validation_set(samples_count);
+    // std::cout << "-------- " << epoch_id << "-------- " << std::endl;
+    std::vector<SampleAllocationPool*> train_set(samples_count);
+    std::vector<SampleAllocationPool*> validation_set(samples_count);
     divide_samples(validation_set_size, gpu_alloc, train_set, validation_set);
 
-    float train_squared_error =
-        execute_batch(true, data_pipeline, gpu_alloc, train_set);
+    execute_batch(true, data_pipeline, gpu_alloc, train_set);
 
     data_pipeline.update_parameters(gpu_alloc.layer_1, gpu_alloc.layer_2,
                                     gpu_alloc.layer_3, train_set.size());
 
-    float validation_squared_error =
-        execute_batch(false, data_pipeline, gpu_alloc, validation_set);
+    // doing validation every time after training just to print some number
+    // is wasteful
+    if ((epoch_id % 25) == 0) {
+      float validation_squared_error =
+          execute_batch(false, data_pipeline, gpu_alloc, validation_set);
 
-    // if error happened we stop the training.
-    if (std::isnan(validation_squared_error)) {
-      std::cout << "Error: squared error is NAN" << std::endl;
-      break;
+      // if error happened we stop the training.
+      if (std::isnan(validation_squared_error)) {
+        std::cout << "Error: squared error is NAN, after " << epoch_id << "/"
+                  << epochs << " epochs" << std::endl;
+        error = true;
+        break;
+      }
+
+      // (we are printing per pixel values because they are easier to remember)
+      float mean_valid_err = validation_squared_error / validation_set.size();
+      std::cout << "[" << epoch_id << "] "  //
+                << "mean validation error: " << mean_valid_err << " ("
+                << (mean_valid_err / validation_px_count) << " per px)"
+                << std::endl;
     }
-
-    // (we are printing per pixel values because they are easier to remember)
-    float mean_train_err = train_squared_error / train_set.size(),
-          mean_valid_err = validation_squared_error / validation_set.size();
-    std::cout << "[" << epoch_id << "] "  //
-              << "mean validation error: " << mean_valid_err << " ("
-              << (mean_valid_err / validation_px_count) << " per px)"
-              << std::endl;
 
     context.block();
-
-    if (!dry && epoch_id > 0 && (epoch_id % backup_weights_rate) == 0) {
-      data_pipeline.write_params_to_file(backup_weights_file, gpu_alloc.layer_1,
-                                         gpu_alloc.layer_2, gpu_alloc.layer_3);
-      context.block();
-    }
   }
 
   ///
@@ -230,7 +217,7 @@ int main(int argc, char** argv) {
   std::cout << "DONE" << std::endl;
   // calling exit does not call Context's destructor - do this by hand
   context.~Context();
-  exit(EXIT_SUCCESS);
+  exit(error ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 // ######################################################################
@@ -242,28 +229,23 @@ void execute_forward(ConfigBasedDataPipeline& data_pipeline,
                      GpuAllocationPool& gpu_alloc, const char* const in_path,
                      const char* const out_path) {
   auto context = data_pipeline.context();
-  auto cfg = data_pipeline.config();
 
   // read input image
   ImageData input_img;
-  opencl::MemoryHandle input_data = gpu_nullptr;
-  opencl::MemoryHandle input_luma = gpu_nullptr;
-  auto ev1 =
-      prepare_image(&data_pipeline, in_path, input_img, input_data, input_luma);
-  data_pipeline.subtract_mean(input_luma, nullptr, &ev1);
-  size_t w = input_img.w, h = input_img.h,  //
-      luma_w = w - cfg->total_padding(),    //
-      luma_h = h - cfg->total_padding();
+  SampleAllocationPool sample;
+  auto ev1 = prepare_image(&data_pipeline, in_path, input_img,
+                           sample.input_data, sample.input_luma);
+  data_pipeline.subtract_mean(sample.input_luma, nullptr, &ev1);
+  sample.input_w = (size_t)input_img.w;
+  sample.input_h = (size_t)input_img.h;
   context->block();
 
   // process with layers
   data_pipeline.forward(gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
-                        input_luma, w, h);
+                        sample);
 
   if (out_path) {
-    data_pipeline.write_result_image(out_path,                           //
-                                     input_img, input_data, input_luma,  //
-                                     gpu_alloc.layer_3.output, luma_w, luma_h);
+    data_pipeline.write_result_image(out_path, input_img, sample);
   }
 }
 
@@ -271,55 +253,72 @@ void execute_forward(ConfigBasedDataPipeline& data_pipeline,
 /// Training
 ///
 void divide_samples(size_t validation_set_size, GpuAllocationPool& pool,
-                    std::vector<PerSampleAllocationPool>& train_set,
-                    std::vector<PerSampleAllocationPool>& validation_set) {
-  auto samples = pool.samples;
+                    std::vector<SampleAllocationPool*>& train_set,
+                    std::vector<SampleAllocationPool*>& validation_set) {
+  std::vector<SampleAllocationPool>& samples = pool.samples;
   train_set.clear();
   validation_set.clear();
   std::random_shuffle(samples.begin(), samples.end());
-  auto st = samples.cbegin(), ne = std::next(st, validation_set_size);
-  std::copy(st, ne, back_inserter(validation_set));
-  std::copy(ne, samples.cend(), back_inserter(train_set));
+  // auto st = samples.cbegin(), ne = std::next(st, validation_set_size);
+  // std::copy(st, ne, back_inserter(validation_set));
+  // std::copy(ne, samples.cend(), back_inserter(train_set));
+  for (size_t i = 0; i < samples.size(); i++) {
+    if (i < validation_set_size) {
+      validation_set.push_back(&samples[i]);
+    } else {
+      train_set.push_back(&samples[i]);
+    }
+  }
 }
 
 float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
                     GpuAllocationPool& gpu_alloc,
-                    std::vector<PerSampleAllocationPool> sample_set) {
+                    std::vector<SampleAllocationPool*>& sample_set) {
   auto context = data_pipeline.context();
-  auto cfg = data_pipeline.config();
-
-  float squared_error = 0;
-  for (PerSampleAllocationPool& sample : sample_set) {
-    const size_t w = sample.w, h = sample.h;
+  int block_stride = std::max(10, (int)sample_set.size() / 3);
+  cl_event event;
+  cl_event* event_ptr = nullptr; // Skipping this does not improve speed..
+  for (size_t i = 0; i < sample_set.size(); i++) {
+    // std::cout << "--[" << i << "] NEXT (train? - " << backpropagate << ") --"
+    // << std::endl;
+    SampleAllocationPool& sample = *sample_set[i];
     // process with layers
     auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
                                             gpu_alloc.layer_2,  //
                                             gpu_alloc.layer_3,  //
-                                            sample.input_luma, w, h);
-    // squared difference
+                                            sample, event_ptr);
     if (!backpropagate) {
-      // we are ignoring train error anyway
-      squared_error += data_pipeline.squared_error(
-          sample.input_luma, gpu_alloc.layer_3.output, w, h, &forward_ev);
-      if (std::isnan(squared_error)) {
-        return squared_error;
-      }
+      // we are executing validation set - schedule all squared_error calcs
+      // (samples do not depend on each other, so we ignore event object)
+      data_pipeline.squared_error(sample, &forward_ev);
+    } else {
+      // backpopagate all
+      event = data_pipeline.backpropagate(gpu_alloc.layer_1,  //
+                                          gpu_alloc.layer_2,  //
+                                          gpu_alloc.layer_3,  //
+                                          sample, &forward_ev);
+      // event_ptr = &event;
     }
 
-    if (backpropagate) {
-      // auto weight_decay_value = data_pipeline.weight_decay(
-      // gpu_alloc.layer_1, gpu_alloc.layer_2, gpu_alloc.layer_3,
-      // cfg->weight_decay_parameter, &forward_ev);
-      auto weight_decay_value = 0.0f;
-      data_pipeline.backpropagate(gpu_alloc.layer_1,  //
-                                  gpu_alloc.layer_2,  //
-                                  gpu_alloc.layer_3,  //
-                                  sample.input_luma,
-                                  sample.expected_output_luma, w, h,
-                                  weight_decay_value);
+    if (i > 0 && i % block_stride == 0) {
+      // std::cout << "[" << i << "] BLOCK" << std::endl;
+      // context->block();
     }
-    context->block();
   }
+  context->block();
+
+  // only meaningful if executing validation set
+  float squared_error = 0;
+  // wait till all finished, sum the errors
+  for (size_t i = 0; !backpropagate && i < sample_set.size(); i++) {
+    SampleAllocationPool& sample = *sample_set[i];
+    float squared_error_val = sample.validation_error;
+    if (std::isnan(squared_error_val)) {
+      return squared_error_val;
+    }
+    squared_error += squared_error_val;
+  }
+
   return squared_error;
 }
 

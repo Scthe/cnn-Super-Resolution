@@ -76,17 +76,17 @@ bool UpdateParametersTest::operator()(size_t,
   unsigned seed1 = std::chrono::system_clock::now().time_since_epoch().count();
   std::mt19937 generator(seed1);
 
-  CnnLayerGpuAllocationPool gpu_alloc;
+  LayerAllocationPool gpu_alloc;
   std::vector<float> expected_w(ws), current_w(ws), new_deltas_w(ws);
   std::vector<float> expected_b(bs), current_b(bs), new_deltas_b(bs);
   _impl->create_data(generator, context,
-                     gpu_alloc.weights,           //
-                     gpu_alloc.accumulating_grad_w,            //
+                     gpu_alloc.weights,                 //
+                     gpu_alloc.accumulating_grad_w,     //
                      gpu_alloc.previous_batch_delta_w,  //
                      expected_w, current_w, new_deltas_w);
   _impl->create_data(generator, context,
-                     gpu_alloc.bias,              //
-                     gpu_alloc.accumulating_grad_b,            //
+                     gpu_alloc.bias,                    //
+                     gpu_alloc.accumulating_grad_b,     //
                      gpu_alloc.previous_batch_delta_b,  //
                      expected_b, current_b, new_deltas_b);
 
@@ -94,7 +94,7 @@ bool UpdateParametersTest::operator()(size_t,
   layer_data.set_bias(&current_b[0]);
 
   pipeline->update_parameters(layer_data, gpu_alloc, _impl->batch_size,
-                              _impl->momentum, _impl->learning_rate);
+                              _impl->momentum, 0.0f, _impl->learning_rate);
 
   assert_equals(pipeline, expected_w, gpu_alloc.weights);
   assert_equals(pipeline, expected_b, gpu_alloc.bias);

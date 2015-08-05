@@ -12,6 +12,9 @@
 #include "json/gason.h"
 
 namespace cnn_sr {
+
+bool warn_about_blocking_operation = false;
+
 namespace utils {
 
 ///
@@ -48,6 +51,17 @@ void dump_vector(std::ostream& os, std::vector<float>& data,
     }
     if (i + 1 < lines) os << std::endl;
   }
+}
+
+size_t closest_power_of_2(int x) {
+  if (x < 0) return 0;
+  --x;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  return static_cast<size_t>(x + 1);
 }
 
 ///

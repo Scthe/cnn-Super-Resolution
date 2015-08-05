@@ -13,8 +13,7 @@
 #include "UtilsOpenCL.hpp"
 #include "Kernel.hpp"
 #include "Context.hpp"
-
-size_t closest_power_of_2(int x);
+#include "../pch.hpp"
 
 namespace opencl {
 namespace utils {
@@ -75,7 +74,6 @@ char *load_file(const char *cFilename, const char *cPreamble,
 
 ///
 /// images
-/// TODO move from OpenCL to general utils
 ///
 
 ImageData::ImageData() : w(0), h(0), bpp(0), data(nullptr) {}
@@ -143,7 +141,8 @@ void work_sizes(const opencl::Kernel &kernel, size_t dim,
 
   // global_work_size
   for (size_t i = 0; i < dim; i++) {
-    global_work_size[i] = closest_power_of_2(static_cast<int>(work[i]));
+    global_work_size[i] =
+        cnn_sr::utils::closest_power_of_2(static_cast<int>(work[i]));
   }
 
   // local_work_size
@@ -267,15 +266,4 @@ const char *get_opencl_error_str(cl_int errorCode) {
 
 //
 }
-}
-
-size_t closest_power_of_2(int x) {
-  if (x < 0) return 0;
-  --x;
-  x |= x >> 1;
-  x |= x >> 2;
-  x |= x >> 4;
-  x |= x >> 8;
-  x |= x >> 16;
-  return static_cast<size_t>(x + 1);
 }

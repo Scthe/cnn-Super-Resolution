@@ -58,6 +58,7 @@ def visualize(cfg, params, scale, layer_id, out_path):
   weights = params['layer' + str(layer_id)]['weights']
   min_w, max_w = min(weights), max(weights)
   print('min_w: {}, max_w: {}'.format(min_w, max_w))
+  print('overfit: {}'.format(sum([x*x for x in weights])))
 
   f, l_k, l_n = layer = layer_data(cfg, layer_id)
   cell_size = f * scale + 2 * per_weight_cell_padding
@@ -104,11 +105,6 @@ if __name__ == '__main__':
   parser.add_argument('--out-dir', '-o', required=False, default='', help='where to store result images')
   parser.add_argument('--scale', '-s', required=False, default=10, type=int, help='scale factor - cause sometimes 10x10 image is too small')
   args = parser.parse_args()
-
-  print(args.config)
-  print(args.parameters_file)
-  print(args.out_dir)
-  print(args.scale)
 
   with open(args.config) as data_file:
     cfg = json.load(data_file)

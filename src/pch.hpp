@@ -42,6 +42,9 @@ class JsonAllocator;
 /// Utils
 ///
 namespace cnn_sr {
+
+extern bool warn_about_blocking_operation;
+
 namespace utils {
 
 void require(bool, const char*);
@@ -59,6 +62,8 @@ template <typename T>
 inline bool is_even(T x) {
   return !is_odd(x);
 }
+
+size_t closest_power_of_2(int);
 
 ///
 /// Utils - macros

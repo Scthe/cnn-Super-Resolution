@@ -69,10 +69,14 @@ bool SquaredErrorTest::operator()(size_t,
   /* clang-format on */
 
   // exec
-  float r =
-      pipeline->squared_error(gpu_buf_ground_truth, gpu_buf_algo_res,
-                              ground_truth_w, ground_truth_h, total_padding);
-  assert_equals(sum, r);
+  opencl::MemoryHandle tmp_buffer = gpu_nullptr;
+  float target = 0.0f;
+  pipeline->squared_error(gpu_buf_ground_truth,            //
+                          ground_truth_w, ground_truth_h,  //
+                          gpu_buf_algo_res,                //
+                          tmp_buffer, target, total_padding);
+  _context->block();
+  assert_equals(sum, target);
 
   return true;
 }

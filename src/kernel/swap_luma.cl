@@ -54,6 +54,8 @@ __kernel void main(__read_only image2d_t original_image,                  //
                   dot(YCbCr, YCbCr2g),  //
                   dot(YCbCr, YCbCr2b)};
     rgb = clamp(rgb, 0.0f, 255.0f);
+    // TODO mix luma values in edges of new luma area, to make the transition
+    // less jarring
     new_color.x = convert_uint(rgb.x);
     new_color.y = convert_uint(rgb.y);
     new_color.z = convert_uint(rgb.z);

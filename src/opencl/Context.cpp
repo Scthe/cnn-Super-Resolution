@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "UtilsOpenCL.hpp"
+#include "../pch.hpp"
 
 bool print_info = false;
 
@@ -11,7 +12,6 @@ bool print_info = false;
  * _kernels uses pointers, which makes the wrapper more lightweight.
  * As soon as vector that holds original instances is reloacted
  * the pointers are obsolete.
- * TODO _kernels should not use pointers. Swap for handles system
  */
 const size_t max_resources_per_type = 128;
 
@@ -151,6 +151,8 @@ void Context::print_app_memory_usage() {
 // core: execution related
 
 void Context::block() {
+  if (cnn_sr::warn_about_blocking_operation)
+    std::cout << "BLOCK explicit Context::block()" << std::endl;
   cl_int ciErr1;
   ciErr1 = clFlush(_clcommand_queue);
   check_error(ciErr1,
@@ -234,6 +236,8 @@ cl_event Context::read_buffer(MemoryHandle gpu_buffer_handle, size_t offset,
                               size_t size, void* dst, bool block,
                               cl_event* events_to_wait_for,
                               int events_to_wait_for_count) {
+  if (cnn_sr::warn_about_blocking_operation && block)
+    std::cout << "BLOCK: read_buffer" << std::endl;
   check_error(initialized, "Context was not initialized");
   auto gpu_buffer = raw_memory(gpu_buffer_handle);
   check_error(size <= gpu_buffer->size, "Tried to read more then is allocated");
@@ -262,6 +266,8 @@ cl_event Context::write_buffer(MemoryHandle gpu_buffer_handle, size_t offset,
                                size_t size, void* src, bool block,
                                cl_event* events_to_wait_for,
                                int events_to_wait_for_count) {
+  if (cnn_sr::warn_about_blocking_operation && block)
+    std::cout << "BLOCK: write_buffer" << std::endl;
   check_error(initialized, "Context was not initialized");
   auto gpu_buffer = raw_memory(gpu_buffer_handle);
   check_error(size <= gpu_buffer->size,

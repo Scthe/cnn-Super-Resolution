@@ -6,22 +6,65 @@
 
 namespace cnn_sr {
 
+/**
+ * All gpu buffer handles related to single image
+ */
+struct SampleAllocationPool {
+  /** Raw 3 channel image loaded from hard drive */
+  opencl::MemoryHandle input_data = gpu_nullptr;
+  /** Single channel (luma) of size input_img_w*input_img_h */
+  opencl::MemoryHandle input_luma = gpu_nullptr;
+  /** Dimensions of original image*/
+  size_t input_w, input_h;
+
+  /** Forward: this layer's output values, size: out_w*out_h*n */
+  opencl::MemoryHandle layer_1_output = gpu_nullptr,  //
+      layer_2_output = gpu_nullptr,                   //
+      layer_3_output = gpu_nullptr;
+  /** Backpropagation: Deltas for this layer, size: out_w*out_h*n */
+  opencl::MemoryHandle layer_1_deltas = gpu_nullptr,  //
+      layer_2_deltas = gpu_nullptr,                   //
+      layer_3_deltas = gpu_nullptr;
+
+  /** Training: Raw 3 channel image loaded from hard drive */
+  opencl::MemoryHandle expected_data = gpu_nullptr;
+  /** Training: luma to compare our result to */
+  opencl::MemoryHandle expected_luma = gpu_nullptr;
+
+  /** Since memory is lazily allocated, it may happen that we are going
+    * to calculate validation error when other buffers are not 100% ready.
+    * As a result of this we are not reusing other buffers,
+    * even thought we could use f.e. one of deltas
+    * real type: cl_float
+    */
+  opencl::MemoryHandle validation_error_buf = gpu_nullptr;  //
+  /** read target */
+  float validation_error;
+
+  SampleAllocationPool() = default;
+
+  // private:
+  // SampleAllocationPool(const SampleAllocationPool&) = delete;
+  // SampleAllocationPool& operator=(const SampleAllocationPool&) = delete;
+};
+
+/**
+ * Class that wraps all low level functions from DataPipeline into something
+ * more usable
+ */
 class ConfigBasedDataPipeline : public DataPipeline {
  public:
   ConfigBasedDataPipeline(Config&, opencl::Context*);
-  void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
-  inline const Config* config() { return _config; }
 
-  cl_event forward(cnn_sr::CnnLayerGpuAllocationPool&,  //
-                   cnn_sr::CnnLayerGpuAllocationPool&,  //
-                   cnn_sr::CnnLayerGpuAllocationPool&,  //
-                   opencl::MemoryHandle, size_t, size_t,
-                   cl_event* ev = nullptr);
+  void init(bool _optimize_for_small_data = false,
+            int load_flags = DataPipeline::LOAD_KERNEL_ALL);
 
-  float squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
-                      opencl::MemoryHandle gpu_buf_algo_res,
-                      size_t ground_truth_w, size_t ground_truth_h,
-                      cl_event* ev = nullptr);
+  cl_event forward(LayerAllocationPool& layer_1_alloc,  //
+                   LayerAllocationPool& layer_2_alloc,  //
+                   LayerAllocationPool& layer_3_alloc,  //
+                   SampleAllocationPool& sample, cl_event* ev = nullptr);
+
+  cl_event squared_error(SampleAllocationPool& sample, cl_event* ev = nullptr);
 
   /* clang-format off */
   /**
@@ -43,30 +86,28 @@ class ConfigBasedDataPipeline : public DataPipeline {
    * @param  ev_to_wait_for       [description]
    * @return                      [description]
    */
-  cl_event backpropagate(cnn_sr::CnnLayerGpuAllocationPool&,
-                         cnn_sr::CnnLayerGpuAllocationPool&,
-                         cnn_sr::CnnLayerGpuAllocationPool&,
-                         opencl::MemoryHandle, opencl::MemoryHandle,
-                         size_t, size_t,//
-                         float, cl_event* ev_to_wait_for = nullptr);
+  cl_event backpropagate(cnn_sr::LayerAllocationPool&,
+                         cnn_sr::LayerAllocationPool&,
+                         cnn_sr::LayerAllocationPool&,
+                         SampleAllocationPool &sample,
+                         cl_event* ev_to_wait_for = nullptr);
   /* clang-format on */
 
-  void write_params_to_file(const char* const file_path,  //
-                            cnn_sr::CnnLayerGpuAllocationPool,
-                            cnn_sr::CnnLayerGpuAllocationPool,
-                            cnn_sr::CnnLayerGpuAllocationPool);
-
   /** update weights and biases*/
-  void update_parameters(cnn_sr::CnnLayerGpuAllocationPool&,
-                         cnn_sr::CnnLayerGpuAllocationPool&,
-                         cnn_sr::CnnLayerGpuAllocationPool&, size_t batch_size,
+  void update_parameters(cnn_sr::LayerAllocationPool&,
+                         cnn_sr::LayerAllocationPool&,
+                         cnn_sr::LayerAllocationPool&, size_t batch_size,
                          cl_event* ev_to_wait_for = nullptr);
 
-  void write_result_image(const char* const, opencl::utils::ImageData&,
-                          opencl::MemoryHandle input_img_3ch,   //
-                          opencl::MemoryHandle input_img_luma,  //
-                          opencl::MemoryHandle new_luma, size_t, size_t);
+  void write_params_to_file(const char* const file_path,  //
+                            cnn_sr::LayerAllocationPool,
+                            cnn_sr::LayerAllocationPool,
+                            cnn_sr::LayerAllocationPool);
 
+  void write_result_image(const char* const, opencl::utils::ImageData&,
+                          SampleAllocationPool& sample);
+
+  inline const Config* config() { return _config; }
   inline const LayerData* layer_1() { return &layer_data_1; }
   inline const LayerData* layer_2() { return &layer_data_2; }
   inline const LayerData* layer_3() { return &layer_data_3; }
@@ -75,9 +116,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
   void load_kernels(int load_flags);
 
  private:
-  cl_event last_layer_delta(opencl::MemoryHandle, opencl::MemoryHandle,
-                            opencl::MemoryHandle&, float, size_t, size_t,
-                            cl_event* ev = nullptr);
+  cl_event last_layer_delta(SampleAllocationPool&, cl_event* ev = nullptr);
 
   void fill_random_parameters(LayerData&, ParametersDistribution&);
 
@@ -86,10 +125,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
   void create_luma_image(const char* const, opencl::MemoryHandle, size_t,
                          size_t);
 
-  void create_lumas_delta_image(const char* const,
-                                opencl::MemoryHandle expected_luma, size_t,
-                                size_t,  //
-                                opencl::MemoryHandle luma, size_t, size_t);
+  void create_lumas_delta_image(const char* const, SampleAllocationPool&);
 
  private:
   Config* const _config;

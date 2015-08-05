@@ -74,8 +74,6 @@ cl_event Kernel::execute(cl_uint work_dim,                //
                          const size_t *local_work_size,   //
                          cl_event *events_to_wait_for,
                          int events_to_wait_for_count) {
-  // TODO get work_dim from sizeof ?
-  // TODO assert sizeof(global) == sizeof(local)
   context->check_error(context->is_initialized(),
                        "Context was not initialized");
   check_work_parameters(work_dim, global_work_size, local_work_size);

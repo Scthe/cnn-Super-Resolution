@@ -114,7 +114,8 @@ bool LayerTest::operator()(size_t data_set_id,
   layer_data.get_output_dimensions(out_dim, data->input_w, data->input_h);
 
   // alloc input
-  cnn_sr::CnnLayerGpuAllocationPool gpu_alloc;
+  cnn_sr::LayerAllocationPool gpu_alloc;
+  opencl::MemoryHandle gpu_output = gpu_nullptr;
   auto gpu_buf_in = _context->allocate(CL_MEM_WRITE_ONLY,
                                        sizeof(cl_float) * data->input.size());
   _context->write_buffer(gpu_buf_in, (void*)&data->input[0], true);
@@ -122,8 +123,8 @@ bool LayerTest::operator()(size_t data_set_id,
   // create kernel & run
   auto kernel = pipeline->create_layer_kernel(layer_data, false);
   pipeline->execute_layer(*kernel, layer_data, gpu_alloc, gpu_buf_in,
-                          data->input_w, data->input_h);
-  assert_equals(pipeline, data->output, gpu_alloc.output);
+                          data->input_w, data->input_h, gpu_output);
+  assert_equals(pipeline, data->output, gpu_output);
 
   return true;
 }

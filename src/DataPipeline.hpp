@@ -8,34 +8,33 @@ const opencl::MemoryHandle gpu_nullptr = 1 << 30;
 
 namespace cnn_sr {
 
-// TODO CnnLayerGpuAllocationPool is mouthful
-/* clang-format off */
-struct CnnLayerGpuAllocationPool {
+struct LayerAllocationPool {
   /** Forward: weights, size: f*f*n*k */
   opencl::MemoryHandle weights = gpu_nullptr;
   /** Forward: bias, size: n */
   opencl::MemoryHandle bias = gpu_nullptr;
-  /** Forward: this layer's output values, size: out_w*out_h*n */
-  opencl::MemoryHandle output = gpu_nullptr;
 
-  /** Backpropagation: Deltas for this layer, size: out_w*out_h*n */
-  opencl::MemoryHandle deltas = gpu_nullptr;
-  /** Backpropagation: Through single batch execution we are going to acumulate grads, size: f*f*n*k */
+  /** Backpropagation: Accumulate gradients through out batch execution,
+      size: f*f*n*k */
   opencl::MemoryHandle accumulating_grad_w = gpu_nullptr;
-  /** Backpropagation: Through single batch execution we are going to acumulate grads, size: f*f*n*k */
+  /** Backpropagation: Accumulate gradients through out batch execution,
+      size: f*f*n*k */
   opencl::MemoryHandle accumulating_grad_b = gpu_nullptr;
-  /** Backpropagation: Deltas that we had after previous batch, size: f*f*n*k */
+  /** Backpropagation-momentum: Deltas that we had after previous batch,
+      size: f*f*n*k */
   opencl::MemoryHandle previous_batch_delta_w = gpu_nullptr;
-  /** Backpropagation: Deltas that we had after previous batch, size: f*f*n*k */
+  /** Backpropagation-momentum: Deltas that we had after previous batch,
+      size: f*f*n*k */
   opencl::MemoryHandle previous_batch_delta_b = gpu_nullptr;
 };
-/* clang-format on */
 
 /**
  * Class used to execute various pipeline methods f.e.:
  * - luma extraction
  * - mean squared error
- * - whole cnn
+ * - all CNN methods
+ *
+ * This is quite low level - thin wrappers with validation mostly
  */
 class DataPipeline {
  public:
@@ -48,7 +47,8 @@ class DataPipeline {
 
   DataPipeline(opencl::Context*);
   virtual ~DataPipeline() {}
-  virtual void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
+  virtual void init(bool _optimize_for_small_data = false,
+                    int load_flags = DataPipeline::LOAD_KERNEL_ALL);
   opencl::Context* context();
 
   /**
@@ -80,8 +80,8 @@ class DataPipeline {
    * 	out - layer.output
    */
   cl_event execute_layer(opencl::Kernel&, const LayerData&,
-                         cnn_sr::CnnLayerGpuAllocationPool&,
-                         opencl::MemoryHandle&, size_t, size_t,
+                         cnn_sr::LayerAllocationPool&, opencl::MemoryHandle&,
+                         size_t, size_t, opencl::MemoryHandle&,
                          cl_event* ev = nullptr);
 
   /**
@@ -94,24 +94,11 @@ class DataPipeline {
    * @param  total_padding        difference in size between ground_truth image
    *                              and result. Should be equal to f1+f2+f3-3
    */
-  float squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
-                      opencl::MemoryHandle gpu_buf_algo_res,
-                      size_t ground_truth_w, size_t ground_truth_h,
-                      size_t total_padding, cl_event* ev = nullptr);
-
-  /**
-   * Glorified sum to calculate weight decay. Important is that:
-   * - this function blocks
-   * - this functions applies weight_decay_parameter
-   *
-   * used buffers:
-   * 	in  - layer_1.weights, layer_2.weights, layer_3.weights
-   * 	out - this->_tmp_gpu_float
-   */
-  float weight_decay(cnn_sr::CnnLayerGpuAllocationPool,
-                     cnn_sr::CnnLayerGpuAllocationPool,
-                     cnn_sr::CnnLayerGpuAllocationPool, float,
-                     cl_event* ev = nullptr);
+  cl_event squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
+                         size_t ground_truth_w, size_t ground_truth_h,
+                         opencl::MemoryHandle gpu_buf_algo_res,
+                         opencl::MemoryHandle& tmp_buffer, float& target,
+                         size_t total_padding, cl_event* ev = nullptr);
 
   /**
    * Deltas last layer
@@ -121,10 +108,9 @@ class DataPipeline {
    * 	out - param->gpu_buf_target
    */
   cl_event last_layer_delta(opencl::MemoryHandle gpu_buf_ground_truth,
+                            size_t ground_truth_w, size_t ground_truth_h,
                             opencl::MemoryHandle gpu_buf_algo_res,
                             opencl::MemoryHandle& gpu_buf_target,
-                            float weight_decay,  //
-                            size_t ground_truth_w, size_t ground_truth_h,
                             size_t total_padding, cl_event* ev = nullptr);
 
   /**
@@ -134,10 +120,12 @@ class DataPipeline {
    * 	in  - next_layer.deltas, curr_layer.output, next_layer.weights
    * 	out - curr_layer.deltas
    */
-  cl_event calculate_deltas(opencl::Kernel&, const LayerData&, const LayerData&,
-                            cnn_sr::CnnLayerGpuAllocationPool&,
-                            cnn_sr::CnnLayerGpuAllocationPool&,  //
-                            size_t, size_t,                      //
+  cl_event calculate_deltas(opencl::Kernel&,  //
+                            const LayerData&, const LayerData&,
+                            cnn_sr::LayerAllocationPool&,                 //
+                            opencl::MemoryHandle&, opencl::MemoryHandle,  //
+                            size_t, size_t,                               //
+                            opencl::MemoryHandle,                         //
                             cl_event* ev = nullptr);
 
   /**
@@ -148,9 +136,10 @@ class DataPipeline {
    * 	out - layer.grad_w, layer.grad_b
    */
   cl_event backpropagate(LayerData&, opencl::MemoryHandle layer_input,
-                         CnnLayerGpuAllocationPool&,  //
+                         opencl::MemoryHandle layer_deltas,
+                         LayerAllocationPool&,  //
                          size_t layer_out_w, size_t layer_out_h,
-                         cl_event* ev = nullptr);
+                         cl_event* ev = nullptr, size_t ev_cnt = 0);
 
   /**
    * Update weights and biases based on gradients and various factors like batch
@@ -163,8 +152,8 @@ class DataPipeline {
    * 	out - layer.weights, layer.bias
    * 	in/out - layer.previous_delta_w, layer.previous_delta_b
    */
-  cl_event update_parameters(LayerData&, CnnLayerGpuAllocationPool&,
-                             size_t batch_size, float momentum,
+  cl_event update_parameters(LayerData&, LayerAllocationPool&,
+                             size_t batch_size, float momentum, float w_decay,
                              float learning_rate, cl_event* ev = nullptr);
 
   ///
@@ -214,9 +203,28 @@ class DataPipeline {
                                     size_t, size_t);
   size_t element_count(opencl::MemoryHandle, size_t el_size);
 
+  /** General version. quite slow */
+  cl_event execute_layer_full(opencl::Kernel&, const LayerData&,
+                              cnn_sr::LayerAllocationPool&,
+                              opencl::MemoryHandle&, size_t, size_t,
+                              opencl::MemoryHandle&, cl_event* ev = nullptr);
+
+  /** version optimized for case f_spatial_size==1 */
+  cl_event execute_layer__f_eq_1(opencl::Kernel&, const LayerData&,
+                                 cnn_sr::LayerAllocationPool&,
+                                 opencl::MemoryHandle&, size_t, size_t,
+                                 opencl::MemoryHandle&, cl_event* ev = nullptr);
+
+  /** version optimized for case current_filter_count==1 */
+  cl_event execute_output_layer(opencl::Kernel&, const LayerData&,
+                                cnn_sr::LayerAllocationPool&,
+                                opencl::MemoryHandle&, size_t, size_t,
+                                opencl::MemoryHandle&, cl_event* ev = nullptr);
+
  protected:
   opencl::Context* const _context;
   bool _initialized;
+  bool _optimize_for_small_data;
 
   /** Single float. Quite useful. */
   opencl::MemoryHandle _tmp_gpu_float = gpu_nullptr;
@@ -231,6 +239,7 @@ class DataPipeline {
   opencl::Kernel* _last_layer_delta_kernel = nullptr;
   opencl::Kernel* _update_parameters_kernel = nullptr;
   opencl::Kernel* _backpropagate_kernel = nullptr;
+  opencl::Kernel* _backpropagate_kernel_opt = nullptr;
 };
 }
 
