@@ -277,7 +277,7 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
   auto context = data_pipeline.context();
   int block_stride = std::max(10, (int)sample_set.size() / 3);
   cl_event event;
-  cl_event* event_ptr = nullptr;
+  cl_event* event_ptr = nullptr; // Skipping this does not improve speed..
   for (size_t i = 0; i < sample_set.size(); i++) {
     // std::cout << "--[" << i << "] NEXT (train? - " << backpropagate << ") --"
     // << std::endl;
@@ -297,19 +297,19 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
                                           gpu_alloc.layer_2,  //
                                           gpu_alloc.layer_3,  //
                                           sample, &forward_ev);
-      event_ptr = &event;
+      // event_ptr = &event;
     }
 
     if (i > 0 && i % block_stride == 0) {
       // std::cout << "[" << i << "] BLOCK" << std::endl;
-      context->block();
+      // context->block();
     }
   }
+  context->block();
 
   // only meaningful if executing validation set
   float squared_error = 0;
   // wait till all finished, sum the errors
-  context->block();
   for (size_t i = 0; !backpropagate && i < sample_set.size(); i++) {
     SampleAllocationPool& sample = *sample_set[i];
     float squared_error_val = sample.validation_error;
