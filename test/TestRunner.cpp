@@ -14,7 +14,7 @@
   CONCATENATE(__test, __LINE__).init(__VA_ARGS__); \
   cases.push_back(&CONCATENATE(__test, __LINE__));
 
-int main(int argc, char **argv) {
+int main(int, char **) {
   std::cout << "STARTING TESTS" << std::endl;
 
   using namespace test;
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
   opencl::Context context;
   context.init();
   cnn_sr::DataPipeline pipeline(&context);
-  pipeline.init(cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
+  pipeline.init(false, cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
   // TODO test opt
   // pipeline.init(true, cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
 
@@ -43,7 +43,6 @@ int main(int argc, char **argv) {
   ADD_TEST(LayerDeltasTest);
   ADD_TEST(BackpropagationTest);
   ADD_TEST(LastLayerDeltaTest);
-  ADD_TEST(WeightDecayTest);
   ADD_TEST(UpdateParametersTest);
   ADD_TEST(ConfigTest);
 

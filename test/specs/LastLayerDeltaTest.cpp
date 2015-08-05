@@ -17,7 +17,6 @@ struct LastLayerDeltaTestImpl {
   // const size_t algo_w = 1000, algo_h = 2000;
   const size_t algo_w = 6, algo_h = 6;
   const size_t padding = 4;
-  const float weight_decay = 0.3f;
 };
 
 ///
@@ -62,8 +61,7 @@ bool LastLayerDeltaTest::operator()(size_t,
     float x = (generator() % 2560) / 1000.0f;
     float y = activation_function(x);
     // fill expected buffer
-    cpu_expected[i] =
-        (y - t) * activation_function_derivative(x) + _impl->weight_decay;
+    cpu_expected[i] = (y - t) * activation_function_derivative(x);
     cpu_ground_truth[g_t_idx] = t;
     cpu_algo_res[i] = y;
   }
@@ -79,8 +77,7 @@ bool LastLayerDeltaTest::operator()(size_t,
   // exec
   pipeline->last_layer_delta(gpu_buf_ground_truth,            //
                              ground_truth_w, ground_truth_h,  //
-                             gpu_buf_algo_res, gpu_buf_out, _impl->weight_decay,
-                             total_padding);
+                             gpu_buf_algo_res, gpu_buf_out, total_padding);
   assert_equals(pipeline, cpu_expected, gpu_buf_out);
   return true;
 }
