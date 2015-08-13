@@ -33,13 +33,13 @@ inline void atomic_add_global(volatile __global float* source, const float opera
  * single color channel buffers with image data and get the difference
  * between respective pixels.
  */
-__kernel void main(__read_only __global float* ground_truth_image,
-                   __read_only __global float* algo_result,
-                   __global float* target,       //
-                   __local float* scratch,       //
-                   __const uint ground_truth_w,  //
-                   __const uint algo_result_w,   //
-                   __const uint algo_result_h) {
+__kernel void squared_err(__read_only __global float* ground_truth_image,
+                          __read_only __global float* algo_result,
+                          __global float* target,       //
+                          __local float* scratch,       //
+                          __const uint ground_truth_w,  //
+                          __const uint algo_result_w,   //
+                          __const uint algo_result_h) {
   const int2 pos = {get_global_id(0), get_global_id(1)};  // x=col=i, y=row=j
   const int2 out_size = {algo_result_w, algo_result_h};
   const int idx = (pos.y * algo_result_w) + pos.x;

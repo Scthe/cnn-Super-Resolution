@@ -1,15 +1,16 @@
-__kernel void main(__read_only __global float* weights,                 //
-                   __read_only __global float* bias,                    //
-                   __read_only __global float* grad_weights,            //
-                   __read_only __global float* grad_bias,               //
-                   __read_only __global float* previous_delta_weights,  //
-                   __read_only __global float* previous_delta_bias,     //
-                   __const float momentum,                              //
-                   __const float weight_decay_parameter,                //
-                   __const float learning_rate,                         //
-                   __const uint batch_size,                             //
-                   __const uint weights_size,                           //
-                   __const uint bias_size) {
+__kernel void update_params(
+    __read_only __global float* weights,                 //
+    __read_only __global float* bias,                    //
+    __read_only __global float* grad_weights,            //
+    __read_only __global float* grad_bias,               //
+    __read_only __global float* previous_delta_weights,  //
+    __read_only __global float* previous_delta_bias,     //
+    __const float momentum,                              //
+    __const float weight_decay_parameter,                //
+    __const float learning_rate,                         //
+    __const uint batch_size,                             //
+    __const uint weights_size,                           //
+    __const uint bias_size) {
   const size_t idx = get_global_id(0);
 
   // update weights

@@ -125,41 +125,38 @@ void DataPipeline::load_kernels(int load_flags) {
        load_back = (load_flags & DataPipeline::LOAD_KERNEL_BACKPROPAGATE) != 0,
        load_misc = (load_flags & DataPipeline::LOAD_KERNEL_MISC) != 0;
 
+  /* clang-format off */
   if (load_luma) {
     auto norm_arg = "-D NORMALIZE";
     if (!_luma_kernel_norm)
-      _luma_kernel_norm = _context->create_kernel(luma_kernel_file, norm_arg);
+      _luma_kernel_norm = _context->create_kernel(luma_kernel_file, norm_arg, "extract_luma");
     if (!_luma_kernel_raw)
-      _luma_kernel_raw = _context->create_kernel(luma_kernel_file);
+      _luma_kernel_raw =  _context->create_kernel(luma_kernel_file, nullptr, "extract_luma");
     if (!_swap_luma_kernel)
-      _swap_luma_kernel = _context->create_kernel(swap_luma_kernel_file);
+      _swap_luma_kernel = _context->create_kernel(swap_luma_kernel_file, nullptr, "swap_luma");
   }
 
   if (load_misc) {
     if (!_squared_error_kernel)
-      _squared_error_kernel =
-          _context->create_kernel(squared_error_kernel_file);
-    if (!_sum_kernel) _sum_kernel = _context->create_kernel(sum_kernel_file);
-    if (!_subtract_from_all_kernel)
-      _subtract_from_all_kernel =
-          _context->create_kernel(subtract_from_all_kernel_file);
+      _squared_error_kernel =       _context->create_kernel(squared_error_kernel_file, nullptr, "squared_err");
+    if (!_sum_kernel) _sum_kernel = _context->create_kernel(sum_kernel_file, nullptr, "sum");
     if (!_sum_squared_kernel)
-      _sum_squared_kernel =
-          _context->create_kernel(sum_kernel_file, "-D SUM_SQUARED");
+      _sum_squared_kernel =         _context->create_kernel(sum_kernel_file, "-D SUM_SQUARED", "sum");
+    if (!_subtract_from_all_kernel)
+      _subtract_from_all_kernel =   _context->create_kernel(subtract_from_all_kernel_file, nullptr, "sub_from_all");
   }
 
   if (load_back) {
-    /* clang-format off */
     if (!_last_layer_delta_kernel)
-      _last_layer_delta_kernel = _context->create_kernel(last_layer_delta_kernel_file);
+      _last_layer_delta_kernel = _context->create_kernel(last_layer_delta_kernel_file, nullptr, "last_layer_delta");
     if (!_update_parameters_kernel)
-      _update_parameters_kernel = _context->create_kernel(update_parameters_kernel_file);
+      _update_parameters_kernel = _context->create_kernel(update_parameters_kernel_file, nullptr, "update_params");
     if (!_backpropagate_kernel)
-      _backpropagate_kernel = _context->create_kernel(backpropagate_kernel_file);
+      _backpropagate_kernel = _context->create_kernel(backpropagate_kernel_file, nullptr, "backpropagate");
     if (!_backpropagate_kernel_opt && _optimize_for_small_data)
-      _backpropagate_kernel_opt = _context->create_kernel(backpropagate_opt_kernel_file);
-    /* clang-format on */
+      _backpropagate_kernel_opt = _context->create_kernel(backpropagate_opt_kernel_file, nullptr, "backpropagate_opt");
   }
+  /* clang-format on */
 }
 
 opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d,
@@ -177,16 +174,21 @@ opencl::Kernel *DataPipeline::create_layer_kernel(const LayerData &d,
   // NOTE following conditions are same as in DataPipeline::execute_layer()
   bool opt_f1 = _optimize_for_small_data && d.f_spatial_size == 1;
   bool opt_n1 = _optimize_for_small_data && d.current_filter_count == 1;
-  auto kernel_file =
-      opt_f1 ? layer__f_e_1__kernel_file  //
-             : opt_n1 ? layer_output_kernel_file : layer_kernel_file;
-  return _context->create_kernel(kernel_file, buf);
+  if (opt_f1) {
+    return _context->create_kernel(layer__f_e_1__kernel_file, buf,
+                                   "forward__f_eq_1");
+  } else if (opt_n1) {
+    return _context->create_kernel(layer_output_kernel_file, buf,
+                                   "forward__last");
+  } else {
+    return _context->create_kernel(layer_kernel_file, buf, "forward");
+  }
 }
 
 opencl::Kernel *DataPipeline::create_deltas_kernel(const LayerData &d) {
   char buf[255];
   snprintf(buf, 255, "-D CURRENT_FILTER_COUNT=%d", d.current_filter_count);
-  return _context->create_kernel(deltas_kernel_file, buf);
+  return _context->create_kernel(deltas_kernel_file, buf, "deltas");
 }
 
 ///

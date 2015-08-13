@@ -32,10 +32,10 @@ inline void atomic_add_global(volatile __global float* source, const float opera
  * Code partially inspired by:
  * http://developer.amd.com/resources/documentation-articles/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
  */
-__kernel void main(__read_only __global float* data,  //
-                   volatile __global float* target,   //
-                   __local float* scratch,            //
-                   __const uint len) {
+__kernel void sum(__read_only __global float* data,  //
+                  volatile __global float* target,   //
+                  __local float* scratch,            //
+                  __const uint len) {
   const int global_index = get_global_id(0);
   const int local_index = get_local_id(0);
 

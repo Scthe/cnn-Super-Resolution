@@ -15,11 +15,12 @@ __constant float4 YCbCr2g = { 1.0f,  -0.343f, -0.711f,  0.0f};
 __constant float4 YCbCr2b = { 1.0f,   1.765f,    0.0f,  0.0f};
 /* clang-format on */
 
-__kernel void main(__read_only image2d_t original_image,                  //
-                   __read_only __global float* new_luma,                  //
-                   __global uchar* target,                                //
-                   const uint ground_truth_w, const uint ground_truth_h,  //
-                   const uint luma_w, const uint luma_h) {
+__kernel void swap_luma(__read_only image2d_t original_image,  //
+                        __read_only __global float* new_luma,  //
+                        __global uchar* target,                //
+                        const uint ground_truth_w,
+                        const uint ground_truth_h,  //
+                        const uint luma_w, const uint luma_h) {
   const size_t padding = (ground_truth_w - luma_w) / 2;
   const int2 pos = {get_global_id(0), get_global_id(1)},
              pos_luma = {pos.x - padding, pos.y - padding};

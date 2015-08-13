@@ -39,14 +39,14 @@
  * @return {[type]}                        [description]
  */
 /* clang-format on */
-__kernel void main(__read_only __global float* deltas_next_layer,  //
-                   __read_only __global float* layer_output,       //
-                   __global float* target,                         //
-                   __read_only __global float* W,                  //
-                   uint f_spatial_size,                            //
-                   uint f_next_spatial_size,                       //
-                   uint n_next_filter_cnt,                         //
-                   uint layer_out_w, uint layer_out_h) {
+__kernel void deltas(__read_only __global float* deltas_next_layer,  //
+                     __read_only __global float* layer_output,       //
+                     __global float* target,                         //
+                     __read_only __global float* W,                  //
+                     uint f_spatial_size,                            //
+                     uint f_next_spatial_size,                       //
+                     uint n_next_filter_cnt,                         //
+                     uint layer_out_w, uint layer_out_h) {
   // x=col=i; range: 0..layer_out_w
   // y=row=j; range: 0..layer_out_h
   const int2 pos = {get_global_id(0), get_global_id(1)};

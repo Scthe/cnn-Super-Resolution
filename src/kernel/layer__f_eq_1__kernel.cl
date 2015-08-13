@@ -3,11 +3,11 @@
  *
  * run for global:[ow,oh,current_filter_count], local:[_,_,current_filter_count]
  */
-__kernel void main(__read_only __global float* input,                  //
-                   __global float* target,                             //
-                   __read_only __global float* weights,                //
-                   __read_only __global float* bias,                   //
-                   uint input_w, uint input_h) {
+__kernel void forward__f_eq_1(__read_only __global float* input,    //
+                              __global float* target,               //
+                              __read_only __global float* weights,  //
+                              __read_only __global float* bias,     //
+                              uint input_w, uint input_h) {
   const int3 pos = {get_global_id(0), get_global_id(1), get_global_id(2)};
   const int n = pos.z;
   const size_t out_idx = (pos.y * input_w + pos.x) * CURRENT_FILTER_COUNT + n,

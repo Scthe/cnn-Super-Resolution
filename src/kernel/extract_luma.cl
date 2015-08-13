@@ -5,7 +5,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE |
 __constant float4 rgb2y = {0.299f, 0.587f, 0.114f, 0.0f};
 
 __kernel
-void main(__read_only image2d_t image,
+void extract_luma(__read_only image2d_t image,
 					__global float* target,
 					int w, int h){
 	const int2 pos = {get_global_id(0), get_global_id(1)};

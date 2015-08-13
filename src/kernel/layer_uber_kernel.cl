@@ -36,7 +36,7 @@
  * @param input_h              source height
  */
 __kernel
-void main(__read_only __global float* input,
+void forward(__read_only __global float* input,
           __global float* target,
           __read_only __global float* W,
           __read_only __global float* B,

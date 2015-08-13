@@ -5,13 +5,13 @@
  *
  * run for global:[ow,oh]
  */
-__kernel void main(__read_only __global float* input,    //
-                   __global float* target,               //
-                   __read_only __global float* weights,  //
-                   __read_only __global float* bias,     //
-                   __local float* local_bias,            //
-                   __local float* local_weights,         //
-                   uint input_w, uint input_h) {         //
+__kernel void forward__last(__read_only __global float* input,    //
+                            __global float* target,               //
+                            __read_only __global float* weights,  //
+                            __read_only __global float* bias,     //
+                            __local float* local_bias,            //
+                            __local float* local_weights,         //
+                            uint input_w, uint input_h) {         //
   const int2 pos = {get_global_id(0), get_global_id(1)};
   const int2 block_pos = {get_local_id(0), get_local_id(1)};
   // const int2 block_dim = {get_local_size(0), get_local_size(1)};

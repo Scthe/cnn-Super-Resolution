@@ -53,15 +53,15 @@ inline void atomic_add_global(volatile __global float* source, const float opera
  *           * layer_input[i+b,j+a,k]    # (2) input at this point
  */
 /* clang-format on */
-__kernel void main(__read_only __global float* deltas,       //
-                   __read_only __global float* layer_input,  //
-                   __global float* target_grad_w,            //
-                   __global float* target_grad_b,            //
-                   uint n_current_filter_cnt,                //
-                   uint n_prev_filter_cnt,                   //
-                   uint f_spatial_size,                      //
-                   uint layer_out_w, uint layer_out_h,
-                   __local float* row_deltas) {
+__kernel void backpropagate_opt(__read_only __global float* deltas,       //
+                                __read_only __global float* layer_input,  //
+                                __global float* target_grad_w,            //
+                                __global float* target_grad_b,            //
+                                uint n_current_filter_cnt,                //
+                                uint n_prev_filter_cnt,                   //
+                                uint f_spatial_size,                      //
+                                uint layer_out_w, uint layer_out_h,
+                                __local float* row_deltas) {
   const int id = get_global_id(0);
   const uint input_w = layer_out_w + f_spatial_size - 1;
   // weight dimensions
