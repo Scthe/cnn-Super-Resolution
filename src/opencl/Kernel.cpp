@@ -151,36 +151,45 @@ void Kernel::check_work_parameters(cl_uint work_dim,  //
     }
   }
 
+#define WORK_DIMENSIONS_STR "global:[%d,%d,%d], local:[%d,%d,%d]"
+#define WORK_DIMENSIONS_VAL global_work_size[0],                     \
+                           (work_dim > 1 ? global_work_size[1] : 1), \
+                           (work_dim == 3 ? global_work_size[2] : 1),\
+                           local_work_size[0],                       \
+                           (work_dim > 1 ? local_work_size[1] : 1),  \
+                           (work_dim == 3 ? local_work_size[2] : 1)
+
+  bool is_ok = true;
   if (!local_dims_lte_device_max) {
-    context->check_error(false,
-                         "Work parameters: one of local dimensions are bigger "
-                         "then device allows");
-  }
-
-  if (!global_dims_divisible_by_local_dims) {
-    context->check_error(false,
-                         "Work parameters: For each dimension "
-                         "global_work_size[dim] should be multiply of "
-                         "local_work_size[dim]");
-  }
-
-  if (real_global_work_size > device_work_id_range) {
+    is_ok = false;
+    snprintf(msg_buffer, sizeof(msg_buffer),
+             "Work parameters: one of local dimensions are bigger "
+             "then device allows. " WORK_DIMENSIONS_STR,
+             WORK_DIMENSIONS_VAL);
+  } else if (!global_dims_divisible_by_local_dims) {
+    is_ok = false;
+    snprintf(msg_buffer, sizeof(msg_buffer),
+             "Work parameters: For each dimension "
+             "global_work_size should be multiply of "
+             "local_work_size. " WORK_DIMENSIONS_STR,
+             WORK_DIMENSIONS_VAL);
+  } else if (real_global_work_size > device_work_id_range) {
+    is_ok = false;
     snprintf(msg_buffer, sizeof(msg_buffer),
              "Work parameters: global_work_size(%llu) is bigger then device "
-             "address_bits(%d) can represent",
-             real_global_work_size, device.address_bits);
-    context->check_error(false, msg_buffer);
-  }
-
-  if (real_local_work_size > device.max_work_group_size ||
-      real_local_work_size > this->max_work_group_size) {
+             "address_bits(%d) can represent. " WORK_DIMENSIONS_STR,
+             real_global_work_size, device.address_bits, WORK_DIMENSIONS_VAL);
+  } else if (real_local_work_size > device.max_work_group_size ||
+             real_local_work_size > this->max_work_group_size) {
+    is_ok = false;
     snprintf(msg_buffer, sizeof(msg_buffer),
              "Work parameters: local_work_size(%llu) is bigger then device(%d) "
-             "or kernel(%d) allows",
+             "or kernel(%d) allows. " WORK_DIMENSIONS_STR,
              real_local_work_size, device.max_work_group_size,
-             this->max_work_group_size);
-    context->check_error(false, msg_buffer);
+             this->max_work_group_size, WORK_DIMENSIONS_VAL);
   }
+
+  context->check_error(is_ok, msg_buffer);
 }
 
 std::ostream &operator<<(std::ostream &os, opencl::Kernel &k) {

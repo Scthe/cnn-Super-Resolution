@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
 
     // doing validation every time after training just to print some number
     // is wasteful
-    if ((epoch_id % 25) == 0) {
+    if ((epoch_id % 25) == 0 || epoch_id == epochs - 1) {
       float validation_squared_error =
           execute_batch(false, data_pipeline, gpu_alloc, validation_set);
 
@@ -277,7 +277,7 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
   auto context = data_pipeline.context();
   int block_stride = std::max(10, (int)sample_set.size() / 3);
   cl_event event;
-  cl_event* event_ptr = nullptr; // Skipping this does not improve speed..
+  cl_event* event_ptr = nullptr;  // Skipping this does not improve speed..
   for (size_t i = 0; i < sample_set.size(); i++) {
     // std::cout << "--[" << i << "] NEXT (train? - " << backpropagate << ") --"
     // << std::endl;

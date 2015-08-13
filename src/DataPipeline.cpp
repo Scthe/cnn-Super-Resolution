@@ -461,13 +461,13 @@ cl_event DataPipeline::execute_layer__f_eq_1(opencl::Kernel &kernel,  //
 
   // run
   int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
-  size_t global_work_size[3], local_work_size[3],
-      work_dims[3] = {input_w, input_h, data.current_filter_count};
-  opencl::utils::work_sizes(kernel, 3, global_work_size, local_work_size,
-                            work_dims, print_work_dimensions);
+  size_t global_work_size[3], local_work_size[3];
   local_work_size[0] = 1;
   local_work_size[1] = 1;
   local_work_size[2] = utils::closest_power_of_2(data.current_filter_count);
+  global_work_size[0] = input_w;
+  global_work_size[1] = input_h;
+  global_work_size[2] = local_work_size[2];
   // std::cout << global_work_size[0] << ", " << global_work_size[1] << ", "
   // << global_work_size[2] << std::endl;
   // std::cout << local_work_size[0] << ", " << local_work_size[1] << ", "

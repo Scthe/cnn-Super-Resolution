@@ -62,8 +62,8 @@ void forward(__read_only __global float* input,
   }
 
   // value range check
-  if(pos.x >= 0 && pos.x <= out_size.x &&
-     pos.y >= 0 && pos.y <= out_size.y){
+  if(pos.x >= 0 && pos.x < out_size.x &&
+     pos.y >= 0 && pos.y < out_size.y){
       // apply weights & write to vals_by_filter
       for (size_t dy = 0; dy < f_spatial_size; dy++) {
         for (size_t dx = 0; dx < f_spatial_size; dx++) {

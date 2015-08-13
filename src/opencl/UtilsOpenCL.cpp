@@ -139,10 +139,9 @@ void work_sizes(const opencl::Kernel &kernel, size_t dim,
       std::min(device.max_work_group_size, kernel.get_max_work_group_size());
   auto max_device_local_size = device.work_items_for_dims;
 
-  // global_work_size
+  size_t pow_2[3];
   for (size_t i = 0; i < dim; i++) {
-    global_work_size[i] =
-        cnn_sr::utils::closest_power_of_2(static_cast<int>(work[i]));
+    pow_2[i] = cnn_sr::utils::closest_power_of_2(static_cast<int>(work[i]));
   }
 
   // local_work_size
@@ -158,14 +157,23 @@ void work_sizes(const opencl::Kernel &kernel, size_t dim,
     tmp[to_update] *= 2;
     local_dims_multiplied *= 2;
     satisfies_conditions = tmp[to_update] <= max_device_local_size[to_update] &&
-                           tmp[to_update] <= global_work_size[to_update] &&
+                           tmp[to_update] <= pow_2[to_update] &&
                            local_dims_multiplied <= max_local;
     to_update = (to_update + 1) % dim;
   } while (satisfies_conditions);
 
+  // global_work_size
+  for (size_t i = 0; i < dim; i++) {
+    global_work_size[i] =
+        (pow_2[i] == local_work_size[i])
+            ? pow_2[i]
+            : ((work[i] / local_work_size[i]) + 1) * local_work_size[i];
+  }
+
   bool ok = true;
   for (size_t i = 0; i < dim; i++) {
     ok &= global_work_size[i] >= local_work_size[i];
+    ok &= global_work_size[i] >= work[i];
     ok &= local_work_size[i] > 0;
   }
 

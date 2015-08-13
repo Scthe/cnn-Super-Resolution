@@ -401,11 +401,13 @@ void ConfigBasedDataPipeline::write_result_image(
   opencl::utils::write_image(out_path, res_img);
 
   // debug images
+  /*
   std::cout << "[DEBUG] creating debug luma image" << std::endl;
   create_luma_image("data\\result_luma.png", sample.layer_3_output, luma_w,
                     luma_h);
   std::cout << "[DEBUG] creating debug delta image (input vs output)"
             << std::endl;
   create_lumas_delta_image("data\\result_deltas.png", sample);
+  */
 }
 }
