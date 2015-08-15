@@ -47,9 +47,12 @@ __kernel void forward__last(__read_only __global float* input,    //
           ((input_pos.y * input_w) + input_pos.x) * PREVIOUS_FILTER_COUNT;
       size_t w_idx = ((dy * F_SPATIAL_SIZE) + dx) * PREVIOUS_FILTER_COUNT;
 
+// following unroll gives ~7% better performance, but it's just so naive..
+#pragma unroll 4
       for (size_t k = 0; k < PREVIOUS_FILTER_COUNT; k++) {
+        // following line is responsible for bad performance. I'm not sure
+        // how to optimize this..
         float input_value = input[input_idx + k];
-        // float w = weights[w_idx + k];
         float w = local_weights[w_idx + k];
         sum += w * input_value;
       }

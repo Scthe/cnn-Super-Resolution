@@ -429,8 +429,6 @@ cl_event DataPipeline::execute_layer_full(opencl::Kernel &kernel,  //
   kernel.push_arg(gpu_buf_out);
   kernel.push_arg(gpu_alloc.weights);
   kernel.push_arg(gpu_alloc.bias);
-  kernel.push_arg(sizeof(cl_uint), (void *)&data.n_prev_filter_cnt);
-  kernel.push_arg(sizeof(cl_uint), (void *)&data.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&input_w);
   kernel.push_arg(sizeof(cl_uint), (void *)&input_h);
 
