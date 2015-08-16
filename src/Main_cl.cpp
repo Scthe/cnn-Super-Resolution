@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
   opencl::Context context;
   context.init(profile);
   ConfigBasedDataPipeline data_pipeline(cfg, &context);
-  data_pipeline.init(train);
+  data_pipeline.init();
   GpuAllocationPool gpu_alloc;
 
   if (!train) {

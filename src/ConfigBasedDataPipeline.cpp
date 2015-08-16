@@ -29,9 +29,8 @@ ConfigBasedDataPipeline::ConfigBasedDataPipeline(Config &cfg,
       layer_data_2(cfg.n1, cfg.n2, cfg.f2),
       layer_data_3(cfg.n2, 1, cfg.f3) {}
 
-void ConfigBasedDataPipeline::init(bool optimize_for_small_data,
-                                   int load_flags) {
-  DataPipeline::init(optimize_for_small_data, load_flags);
+void ConfigBasedDataPipeline::init(int load_flags) {
+  DataPipeline::init(load_flags);
 
   // init weights/bias
   if (!_config->parameters_file.empty()) {
