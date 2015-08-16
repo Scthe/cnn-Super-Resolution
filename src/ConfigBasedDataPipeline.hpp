@@ -50,18 +50,6 @@ struct GpuAllocationPool {
 };
 
 /**
- * Allocation unit - all buffers used during program execution
- * TODO remove !!!
- */
-struct AllocationItem {
-  opencl::MemoryHandle layer_1_deltas = gpu_nullptr,  //
-      layer_2_deltas = gpu_nullptr,                   //
-      layer_3_deltas = gpu_nullptr;
-
-  AllocationItem() = default;
-};
-
-/**
  * Class that wraps all low level functions from DataPipeline into something
  * more usable
  */
@@ -112,7 +100,8 @@ class ConfigBasedDataPipeline : public DataPipeline {
   cl_event backpropagate(cnn_sr::LayerAllocationPool&,
                          cnn_sr::LayerAllocationPool&,
                          cnn_sr::LayerAllocationPool&,
-                         SampleAllocationPool &sample,
+                         opencl::MemoryHandle,
+                         size_t, size_t,
                          cl_event* ev_to_wait_for = nullptr);
   /* clang-format on */
 
@@ -156,10 +145,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
   LayerData layer_data_2;
   LayerData layer_data_3;
   size_t epochs = 0;
-
   size_t _mini_batch_size = 0;
-  std::vector<AllocationItem> _allocation_pool;
-  size_t _current_allocation_item = 0;
 
   /** input for layer 1 */
   opencl::MemoryHandle _forward_gpu_buf = gpu_nullptr;
@@ -167,6 +153,12 @@ class ConfigBasedDataPipeline : public DataPipeline {
   opencl::MemoryHandle _out_1_gpu_buf = gpu_nullptr,  //
       _out_2_gpu_buf = gpu_nullptr,                   //
       _out_3_gpu_buf = gpu_nullptr;
+  /** deltas for layers */
+  opencl::MemoryHandle _delta_1_gpu_buf = gpu_nullptr,  //
+      _delta_2_gpu_buf = gpu_nullptr,                   //
+      _delta_3_gpu_buf = gpu_nullptr;
+  /***/
+  // opencl::MemoryHandle _validation_error_buf = gpu_nullptr;
 
   opencl::Kernel* _layer_1_kernel = nullptr;
   opencl::Kernel* _layer_2_kernel = nullptr;
