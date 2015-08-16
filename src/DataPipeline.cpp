@@ -75,13 +75,15 @@ bool DataPipeline::allocation_has_right_size__(opencl::MemoryHandle alloc,
     return false;
   }
   auto raw_mem = _context->raw_memory(alloc);
-  if (raw_mem->size == size) return true;
+  if (raw_mem->size >= size) return true;
 
   std::cout << "Was forced to realocate gpu buffer. This is not optimal and "
                "may be a bug. In many cases DataPipeline is able to allocate "
                "buffer of right size, so You only need to explictly set "
-               "MemoryHandle to gpu_nullptr. Code line: " << line
-            << ", variable: '" << variable_name << "'" << std::endl;
+               "MemoryHandle to gpu_nullptr. "  //
+               "Expected: " << size << ", got: " << raw_mem->size
+            << ". Code line: " << line << ", variable: '" << variable_name
+            << "'" << std::endl;
   throw std::runtime_error(
       "Was forced to realocate gpu buffer due too difference in sizes.");
   return false;

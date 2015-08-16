@@ -17,15 +17,6 @@ struct SampleAllocationPool {
   /** Dimensions of original image*/
   size_t input_w, input_h;
 
-  /** Forward: this layer's output values, size: out_w*out_h*n */
-  opencl::MemoryHandle layer_1_output = gpu_nullptr,  //
-      layer_2_output = gpu_nullptr,                   //
-      layer_3_output = gpu_nullptr;
-  /** Backpropagation: Deltas for this layer, size: out_w*out_h*n */
-  opencl::MemoryHandle layer_1_deltas = gpu_nullptr,  //
-      layer_2_deltas = gpu_nullptr,                   //
-      layer_3_deltas = gpu_nullptr;
-
   /** Training: Raw 3 channel image loaded from hard drive */
   opencl::MemoryHandle expected_data = gpu_nullptr;
   /** Training: luma to compare our result to */
@@ -37,7 +28,8 @@ struct SampleAllocationPool {
     * even thought we could use f.e. one of deltas
     * real type: cl_float
     */
-  opencl::MemoryHandle validation_error_buf = gpu_nullptr;  //
+  opencl::MemoryHandle validation_error_buf = gpu_nullptr;
+
   /** read target */
   float validation_error;
 
@@ -46,6 +38,22 @@ struct SampleAllocationPool {
   // private:
   // SampleAllocationPool(const SampleAllocationPool&) = delete;
   // SampleAllocationPool& operator=(const SampleAllocationPool&) = delete;
+};
+
+/**
+ * Allocation unit - all buffers used during program execution
+ */
+struct AllocationItem {
+  /** Forward: this layer's output values, size: out_w*out_h*n */
+  opencl::MemoryHandle layer_1_output = gpu_nullptr,  //
+      layer_2_output = gpu_nullptr,                   //
+      layer_3_output = gpu_nullptr;
+  /** Backpropagation: Deltas for this layer, size: out_w*out_h*n */
+  opencl::MemoryHandle layer_1_deltas = gpu_nullptr,  //
+      layer_2_deltas = gpu_nullptr,                   //
+      layer_3_deltas = gpu_nullptr;
+
+  AllocationItem() = default;
 };
 
 /**
@@ -58,6 +66,12 @@ class ConfigBasedDataPipeline : public DataPipeline {
 
   void init(bool _optimize_for_small_data = false,
             int load_flags = DataPipeline::LOAD_KERNEL_ALL);
+
+  void set_memory_pool_size(size_t);
+
+  size_t memory_pool_size();
+
+  void finish_mini_batch();
 
   cl_event forward(LayerAllocationPool& layer_1_alloc,  //
                    LayerAllocationPool& layer_2_alloc,  //
@@ -116,7 +130,8 @@ class ConfigBasedDataPipeline : public DataPipeline {
   void load_kernels(int load_flags);
 
  private:
-  cl_event last_layer_delta(SampleAllocationPool&, cl_event* ev = nullptr);
+  cl_event last_layer_delta(SampleAllocationPool&, AllocationItem&,
+                            cl_event* ev = nullptr);
 
   void fill_random_parameters(LayerData&, ParametersDistribution&);
 
@@ -125,7 +140,8 @@ class ConfigBasedDataPipeline : public DataPipeline {
   void create_luma_image(const char* const, opencl::MemoryHandle, size_t,
                          size_t);
 
-  void create_lumas_delta_image(const char* const, SampleAllocationPool&);
+  void create_lumas_delta_image(const char* const, SampleAllocationPool& e,
+                                AllocationItem&);
 
  private:
   Config* const _config;
@@ -133,6 +149,9 @@ class ConfigBasedDataPipeline : public DataPipeline {
   LayerData layer_data_2;
   LayerData layer_data_3;
   size_t epochs = 0;
+
+  std::vector<AllocationItem> _allocation_pool;
+  size_t _current_allocation_item = 0;
 
   opencl::Kernel* _layer_1_kernel = nullptr;
   opencl::Kernel* _layer_2_kernel = nullptr;

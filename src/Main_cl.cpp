@@ -105,6 +105,7 @@ int main(int argc, char** argv) {
 
   // other config variables
   const size_t validation_set_percent = 20;  // TODO move to cfg
+  const size_t mini_batch_count = 2;         // TODO move to cfg
 
   // read config
   ConfigReader reader;
@@ -127,8 +128,9 @@ int main(int argc, char** argv) {
   // read training samples
   std::vector<TrainSampleFiles> train_sample_files;
   get_training_samples(in_path, train_sample_files);
-  const size_t validation_set_size =
-      (size_t)(train_sample_files.size() * validation_set_percent / 100.0f);
+  const size_t validation_set_size = (size_t)(train_sample_files.size() *
+                                              validation_set_percent / 100.0f),
+               train_set_size = train_sample_files.size() - validation_set_size;
   if (validation_set_size == 0) {
     std::cout << "[WARNING] Validation set is empty" << std::endl;
   } else {
@@ -137,6 +139,11 @@ int main(int argc, char** argv) {
               << (validation_set_size * 100.0f / train_sample_files.size())
               << "%" << std::endl;
   }
+
+  data_pipeline.set_memory_pool_size((train_set_size / mini_batch_count) +
+                                     mini_batch_count);
+  std::cout << "mini-batch size: " << data_pipeline.memory_pool_size()
+            << std::endl;
 
   // read & prepare images
   for (auto& path_pair : train_sample_files) {
@@ -275,36 +282,43 @@ float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
                     GpuAllocationPool& gpu_alloc,
                     std::vector<SampleAllocationPool*>& sample_set) {
   auto context = data_pipeline.context();
-  int block_stride = std::max(10, (int)sample_set.size() / 3);
-  cl_event event;
-  cl_event* event_ptr = nullptr;  // Skipping this does not improve speed..
-  for (size_t i = 0; i < sample_set.size(); i++) {
-    // std::cout << "--[" << i << "] NEXT (train? - " << backpropagate << ") --"
-    // << std::endl;
-    SampleAllocationPool& sample = *sample_set[i];
-    // process with layers
-    auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
-                                            gpu_alloc.layer_2,  //
-                                            gpu_alloc.layer_3,  //
-                                            sample, event_ptr);
-    if (!backpropagate) {
-      // we are executing validation set - schedule all squared_error calcs
-      // (samples do not depend on each other, so we ignore event object)
-      data_pipeline.squared_error(sample, &forward_ev);
-    } else {
-      // backpopagate all
-      event = data_pipeline.backpropagate(gpu_alloc.layer_1,  //
-                                          gpu_alloc.layer_2,  //
-                                          gpu_alloc.layer_3,  //
-                                          sample, &forward_ev);
-      // event_ptr = &event;
+  // cl_event event;
+  // cl_event* event_ptr = nullptr;  // Skipping this does not improve speed..
+  auto mini_batch_size = data_pipeline.memory_pool_size();
+
+  size_t i = 0;
+  while (i < sample_set.size()) {
+    // std::cout << "EXECUTING MINI-BATCH("
+              // << (backpropagate ? "Backpropagate" : "Validation")
+              // << "), start idx " << i << std::endl;
+    // execute mini batch:
+    for (size_t _k = 0; _k < mini_batch_size && i < sample_set.size(); _k++) {
+      // std::cout << "Sample [" << i << "]  - in mini-batch position: " << _k
+                // << "/" << mini_batch_size << std::endl;
+      SampleAllocationPool& sample = *sample_set[i];
+      auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
+                                              gpu_alloc.layer_2,  //
+                                              gpu_alloc.layer_3,  //
+                                              sample /*, event_ptr*/);
+      if (!backpropagate) {
+        // we are executing validation set - schedule all squared_error calcs
+        // (samples do not depend on each other, so we ignore event object)
+        data_pipeline.squared_error(sample, &forward_ev);
+      } else {
+        // backpopagate all
+        /*event = */ data_pipeline.backpropagate(gpu_alloc.layer_1,  //
+                                                 gpu_alloc.layer_2,  //
+                                                 gpu_alloc.layer_3,  //
+                                                 sample, &forward_ev);
+        // event_ptr = &event;
+      }
+
+      ++i;
     }
 
-    if (i > 0 && i % block_stride == 0) {
-      // std::cout << "[" << i << "] BLOCK" << std::endl;
-      // context->block();
-    }
+    data_pipeline.finish_mini_batch();
   }
+
   context->block();
 
   // only meaningful if executing validation set
