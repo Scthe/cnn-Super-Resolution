@@ -411,8 +411,9 @@ cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
 ///
 
 cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
-                                     size_t ground_truth_w,
-                                     size_t ground_truth_h,
+                                     size_t ground_truth_w,  //
+                                     size_t ground_truth_h,  //
+                                     size_t sample_id,
                                      opencl::MemoryHandle gpu_buf_algo_res,
                                      opencl::MemoryHandle tmp_buffer,
                                      float &target, size_t total_padding,
@@ -424,11 +425,12 @@ cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
 
   // check allocations
   /* clang-format off */
+  /*
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_ground_truth, sizeof(cl_float) * ground_truth_w * ground_truth_h)) {
     throw std::runtime_error(
         "Provided ground_truth_w, ground_truth_h dimensions did not match "
         "allocated gpu_buf_ground_truth buffer size");
-  }
+  }*/
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
     throw std::runtime_error( "Allocated gpu_buf_algo_res buffer size did not match calculated size");
   }
@@ -451,7 +453,9 @@ cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
   _squared_error_kernel->push_arg(tmp_buffer);
   _squared_error_kernel->push_arg(sizeof(cl_float) * local_mem_size,
                                   nullptr);  // scratch
+  _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&sample_id);
   _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
+  _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_h);
   _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
   _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&algo_h);
 

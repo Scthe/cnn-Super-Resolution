@@ -178,8 +178,8 @@ float ConfigBasedDataPipeline::execute_batch(
         // (samples do not depend on each other, so we ignore event object)
         size_t padding = _config->total_padding();
         float validation_error__ = 0.0f;
-        auto e = squared_error(sample.expected_luma,            //
-                               sample.input_w, sample.input_h,  //
+        auto e = squared_error(_ground_truth_gpu_buf,               //
+                               sample.input_w, sample.input_h, _k,  //
                                _out_3_gpu_buf, _tmp_gpu_float,
                                validation_error__, padding, &forward_ev);
         clWaitForEvents(1, &e);
