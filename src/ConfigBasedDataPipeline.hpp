@@ -54,11 +54,6 @@ struct GpuAllocationPool {
  * TODO remove !!!
  */
 struct AllocationItem {
-  /** Forward: this layer's output values, size: out_w*out_h*n */
-  opencl::MemoryHandle layer_1_output = gpu_nullptr,  //
-      layer_2_output = gpu_nullptr,                   //
-      layer_3_output = gpu_nullptr;
-  /** Backpropagation: Deltas for this layer, size: out_w*out_h*n */
   opencl::MemoryHandle layer_1_deltas = gpu_nullptr,  //
       layer_2_deltas = gpu_nullptr,                   //
       layer_3_deltas = gpu_nullptr;
@@ -84,7 +79,15 @@ class ConfigBasedDataPipeline : public DataPipeline {
   cl_event forward(LayerAllocationPool& layer_1_alloc,  //
                    LayerAllocationPool& layer_2_alloc,  //
                    LayerAllocationPool& layer_3_alloc,  //
-                   SampleAllocationPool& sample, cl_event* ev = nullptr);
+                   SampleAllocationPool& sample);
+
+ private:
+  void allocate_buffers(size_t, size_t);
+
+  cl_event forward(LayerAllocationPool& layer_1_alloc,  //
+                   LayerAllocationPool& layer_2_alloc,  //
+                   LayerAllocationPool& layer_3_alloc,  //
+                   size_t w, size_t h);
 
   /* clang-format off */
   /**
@@ -113,6 +116,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
                          cl_event* ev_to_wait_for = nullptr);
   /* clang-format on */
 
+ public:
   /** update weights and biases*/
   void update_parameters(cnn_sr::LayerAllocationPool&,
                          cnn_sr::LayerAllocationPool&,
@@ -143,8 +147,8 @@ class ConfigBasedDataPipeline : public DataPipeline {
   void create_luma_image(const char* const, opencl::MemoryHandle, size_t,
                          size_t);
 
-  void create_lumas_delta_image(const char* const, SampleAllocationPool& e,
-                                AllocationItem&);
+  // void create_lumas_delta_image(const char* const, SampleAllocationPool& e,
+  // AllocationItem&);
 
  private:
   Config* const _config;
@@ -156,6 +160,13 @@ class ConfigBasedDataPipeline : public DataPipeline {
   size_t _mini_batch_size = 0;
   std::vector<AllocationItem> _allocation_pool;
   size_t _current_allocation_item = 0;
+
+  /** input for layer 1 */
+  opencl::MemoryHandle _forward_gpu_buf = gpu_nullptr;
+  /** outputs for layers */
+  opencl::MemoryHandle _out_1_gpu_buf = gpu_nullptr,  //
+      _out_2_gpu_buf = gpu_nullptr,                   //
+      _out_3_gpu_buf = gpu_nullptr;
 
   opencl::Kernel* _layer_1_kernel = nullptr;
   opencl::Kernel* _layer_2_kernel = nullptr;

@@ -38,7 +38,7 @@ void execute_forward(ConfigBasedDataPipeline&, GpuAllocationPool&,
 /// main
 ///
 int main(int argc, char** argv) {
-  std::srand(std::time(0));
+  // std::srand(std::time(0)); // TODO make non deterministic ?
 
   cnn_sr::utils::Argparse argparse("cnn", "????");
   /* clang-format off */
