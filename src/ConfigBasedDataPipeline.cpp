@@ -76,23 +76,77 @@ void ConfigBasedDataPipeline::load_kernels(int load_flags) {
   }
 }
 
-void ConfigBasedDataPipeline::set_memory_pool_size(size_t memory_pool_size) {
-  _allocation_pool.resize(memory_pool_size);
-}
-
-size_t ConfigBasedDataPipeline::memory_pool_size() {
-  return _allocation_pool.size();
+void ConfigBasedDataPipeline::set_mini_batch_size(size_t mini_batch_size) {
+  _mini_batch_size = mini_batch_size;
+  _allocation_pool.resize(_mini_batch_size);
+  std::cout << "mini-batch size: " << _mini_batch_size << std::endl;
 }
 
 ///
-/// Pipeline: forward/backward
+/// Pipeline: forward/backward propagation wrappers
 ///
+float ConfigBasedDataPipeline::execute_batch(
+    bool backpropagate__, GpuAllocationPool &gpu_alloc,
+    std::vector<SampleAllocationPool *> &sample_set) {
+  size_t i = 0;
+  while (i < sample_set.size()) {
+    // std::cout << "EXECUTING MINI-BATCH("
+    // << (backpropagate__ ? "Backpropagate" : "Validation")
+    // << "), start idx " << i << std::endl;
+    // execute mini batch:
+    for (size_t _k = 0; _k < _mini_batch_size && i < sample_set.size(); _k++) {
+      SampleAllocationPool &sample = *sample_set[i];
+      auto forward_ev = forward(gpu_alloc.layer_1,  //
+                                gpu_alloc.layer_2,  //
+                                gpu_alloc.layer_3,  //
+                                sample);
+      if (backpropagate__) {
+        backpropagate(gpu_alloc.layer_1,  //
+                      gpu_alloc.layer_2,  //
+                      gpu_alloc.layer_3,  //
+                      sample, &forward_ev);
+      } else {
+        // we are executing validation set - schedule all squared_error calcs
+        // (samples do not depend on each other, so we ignore event object)
+        size_t padding = _config->total_padding();
+        AllocationItem &alloc = _allocation_pool[_current_allocation_item];
+        ++_current_allocation_item;
 
-void ConfigBasedDataPipeline::finish_mini_batch() {
+        DataPipeline::squared_error(
+            sample.expected_luma,            //
+            sample.input_w, sample.input_h,  //
+            alloc.layer_3_output, sample.validation_error_buf,
+            sample.validation_error, padding, &forward_ev);
+      }
+
+      ++i;
+    }
+
+    // finish_mini_batch
+    _context->block();
+    _current_allocation_item = 0;
+  }
+
   _context->block();
-  _current_allocation_item = 0;
+
+  // only meaningful if executing validation set
+  float squared_error = 0;
+  // wait till all finished, sum the errors
+  for (size_t i = 0; !backpropagate__ && i < sample_set.size(); i++) {
+    SampleAllocationPool &sample = *sample_set[i];
+    float squared_error_val = sample.validation_error;
+    if (std::isnan(squared_error_val)) {
+      return squared_error_val;
+    }
+    squared_error += squared_error_val;
+  }
+
+  return squared_error;
 }
 
+///
+/// Pipeline: forward/backward propagation implementation
+///
 cl_event ConfigBasedDataPipeline::forward(
     LayerAllocationPool &layer_1_alloc,  //
     LayerAllocationPool &layer_2_alloc,  //
@@ -110,7 +164,7 @@ cl_event ConfigBasedDataPipeline::forward(
   if (_allocation_pool.empty()) _allocation_pool.resize(1);
   if (print_steps)
     std::cout << "Mini-batch[" << _current_allocation_item << "/"
-              << memory_pool_size() << "]" << std::endl;
+              << _mini_batch_size << "]" << std::endl;
   if (_current_allocation_item >= _allocation_pool.size())
     throw std::runtime_error("Allocation pool out of bounds exception");
   AllocationItem &alloc = _allocation_pool[_current_allocation_item];
@@ -158,7 +212,10 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   // propagate deltas
   if (print_steps)
     std::cout << "### Calculating deltas for last layer" << std::endl;
-  auto event2_1 = last_layer_delta(sample, alloc, ev_to_wait_for);
+  size_t padding = _config->total_padding();
+  auto event2_1 = DataPipeline::last_layer_delta(
+      sample.expected_luma, sample.input_w, sample.input_h,  //
+      alloc.layer_3_output, alloc.layer_3_deltas, padding, ev_to_wait_for);
 
   if (print_steps)
     std::cout << "### Calculating deltas for 2nd layer" << std::endl;
@@ -250,32 +307,6 @@ void ConfigBasedDataPipeline::update_parameters(
   _context->zeros_float(layer_3_alloc.accumulating_grad_b, true);
 
   ++epochs;
-}
-
-cl_event ConfigBasedDataPipeline::squared_error(SampleAllocationPool &sample,
-                                                cl_event *ev_to_wait_for) {
-  //
-  size_t padding = layer_data_1.f_spatial_size + layer_data_2.f_spatial_size +
-                   layer_data_3.f_spatial_size - 3;
-
-  AllocationItem &alloc = _allocation_pool[_current_allocation_item];
-  ++_current_allocation_item;
-
-  return DataPipeline::squared_error(
-      sample.expected_luma,            //
-      sample.input_w, sample.input_h,  //
-      alloc.layer_3_output, sample.validation_error_buf,
-      sample.validation_error, padding, ev_to_wait_for);
-}
-
-cl_event ConfigBasedDataPipeline::last_layer_delta(SampleAllocationPool &sample,
-                                                   AllocationItem &alloc,
-                                                   cl_event *ev) {
-  //
-  size_t padding = _config->total_padding();
-  return DataPipeline::last_layer_delta(
-      sample.expected_luma, sample.input_w, sample.input_h,  //
-      alloc.layer_3_output, alloc.layer_3_deltas, padding, ev);
 }
 
 ///

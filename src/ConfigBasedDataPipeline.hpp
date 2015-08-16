@@ -40,8 +40,18 @@ struct SampleAllocationPool {
   // SampleAllocationPool& operator=(const SampleAllocationPool&) = delete;
 };
 
+/** Represents all general allocations that we will make */
+struct GpuAllocationPool {
+  LayerAllocationPool layer_1;
+  LayerAllocationPool layer_2;
+  LayerAllocationPool layer_3;
+
+  std::vector<SampleAllocationPool> samples;
+};
+
 /**
  * Allocation unit - all buffers used during program execution
+ * TODO remove !!!
  */
 struct AllocationItem {
   /** Forward: this layer's output values, size: out_w*out_h*n */
@@ -64,20 +74,17 @@ class ConfigBasedDataPipeline : public DataPipeline {
  public:
   ConfigBasedDataPipeline(Config&, opencl::Context*);
 
-  void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
+  void init(int load_flags);
 
-  void set_memory_pool_size(size_t);
+  void set_mini_batch_size(size_t);
 
-  size_t memory_pool_size();
-
-  void finish_mini_batch();
+  float execute_batch(bool backpropagate, GpuAllocationPool&,
+                      std::vector<SampleAllocationPool*>&);
 
   cl_event forward(LayerAllocationPool& layer_1_alloc,  //
                    LayerAllocationPool& layer_2_alloc,  //
                    LayerAllocationPool& layer_3_alloc,  //
                    SampleAllocationPool& sample, cl_event* ev = nullptr);
-
-  cl_event squared_error(SampleAllocationPool& sample, cl_event* ev = nullptr);
 
   /* clang-format off */
   /**
@@ -129,9 +136,6 @@ class ConfigBasedDataPipeline : public DataPipeline {
   void load_kernels(int load_flags);
 
  private:
-  cl_event last_layer_delta(SampleAllocationPool&, AllocationItem&,
-                            cl_event* ev = nullptr);
-
   void fill_random_parameters(LayerData&, ParametersDistribution&);
 
   size_t load_parameters_file(const char* const);
@@ -149,6 +153,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
   LayerData layer_data_3;
   size_t epochs = 0;
 
+  size_t _mini_batch_size = 0;
   std::vector<AllocationItem> _allocation_pool;
   size_t _current_allocation_item = 0;
 
