@@ -465,7 +465,7 @@ cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
 
 cl_event DataPipeline::last_layer_delta(
     opencl::MemoryHandle gpu_buf_ground_truth,  //
-    size_t ground_truth_w, size_t ground_truth_h,
+    size_t ground_truth_w, size_t ground_truth_h, size_t sample_id,
     opencl::MemoryHandle gpu_buf_algo_res,
     opencl::MemoryHandle &gpu_buf_target,  //
     size_t total_padding, cl_event *ev_to_wait_for) {
@@ -477,11 +477,12 @@ cl_event DataPipeline::last_layer_delta(
 
   // check allocations
   /* clang-format off */
+  /*
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_ground_truth, sizeof(cl_float) * ground_truth_w * ground_truth_h)) {
     throw std::runtime_error(
         "Provided ground_truth_w, ground_truth_h dimensions did not match "
         "allocated gpu_buf_ground_truth buffer size");
-  }
+  }*/
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
     throw std::runtime_error( "Allocated gpu_buf_algo_res buffer size did not match calculated size");
   }
@@ -494,7 +495,9 @@ cl_event DataPipeline::last_layer_delta(
   _last_layer_delta_kernel->push_arg(gpu_buf_ground_truth);
   _last_layer_delta_kernel->push_arg(gpu_buf_algo_res);
   _last_layer_delta_kernel->push_arg(gpu_buf_target);
+  _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&sample_id);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
+  _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_h);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&algo_h);
 

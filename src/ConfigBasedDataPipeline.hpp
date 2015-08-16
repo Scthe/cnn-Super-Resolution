@@ -89,8 +89,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
   cl_event backpropagate(cnn_sr::LayerAllocationPool&,
                          cnn_sr::LayerAllocationPool&,
                          cnn_sr::LayerAllocationPool&,
-                         opencl::MemoryHandle,
-                         size_t, size_t,
+                         size_t, size_t, size_t,
                          cl_event* ev_to_wait_for = nullptr);
   /* clang-format on */
 
@@ -136,6 +135,8 @@ class ConfigBasedDataPipeline : public DataPipeline {
   size_t epochs = 0;
   size_t _mini_batch_size = 0;
 
+  /* ground truth for batch */
+  opencl::MemoryHandle _ground_truth_gpu_buf = gpu_nullptr;
   /** input for layer 1 */
   opencl::MemoryHandle _forward_gpu_buf = gpu_nullptr;
   /** outputs for layers */
@@ -146,8 +147,6 @@ class ConfigBasedDataPipeline : public DataPipeline {
   opencl::MemoryHandle _delta_1_gpu_buf = gpu_nullptr,  //
       _delta_2_gpu_buf = gpu_nullptr,                   //
       _delta_3_gpu_buf = gpu_nullptr;
-  /***/
-  // opencl::MemoryHandle _validation_error_buf = gpu_nullptr;
 
   opencl::Kernel* _layer_1_kernel = nullptr;
   opencl::Kernel* _layer_2_kernel = nullptr;

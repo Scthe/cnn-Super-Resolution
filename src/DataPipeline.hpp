@@ -108,7 +108,7 @@ class DataPipeline {
    */
   cl_event last_layer_delta(opencl::MemoryHandle gpu_buf_ground_truth,
                             size_t ground_truth_w, size_t ground_truth_h,
-                            opencl::MemoryHandle gpu_buf_algo_res,
+                            size_t id, opencl::MemoryHandle gpu_buf_algo_res,
                             opencl::MemoryHandle& gpu_buf_target,
                             size_t total_padding, cl_event* ev = nullptr);
 

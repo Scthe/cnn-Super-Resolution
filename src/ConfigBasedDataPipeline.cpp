@@ -103,6 +103,9 @@ void ConfigBasedDataPipeline::allocate_buffers(size_t img_w, size_t img_h) {
   _delta_1_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img1);
   _delta_2_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img2);
   _delta_3_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img3);
+  /* clang-format off */
+  _ground_truth_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img0);
+  /* clang-format on */
 }
 
 ///
@@ -142,6 +145,19 @@ float ConfigBasedDataPipeline::execute_batch(
     // << (backpropagate__ ? "Backpropagate" : "Validation")
     // << "), start idx " << i << std::endl;
 
+    // copy mini batch so that data is nicely aligned in memory
+    size_t img_offset = 0, samples_in_batch = 0, j = i;
+    while (samples_in_batch < _mini_batch_size && j < sample_set.size()) {
+      SampleAllocationPool &sample = *sample_set[j];
+      // _context->copy_buffer(sample.input_luma, _forward_gpu_buf, img_offset);
+      _context->copy_buffer(sample.expected_luma, _ground_truth_gpu_buf,
+                            img_offset);
+      img_offset += sample.input_w * sample.input_h * 4;
+      // img_offset += _context->raw_memory(sample.input_luma)->size;
+      ++samples_in_batch;
+      ++j;
+    }
+
     // execute mini batch:
     for (size_t _k = 0; _k < _mini_batch_size && i < sample_set.size(); _k++) {
       SampleAllocationPool &sample = *sample_set[i];
@@ -151,10 +167,10 @@ float ConfigBasedDataPipeline::execute_batch(
                                 gpu_alloc.layer_3,  //
                                 sample.input_w, sample.input_h);
       if (backpropagate__) {
-        backpropagate(gpu_alloc.layer_1,                                     //
-                      gpu_alloc.layer_2,                                     //
-                      gpu_alloc.layer_3,                                     //
-                      sample.expected_luma, sample.input_w, sample.input_h,  //
+        backpropagate(gpu_alloc.layer_1,                   //
+                      gpu_alloc.layer_2,                   //
+                      gpu_alloc.layer_3,                   //
+                      sample.input_w, sample.input_h, _k,  //
                       &forward_ev);
         _context->block();
       } else {
@@ -228,9 +244,8 @@ cl_event ConfigBasedDataPipeline::forward(
 cl_event ConfigBasedDataPipeline::backpropagate(
     cnn_sr::LayerAllocationPool &layer_1_alloc,
     cnn_sr::LayerAllocationPool &layer_2_alloc,
-    cnn_sr::LayerAllocationPool &layer_3_alloc,  //
-    opencl::MemoryHandle ground_truth,           //
-    size_t sample_w, size_t sample_h,            //
+    cnn_sr::LayerAllocationPool &layer_3_alloc,          //
+    size_t sample_w, size_t sample_h, size_t sample_id,  //
     cl_event *ev_to_wait_for) {
   // dimensions
   size_t layer_1_out_dim[2], layer_2_out_dim[2], layer_3_out_dim[2];
@@ -245,8 +260,8 @@ cl_event ConfigBasedDataPipeline::backpropagate(
   if (print_steps)
     std::cout << "### Calculating deltas for last layer" << std::endl;
   size_t padding = _config->total_padding();
-  auto event2_1 = last_layer_delta(ground_truth,                      //
-                                   sample_w, sample_h,                //
+  auto event2_1 = last_layer_delta(_ground_truth_gpu_buf,             //
+                                   sample_w, sample_h, sample_id,     //
                                    _out_3_gpu_buf, _delta_3_gpu_buf,  //
                                    padding, ev_to_wait_for);
 
