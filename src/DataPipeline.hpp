@@ -96,7 +96,7 @@ class DataPipeline {
   cl_event squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
                          size_t ground_truth_w, size_t ground_truth_h,
                          opencl::MemoryHandle gpu_buf_algo_res,
-                         opencl::MemoryHandle& tmp_buffer, float& target,
+                         opencl::MemoryHandle tmp_buffer, float& target,
                          size_t total_padding, cl_event* ev = nullptr);
 
   /**

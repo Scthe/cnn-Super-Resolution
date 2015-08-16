@@ -136,10 +136,12 @@ float ConfigBasedDataPipeline::execute_batch(
     allocate_buffers(w, h);
   }
 
+  float validation_error = 0.0f;  // only if executing validation set
   while (i < sample_set.size()) {
     // std::cout << "EXECUTING MINI-BATCH("
     // << (backpropagate__ ? "Backpropagate" : "Validation")
     // << "), start idx " << i << std::endl;
+
     // execute mini batch:
     for (size_t _k = 0; _k < _mini_batch_size && i < sample_set.size(); _k++) {
       SampleAllocationPool &sample = *sample_set[i];
@@ -149,23 +151,24 @@ float ConfigBasedDataPipeline::execute_batch(
                                 gpu_alloc.layer_3,  //
                                 sample.input_w, sample.input_h);
       if (backpropagate__) {
-        backpropagate(gpu_alloc.layer_1,               //
-                      gpu_alloc.layer_2,               //
-                      gpu_alloc.layer_3,               //
-                      sample.expected_luma,
-                      sample.input_w, sample.input_h,  //
+        backpropagate(gpu_alloc.layer_1,                                     //
+                      gpu_alloc.layer_2,                                     //
+                      gpu_alloc.layer_3,                                     //
+                      sample.expected_luma, sample.input_w, sample.input_h,  //
                       &forward_ev);
+        _context->block();
       } else {
         // we are executing validation set - schedule all squared_error calcs
         // (samples do not depend on each other, so we ignore event object)
         size_t padding = _config->total_padding();
-        DataPipeline::squared_error(sample.expected_luma,            //
-                                    sample.input_w, sample.input_h,  //
-                                    _out_3_gpu_buf, sample.validation_error_buf,
-                                    sample.validation_error, padding,
-                                    &forward_ev);
+        float validation_error__ = 0.0f;
+        auto e = squared_error(sample.expected_luma,            //
+                               sample.input_w, sample.input_h,  //
+                               _out_3_gpu_buf, _tmp_gpu_float,
+                               validation_error__, padding, &forward_ev);
+        clWaitForEvents(1, &e);
+        validation_error += validation_error__;
       }
-      _context->block();
 
       ++i;
     }
@@ -176,19 +179,7 @@ float ConfigBasedDataPipeline::execute_batch(
 
   _context->block();
 
-  // only meaningful if executing validation set
-  float squared_error = 0;
-  // wait till all finished, sum the errors
-  for (size_t i = 0; !backpropagate__ && i < sample_set.size(); i++) {
-    SampleAllocationPool &sample = *sample_set[i];
-    float squared_error_val = sample.validation_error;
-    if (std::isnan(squared_error_val)) {
-      return squared_error_val;
-    }
-    squared_error += squared_error_val;
-  }
-
-  return squared_error;
+  return validation_error;
 }
 
 ///

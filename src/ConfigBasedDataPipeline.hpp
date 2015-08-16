@@ -22,17 +22,6 @@ struct SampleAllocationPool {
   /** Training: luma to compare our result to */
   opencl::MemoryHandle expected_luma = gpu_nullptr;
 
-  /** Since memory is lazily allocated, it may happen that we are going
-    * to calculate validation error when other buffers are not 100% ready.
-    * As a result of this we are not reusing other buffers,
-    * even thought we could use f.e. one of deltas
-    * real type: cl_float
-    */
-  opencl::MemoryHandle validation_error_buf = gpu_nullptr;
-
-  /** read target */
-  float validation_error;
-
   SampleAllocationPool() = default;
 
   // private:

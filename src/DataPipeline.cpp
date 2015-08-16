@@ -414,7 +414,7 @@ cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
                                      size_t ground_truth_w,
                                      size_t ground_truth_h,
                                      opencl::MemoryHandle gpu_buf_algo_res,
-                                     opencl::MemoryHandle &tmp_buffer,
+                                     opencl::MemoryHandle tmp_buffer,
                                      float &target, size_t total_padding,
                                      cl_event *ev_to_wait_for) {
   check_initialized(DataPipeline::LOAD_KERNEL_MISC);
@@ -431,9 +431,6 @@ cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
   }
   if (!ALLOCATION_HAS_RIGHT_SIZE(gpu_buf_algo_res, sizeof(cl_float) * algo_size)) {
     throw std::runtime_error( "Allocated gpu_buf_algo_res buffer size did not match calculated size");
-  }
-  if (!ALLOCATION_HAS_RIGHT_SIZE(tmp_buffer, sizeof(cl_float))) {
-    tmp_buffer = _context->allocate(CL_MEM_READ_WRITE, sizeof(cl_float));
   }
   /* clang-format on */
   float zero = 0.0f;
