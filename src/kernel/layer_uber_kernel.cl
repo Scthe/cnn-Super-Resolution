@@ -38,6 +38,7 @@ void forward(__read_only __global float* input,
           __global float* target,
           __read_only __global float* W,
           __read_only __global float* B,
+          __const uint sample_id,
           uint input_w, uint input_h){
 
   // value range: (0..out_w, 0..out_h)
@@ -46,6 +47,9 @@ void forward(__read_only __global float* input,
   const int2 src_size = {input_w, input_h};
   const int2 out_size = {src_size.x - F_SPATIAL_SIZE + 1,
                          src_size.y - F_SPATIAL_SIZE + 1};
+
+#define IMAGE_OFFSET_IN  sample_id* PREVIOUS_FILTER_COUNT* input_w* input_h
+#define IMAGE_OFFSET_OUT sample_id* CURRENT_FILTER_COUNT* out_size.x* out_size.y
 
   // index on which write to target,
   // will write total of CURRENT_FILTER_COUNT values
@@ -70,7 +74,7 @@ void forward(__read_only __global float* input,
       size_t w_idx_2D = ((dy * F_SPATIAL_SIZE) + dx) * CURRENT_FILTER_COUNT * PREVIOUS_FILTER_COUNT;
 
       for (size_t k = 0; k < PREVIOUS_FILTER_COUNT; k++) {
-        float point_value = input[base_input_idx + k];
+        float point_value = input[IMAGE_OFFSET_IN + base_input_idx + k];
         size_t w_idx_3D = w_idx_2D + k * CURRENT_FILTER_COUNT;
 
         for (size_t n = 0; n < CURRENT_FILTER_COUNT; n++) {
@@ -84,9 +88,9 @@ void forward(__read_only __global float* input,
   for (size_t filter_id = 0; filter_id < CURRENT_FILTER_COUNT; filter_id++) {
     float result = vals_by_filter[filter_id] + B[filter_id];
 #ifdef SKIP_RELU
-    target[out_idx + filter_id] = result;
+    target[IMAGE_OFFSET_OUT + out_idx + filter_id] = result;
 #else
-    target[out_idx + filter_id] = max(result, 0.0f);
+    target[IMAGE_OFFSET_OUT + out_idx + filter_id] = max(result, 0.0f);
 #endif // SKIP_RELU
   }
 }

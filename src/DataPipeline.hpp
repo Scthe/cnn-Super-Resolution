@@ -80,7 +80,7 @@ class DataPipeline {
    */
   cl_event execute_layer(opencl::Kernel&, const LayerData&,
                          cnn_sr::LayerAllocationPool&, opencl::MemoryHandle&,
-                         size_t, size_t, opencl::MemoryHandle&,
+                         size_t, size_t, size_t id, opencl::MemoryHandle&,
                          cl_event* ev = nullptr);
 
   /**

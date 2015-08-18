@@ -64,7 +64,7 @@ class ConfigBasedDataPipeline : public DataPipeline {
   cl_event forward(LayerAllocationPool& layer_1_alloc,  //
                    LayerAllocationPool& layer_2_alloc,  //
                    LayerAllocationPool& layer_3_alloc,  //
-                   size_t w, size_t h);
+                   size_t w, size_t h, size_t id);
 
   /* clang-format off */
   /**

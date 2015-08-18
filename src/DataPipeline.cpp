@@ -360,6 +360,7 @@ cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
                                      LayerAllocationPool &gpu_alloc,  //
                                      opencl::MemoryHandle &gpu_buf_in,
                                      size_t input_w, size_t input_h,
+                                     size_t sample_id,  //
                                      opencl::MemoryHandle &gpu_buf_out,
                                      cl_event *ev_to_wait_for) {
   pre_execute_layer_validation(data, gpu_buf_in, input_w, input_h);
@@ -393,6 +394,7 @@ cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
   kernel.push_arg(gpu_buf_out);
   kernel.push_arg(gpu_alloc.weights);
   kernel.push_arg(gpu_alloc.bias);
+  kernel.push_arg(sizeof(cl_uint), (void *)&sample_id);
   kernel.push_arg(sizeof(cl_uint), (void *)&input_w);
   kernel.push_arg(sizeof(cl_uint), (void *)&input_h);
 

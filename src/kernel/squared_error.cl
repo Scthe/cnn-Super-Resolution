@@ -51,6 +51,7 @@ __kernel void squared_err(__read_only __global float* ground_truth_image,
                    get_local_id(1) * get_local_size(0) + get_local_id(0);
 
 #define IMAGE_OFFSET_GT sample_id* ground_truth_w* ground_truth_h
+#define IMAGE_OFFSET_ALGO sample_id* algo_result_w* algo_result_h
 
   // size of ground_truth != algo res (padding)
   // The offset is not const, since it depends on the row we are in
@@ -63,7 +64,7 @@ __kernel void squared_err(__read_only __global float* ground_truth_image,
   if (pos.x >= 0 && pos.x < out_size.x &&  //
       pos.y >= 0 && pos.y < out_size.y) {
     float t = ground_truth_image[IMAGE_OFFSET_GT + ground_truth_idx];
-    float y = algo_result[idx];
+    float y = algo_result[IMAGE_OFFSET_ALGO + idx];
     float d = y - t;
     squared_diff = d * d;
   }

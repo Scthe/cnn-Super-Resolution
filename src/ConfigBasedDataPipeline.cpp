@@ -95,13 +95,12 @@ void ConfigBasedDataPipeline::allocate_buffers(size_t img_w, size_t img_h) {
          per_img3 = l3_output_dim[0] * l3_output_dim[1] *
                     layer_data_3.current_filter_count;
 
-  _forward_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img0);
-  _out_1_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img1);
-  _out_2_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img2);
-  _out_3_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img3);
-
   /* clang-format off */
   _ground_truth_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img0);
+  _forward_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img0);
+  _out_1_gpu_buf   = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img1);
+  _out_2_gpu_buf   = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img2);
+  _out_3_gpu_buf   = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img3);
   _delta_1_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img1);
   _delta_2_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img2);
   _delta_3_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img3);
@@ -119,9 +118,11 @@ cl_event ConfigBasedDataPipeline::forward(LayerAllocationPool &layer_1_alloc,
   set_mini_batch_size(1);
   allocate_buffers(sample.input_w, sample.input_h);
   _context->copy_buffer(sample.input_luma, _forward_gpu_buf);
+  // we use 0, since there is no offset
   return forward(layer_1_alloc,  //
                  layer_2_alloc,  //
-                 layer_3_alloc, sample.input_w, sample.input_h);
+                 layer_3_alloc,  //
+                 sample.input_w, sample.input_h, 0);
 }
 
 float ConfigBasedDataPipeline::execute_batch(
@@ -149,9 +150,10 @@ float ConfigBasedDataPipeline::execute_batch(
     size_t img_offset = 0, samples_in_batch = 0, j = i;
     while (samples_in_batch < _mini_batch_size && j < sample_set.size()) {
       SampleAllocationPool &sample = *sample_set[j];
-      // _context->copy_buffer(sample.input_luma, _forward_gpu_buf, img_offset);
+      _context->copy_buffer(sample.input_luma, _forward_gpu_buf, img_offset,
+                            nullptr, 0);
       _context->copy_buffer(sample.expected_luma, _ground_truth_gpu_buf,
-                            img_offset);
+                            img_offset, nullptr, 0);
       img_offset += sample.input_w * sample.input_h * 4;
       // img_offset += _context->raw_memory(sample.input_luma)->size;
       ++samples_in_batch;
@@ -161,11 +163,10 @@ float ConfigBasedDataPipeline::execute_batch(
     // execute mini batch:
     for (size_t _k = 0; _k < _mini_batch_size && i < sample_set.size(); _k++) {
       SampleAllocationPool &sample = *sample_set[i];
-      _context->copy_buffer(sample.input_luma, _forward_gpu_buf);
       auto forward_ev = forward(gpu_alloc.layer_1,  //
                                 gpu_alloc.layer_2,  //
                                 gpu_alloc.layer_3,  //
-                                sample.input_w, sample.input_h);
+                                sample.input_w, sample.input_h, _k);
       if (backpropagate__) {
         backpropagate(gpu_alloc.layer_1,                   //
                       gpu_alloc.layer_2,                   //
@@ -205,7 +206,7 @@ cl_event ConfigBasedDataPipeline::forward(
     LayerAllocationPool &layer_1_alloc,  //
     LayerAllocationPool &layer_2_alloc,  //
     LayerAllocationPool &layer_3_alloc,  //
-    size_t sample_w, size_t sample_h) {
+    size_t sample_w, size_t sample_h, size_t sample_id) {
   //
   check_initialized(DataPipeline::LOAD_KERNEL_LAYERS);
   size_t l1_output_dim[2], l2_output_dim[2];
@@ -221,21 +222,21 @@ cl_event ConfigBasedDataPipeline::forward(
   if (print_steps) std::cout << "### Executing layer 1" << std::endl;
   cl_event finish_token1 =
       execute_layer(*_layer_1_kernel, layer_data_1, layer_1_alloc,  // layer cfg
-                    _forward_gpu_buf, sample_w, sample_h,           // input
+                    _forward_gpu_buf, sample_w, sample_h, sample_id,  // input
                     _out_1_gpu_buf);
 
   // layer 2
   if (print_steps) std::cout << "### Executing layer 2" << std::endl;
   cl_event finish_token2 = execute_layer(
-      *_layer_2_kernel, layer_data_2, layer_2_alloc,       // layer cfg
-      _out_1_gpu_buf, l1_output_dim[0], l1_output_dim[1],  // input
+      *_layer_2_kernel, layer_data_2, layer_2_alloc,  // layer cfg
+      _out_1_gpu_buf, l1_output_dim[0], l1_output_dim[1], sample_id,  // input
       _out_2_gpu_buf, &finish_token1);
 
   // layer 3
   if (print_steps) std::cout << "### Executing layer 3" << std::endl;
   cl_event finish_token3 = execute_layer(
-      *_layer_3_kernel, layer_data_3, layer_3_alloc,       // layer cfg
-      _out_2_gpu_buf, l2_output_dim[0], l2_output_dim[1],  // input
+      *_layer_3_kernel, layer_data_3, layer_3_alloc,  // layer cfg
+      _out_2_gpu_buf, l2_output_dim[0], l2_output_dim[1], sample_id,  // input
       _out_3_gpu_buf, &finish_token2);
 
   return finish_token3;

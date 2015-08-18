@@ -72,7 +72,7 @@ __kernel void deltas(__read_only __global float* deltas_next_layer,  //
     for (size_t n = 0; n < CURRENT_FILTER_COUNT; n++) {
       delta_for_filter[n] = 0.0f;
       // (3) f`( x[i,j,n](l-1) )
-      float y_ijn = layer_output[idx + n];
+      float y_ijn = layer_output[IMAGE_OFFSET_CURR + idx + n];
       activation_func_derivatives[n] = y_ijn > 0.0f ? 1.0f : 0.0f;
     }
 

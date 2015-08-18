@@ -38,7 +38,7 @@ __kernel void last_layer_delta(__read_only __global float* ground_truth_image,
       pos.y >= 0 && pos.y < out_size.y) {
     // usuall square error derivative calculations
     float t = ground_truth_image[IMAGE_OFFSET_GT + ground_truth_idx];
-    float y = algo_result[idx];
+    float y = algo_result[IMAGE_OFFSET_ALGO + idx];
     float d = y - t;
 
     // relu
