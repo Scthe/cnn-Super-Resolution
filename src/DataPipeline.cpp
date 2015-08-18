@@ -403,8 +403,8 @@ cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
       work_dims[2] = {input_w, input_h};  // TODO output_w,output_h ?
   opencl::utils::work_sizes(kernel, 2, global_work_size, local_work_size,
                             work_dims, print_work_dimensions);
-                          global_work_size[2] = sample_count;
-                          local_work_size[2] = 1;
+  global_work_size[2] = sample_count;
+  local_work_size[2] = 1;
   return kernel.execute(3, global_work_size, local_work_size, ev_to_wait_for,
                         events_to_wait_for_count);
 }
@@ -472,7 +472,7 @@ cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
 
 cl_event DataPipeline::last_layer_delta(
     opencl::MemoryHandle gpu_buf_ground_truth,  //
-    size_t ground_truth_w, size_t ground_truth_h, size_t sample_id,
+    size_t ground_truth_w, size_t ground_truth_h, size_t sample_count,
     opencl::MemoryHandle gpu_buf_algo_res,
     opencl::MemoryHandle &gpu_buf_target,  //
     size_t total_padding, cl_event *ev_to_wait_for) {
@@ -502,18 +502,19 @@ cl_event DataPipeline::last_layer_delta(
   _last_layer_delta_kernel->push_arg(gpu_buf_ground_truth);
   _last_layer_delta_kernel->push_arg(gpu_buf_algo_res);
   _last_layer_delta_kernel->push_arg(gpu_buf_target);
-  _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&sample_id);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_h);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
   _last_layer_delta_kernel->push_arg(sizeof(cl_uint), (void *)&algo_h);
 
   // run
-  size_t global_work_size[2], local_work_size[2],
+  size_t global_work_size[3], local_work_size[3],
       work_dims[2] = {algo_w, algo_h};
   opencl::utils::work_sizes(*_last_layer_delta_kernel, 2, global_work_size,
                             local_work_size, work_dims, print_work_dimensions);
-  return _last_layer_delta_kernel->execute(2, global_work_size, local_work_size,
+  global_work_size[2] = sample_count;
+  local_work_size[2] = 1;
+  return _last_layer_delta_kernel->execute(3, global_work_size, local_work_size,
                                            ev_to_wait_for);
 }
 
@@ -522,7 +523,7 @@ cl_event DataPipeline::calculate_deltas(
     const LayerData &curr_layer, const LayerData &next_layer,
     LayerAllocationPool &next_gpu_alloc,  //
     opencl::MemoryHandle curr_deltas, opencl::MemoryHandle next_deltas,
-    size_t next_layer_out_w, size_t next_layer_out_h, size_t sample_id,
+    size_t next_layer_out_w, size_t next_layer_out_h, size_t sample_count,
     opencl::MemoryHandle curr_output, cl_event *ev_to_wait_for) {
   //
   // @pre validation
@@ -574,7 +575,6 @@ cl_event DataPipeline::calculate_deltas(
   kernel.push_arg(curr_output);
   kernel.push_arg(curr_deltas);  // target
   kernel.push_arg(next_gpu_alloc.weights);
-  kernel.push_arg(sizeof(cl_uint), (void *)&sample_id);
   kernel.push_arg(sizeof(cl_uint), (void *)&curr_layer.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&next_layer.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&next_layer.current_filter_count);
@@ -582,12 +582,13 @@ cl_event DataPipeline::calculate_deltas(
   kernel.push_arg(sizeof(cl_uint), (void *)&out_h);
 
   // run
-  size_t global_work_size[2], local_work_size[2], work_dims[2] = {out_w, out_h};
+  size_t global_work_size[3], local_work_size[3], work_dims[2] = {out_w, out_h};
   opencl::utils::work_sizes(kernel, 2, global_work_size, local_work_size,
                             work_dims, print_work_dimensions);
-
+  global_work_size[2] = sample_count;
+  local_work_size[2] = 1;
   int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
-  return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
+  return kernel.execute(3, global_work_size, local_work_size, ev_to_wait_for,
                         events_to_wait_for_count);
 }
 
@@ -596,7 +597,7 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
                                      opencl::MemoryHandle layer_deltas,
                                      LayerAllocationPool &gpu_alloc,
                                      size_t layer_out_w, size_t layer_out_h,
-                                     size_t sample_id,  //
+                                     size_t sample_count,  //
                                      cl_event *ev_to_wait_for, size_t ev_cnt) {
   LayerData::validate(layer_data);
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
@@ -643,7 +644,6 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
   kernel.push_arg(layer_input);
   kernel.push_arg(gpu_alloc.accumulating_grad_w);
   kernel.push_arg(gpu_alloc.accumulating_grad_b);
-  kernel.push_arg(sizeof(cl_uint), (void *)&sample_id);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.current_filter_count);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.n_prev_filter_cnt);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.f_spatial_size);
@@ -654,8 +654,10 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
   size_t global_work_size[3], local_work_size[3];
   opencl::utils::work_sizes(kernel, 1, global_work_size, local_work_size,
                             &weights_size, print_work_dimensions);
+  global_work_size[1] = sample_count;
+  local_work_size[1] = 1;
   int events_to_wait_for_count = !ev_to_wait_for ? 0 : ev_cnt == 0 ? 1 : ev_cnt;
-  return kernel.execute(1, global_work_size, local_work_size, ev_to_wait_for,
+  return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
                         events_to_wait_for_count);
 }
 

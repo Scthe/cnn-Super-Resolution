@@ -43,7 +43,6 @@ __kernel void deltas(__read_only __global float* deltas_next_layer,  //
                      __read_only __global float* layer_output,       //
                      __global float* target,                         //
                      __read_only __global float* W,                  //
-                     __const uint sample_id,                         //
                      uint f_spatial_size,                            //
                      uint f_next_spatial_size,                       //
                      uint n_next_filter_cnt,                         //
@@ -51,6 +50,7 @@ __kernel void deltas(__read_only __global float* deltas_next_layer,  //
   // x=col=i; range: 0..layer_out_w
   // y=row=j; range: 0..layer_out_h
   const int2 pos = {get_global_id(0), get_global_id(1)};
+  const uint sample_id = get_global_id(2);
   const int2 out_dim = {layer_out_w, layer_out_h};
   const int idx = ((pos.y * out_dim.x) + pos.x) * CURRENT_FILTER_COUNT;
   const int2 next_layer_out = {out_dim.x - f_next_spatial_size + 1,

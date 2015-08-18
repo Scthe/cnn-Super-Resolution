@@ -168,17 +168,18 @@ float ConfigBasedDataPipeline::execute_batch(
                               w, h, samples_in_batch);
 
     // execute mini batch:
-    for (size_t _k = 0; _k < _mini_batch_size && i < sample_set.size(); _k++) {
-      SampleAllocationPool &sample = *sample_set[i];
-
-      if (backpropagate__) {
-        backpropagate(gpu_alloc.layer_1,                   //
-                      gpu_alloc.layer_2,                   //
-                      gpu_alloc.layer_3,                   //
-                      sample.input_w, sample.input_h, _k,  //
-                      &forward_ev);
-        _context->block();
-      } else {
+    if (backpropagate__) {
+      backpropagate(gpu_alloc.layer_1,       //
+                    gpu_alloc.layer_2,       //
+                    gpu_alloc.layer_3,       //
+                    w, h, samples_in_batch,  //
+                    &forward_ev);
+      _context->block();
+      i += samples_in_batch;
+    } else {
+      for (size_t _k = 0; _k < _mini_batch_size && i < sample_set.size();
+           _k++) {
+        SampleAllocationPool &sample = *sample_set[i];
         // we are executing validation set - schedule all squared_error calcs
         // (samples do not depend on each other, so we ignore event object)
         size_t padding = _config->total_padding();
@@ -189,9 +190,8 @@ float ConfigBasedDataPipeline::execute_batch(
                                validation_error__, padding, &forward_ev);
         clWaitForEvents(1, &e);
         validation_error += validation_error__;
+        ++i;
       }
-
-      ++i;
     }
 
     // finish_mini_batch
@@ -252,8 +252,8 @@ cl_event ConfigBasedDataPipeline::forward(
 cl_event ConfigBasedDataPipeline::backpropagate(
     cnn_sr::LayerAllocationPool &layer_1_alloc,
     cnn_sr::LayerAllocationPool &layer_2_alloc,
-    cnn_sr::LayerAllocationPool &layer_3_alloc,          //
-    size_t sample_w, size_t sample_h, size_t sample_id,  //
+    cnn_sr::LayerAllocationPool &layer_3_alloc,             //
+    size_t sample_w, size_t sample_h, size_t sample_count,  //
     cl_event *ev_to_wait_for) {
   // dimensions
   size_t layer_1_out_dim[2], layer_2_out_dim[2], layer_3_out_dim[2];
@@ -269,7 +269,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
     std::cout << "### Calculating deltas for last layer" << std::endl;
   size_t padding = _config->total_padding();
   auto event2_1 = last_layer_delta(_ground_truth_gpu_buf,             //
-                                   sample_w, sample_h, sample_id,     //
+                                   sample_w, sample_h, sample_count,  //
                                    _out_3_gpu_buf, _delta_3_gpu_buf,  //
                                    padding, ev_to_wait_for);
 
@@ -280,7 +280,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                    layer_3_alloc,               //
                                    _delta_2_gpu_buf, _delta_3_gpu_buf,
                                    layer_3_out_dim[0], layer_3_out_dim[1],  //
-                                   sample_id,                               //
+                                   sample_count,                            //
                                    _out_2_gpu_buf, &event2_1);
 
   if (print_steps)
@@ -290,7 +290,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                    layer_2_alloc,               //
                                    _delta_1_gpu_buf, _delta_2_gpu_buf,
                                    layer_2_out_dim[0], layer_2_out_dim[1],  //
-                                   sample_id,                               //
+                                   sample_count,                            //
                                    _out_1_gpu_buf, &event2_2);
 
   // gradient w, gradient b for all layers
@@ -302,7 +302,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                   _out_2_gpu_buf, _delta_3_gpu_buf,
                                   layer_3_alloc,                           //
                                   layer_3_out_dim[0], layer_3_out_dim[1],  //
-                                  sample_id,                               //
+                                  sample_count,                            //
                                   &event2_1);
 
   if (print_steps)
@@ -313,7 +313,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                   _out_1_gpu_buf, _delta_2_gpu_buf,
                                   layer_2_alloc,                           //
                                   layer_2_out_dim[0], layer_2_out_dim[1],  //
-                                  sample_id,                               //
+                                  sample_count,                            //
                                   &event2_2);
 
   if (print_steps)
@@ -325,7 +325,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                   _forward_gpu_buf, _delta_1_gpu_buf,      //
                                   layer_1_alloc,                           //
                                   layer_1_out_dim[0], layer_1_out_dim[1],  //
-                                  sample_id,                               //
+                                  sample_count,                            //
                                   evs, 3);
 
   return event3_3;
