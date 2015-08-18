@@ -62,11 +62,17 @@ __kernel void backpropagate(__read_only __global float* deltas,       //
                             uint f_spatial_size,                      //
                             uint layer_out_w, uint layer_out_h) {
   const int id = get_global_id(0);
+  const uint sample_id = get_global_id(1);
   const uint input_w = layer_out_w + f_spatial_size - 1;
+  const uint input_h = layer_out_h + f_spatial_size - 1;
   // weight dimensions
   const size_t d2 = n_prev_filter_cnt * n_current_filter_cnt,
                d3 = d2 * f_spatial_size;
   const size_t weights_size = d3 * f_spatial_size;
+
+#define IMAGE_OFFSET_CURR \
+  sample_id* n_current_filter_cnt* layer_out_w* layer_out_h
+#define IMAGE_OFFSET_PREV sample_id* n_prev_filter_cnt* input_w* input_h
 
   // reverse id to get weight parameters: a(as dx), b(as dy), n, k
   int w_tmp = id;
@@ -84,7 +90,7 @@ __kernel void backpropagate(__read_only __global float* deltas,       //
       for (size_t col = 0; col < layer_out_w; col++) {
         // (1) delta[i,j,n](l)
         int idx = ((row * layer_out_w) + col) * n_current_filter_cnt;
-        float delta = deltas[idx + n];
+        float delta = deltas[IMAGE_OFFSET_CURR + idx + n];
         grad_b += delta;
 
         // (2) layer_input[i+b,j+a,k]
@@ -94,7 +100,7 @@ __kernel void backpropagate(__read_only __global float* deltas,       //
         int prev_layer_idx = ((prev_layer_pos.y * input_w) + prev_layer_pos.x) *
                              n_prev_filter_cnt;
 
-        float input = layer_input[prev_layer_idx + k];
+        float input = layer_input[IMAGE_OFFSET_PREV + prev_layer_idx + k];
         grad_w += input * delta;
       }
     }

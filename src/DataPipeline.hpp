@@ -47,8 +47,7 @@ class DataPipeline {
 
   DataPipeline(opencl::Context*);
   virtual ~DataPipeline() {}
-  virtual void init(bool _optimize_for_small_data = false,
-                    int load_flags = DataPipeline::LOAD_KERNEL_ALL);
+  virtual void init(int load_flags = DataPipeline::LOAD_KERNEL_ALL);
   opencl::Context* context();
 
   /**
@@ -81,7 +80,7 @@ class DataPipeline {
    */
   cl_event execute_layer(opencl::Kernel&, const LayerData&,
                          cnn_sr::LayerAllocationPool&, opencl::MemoryHandle&,
-                         size_t, size_t, opencl::MemoryHandle&,
+                         size_t, size_t, size_t id, opencl::MemoryHandle&,
                          cl_event* ev = nullptr);
 
   /**
@@ -96,8 +95,8 @@ class DataPipeline {
    */
   cl_event squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
                          size_t ground_truth_w, size_t ground_truth_h,
-                         opencl::MemoryHandle gpu_buf_algo_res,
-                         opencl::MemoryHandle& tmp_buffer, float& target,
+                         size_t id, opencl::MemoryHandle gpu_buf_algo_res,
+                         opencl::MemoryHandle tmp_buffer, float& target,
                          size_t total_padding, cl_event* ev = nullptr);
 
   /**
@@ -109,7 +108,7 @@ class DataPipeline {
    */
   cl_event last_layer_delta(opencl::MemoryHandle gpu_buf_ground_truth,
                             size_t ground_truth_w, size_t ground_truth_h,
-                            opencl::MemoryHandle gpu_buf_algo_res,
+                            size_t id, opencl::MemoryHandle gpu_buf_algo_res,
                             opencl::MemoryHandle& gpu_buf_target,
                             size_t total_padding, cl_event* ev = nullptr);
 
@@ -122,10 +121,10 @@ class DataPipeline {
    */
   cl_event calculate_deltas(opencl::Kernel&,  //
                             const LayerData&, const LayerData&,
-                            cnn_sr::LayerAllocationPool&,                 //
-                            opencl::MemoryHandle&, opencl::MemoryHandle,  //
-                            size_t, size_t,                               //
-                            opencl::MemoryHandle,                         //
+                            cnn_sr::LayerAllocationPool&,                //
+                            opencl::MemoryHandle, opencl::MemoryHandle,  //
+                            size_t, size_t, size_t id,                   //
+                            opencl::MemoryHandle,                        //
                             cl_event* ev = nullptr);
 
   /**
@@ -138,7 +137,7 @@ class DataPipeline {
   cl_event backpropagate(LayerData&, opencl::MemoryHandle layer_input,
                          opencl::MemoryHandle layer_deltas,
                          LayerAllocationPool&,  //
-                         size_t layer_out_w, size_t layer_out_h,
+                         size_t layer_out_w, size_t layer_out_h, size_t id,
                          cl_event* ev = nullptr, size_t ev_cnt = 0);
 
   /**
@@ -203,28 +202,9 @@ class DataPipeline {
                                     size_t, size_t);
   size_t element_count(opencl::MemoryHandle, size_t el_size);
 
-  /** General version. quite slow */
-  cl_event execute_layer_full(opencl::Kernel&, const LayerData&,
-                              cnn_sr::LayerAllocationPool&,
-                              opencl::MemoryHandle&, size_t, size_t,
-                              opencl::MemoryHandle&, cl_event* ev = nullptr);
-
-  /** version optimized for case f_spatial_size==1 */
-  cl_event execute_layer__f_eq_1(opencl::Kernel&, const LayerData&,
-                                 cnn_sr::LayerAllocationPool&,
-                                 opencl::MemoryHandle&, size_t, size_t,
-                                 opencl::MemoryHandle&, cl_event* ev = nullptr);
-
-  /** version optimized for case current_filter_count==1 */
-  cl_event execute_output_layer(opencl::Kernel&, const LayerData&,
-                                cnn_sr::LayerAllocationPool&,
-                                opencl::MemoryHandle&, size_t, size_t,
-                                opencl::MemoryHandle&, cl_event* ev = nullptr);
-
  protected:
   opencl::Context* const _context;
   bool _initialized;
-  bool _optimize_for_small_data;
 
   /** Single float. Quite useful. */
   opencl::MemoryHandle _tmp_gpu_float = gpu_nullptr;
@@ -239,7 +219,6 @@ class DataPipeline {
   opencl::Kernel* _last_layer_delta_kernel = nullptr;
   opencl::Kernel* _update_parameters_kernel = nullptr;
   opencl::Kernel* _backpropagate_kernel = nullptr;
-  opencl::Kernel* _backpropagate_kernel_opt = nullptr;
 };
 }
 

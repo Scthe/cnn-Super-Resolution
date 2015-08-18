@@ -26,7 +26,7 @@ int main(int, char **) {
   opencl::Context context;
   context.init();
   cnn_sr::DataPipeline pipeline(&context);
-  pipeline.init(false, cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
+  pipeline.init(cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
   // TODO test opt
   // pipeline.init(true, cnn_sr::DataPipeline::LOAD_KERNEL_MISC);
 

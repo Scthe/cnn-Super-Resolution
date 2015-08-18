@@ -38,15 +38,20 @@ __kernel void squared_err(__read_only __global float* ground_truth_image,
                           __global float* target,       //
                           __local float* scratch,       //
                           __const uint ground_truth_w,  //
+                          __const uint ground_truth_h,  //
                           __const uint algo_result_w,   //
                           __const uint algo_result_h) {
   const int2 pos = {get_global_id(0), get_global_id(1)};  // x=col=i, y=row=j
+  const uint sample_id = get_global_id(2);
   const int2 out_size = {algo_result_w, algo_result_h};
   const int idx = (pos.y * algo_result_w) + pos.x;
   const size_t padding = (ground_truth_w - algo_result_w) / 2;
   const size_t local_size = get_local_size(1) * get_local_size(0),
                local_index =
                    get_local_id(1) * get_local_size(0) + get_local_id(0);
+
+#define IMAGE_OFFSET_GT sample_id* ground_truth_w* ground_truth_h
+#define IMAGE_OFFSET_ALGO sample_id* algo_result_w* algo_result_h
 
   // size of ground_truth != algo res (padding)
   // The offset is not const, since it depends on the row we are in
@@ -58,8 +63,8 @@ __kernel void squared_err(__read_only __global float* ground_truth_image,
   float squared_diff = 0.0f;
   if (pos.x >= 0 && pos.x < out_size.x &&  //
       pos.y >= 0 && pos.y < out_size.y) {
-    float t = ground_truth_image[ground_truth_idx];
-    float y = algo_result[idx];
+    float t = ground_truth_image[IMAGE_OFFSET_GT + ground_truth_idx];
+    float y = algo_result[IMAGE_OFFSET_ALGO + idx];
     float d = y - t;
     squared_diff = d * d;
   }

@@ -312,17 +312,28 @@ cl_event Context::fill_float(MemoryHandle gpu_buffer_handle, float val,
 cl_event Context::copy_buffer(MemoryHandle src_buffer, MemoryHandle dst_buffer,
                               cl_event* events_to_wait_for,
                               int events_to_wait_for_count) {
-  check_error(initialized, "Context was not initialized");
   auto gpu_src = raw_memory(src_buffer);
   auto gpu_dst = raw_memory(dst_buffer);
   check_error(
       gpu_src->size == gpu_dst->size,
       "When performing buffer copy, both buffers should have equal length");
+  return copy_buffer(src_buffer, dst_buffer, 0, events_to_wait_for,
+                     events_to_wait_for_count);
+}
+
+cl_event Context::copy_buffer(MemoryHandle src_buffer, MemoryHandle dst_buffer,
+                              size_t dst_offset, cl_event* events_to_wait_for,
+                              int events_to_wait_for_count) {
+  check_error(initialized, "Context was not initialized");
+  auto gpu_src = raw_memory(src_buffer);
+  auto gpu_dst = raw_memory(dst_buffer);
+  check_error(gpu_src->size + dst_offset <= gpu_dst->size,
+              "When performing buffer copy, would write after dst end");
   cl_event finish_token;
-  cl_int ciErr1 = clEnqueueCopyBuffer(_clcommand_queue,     //
-                                      gpu_src->handle,      //
-                                      gpu_dst->handle,      //
-                                      0, 0, gpu_src->size,  //
+  cl_int ciErr1 = clEnqueueCopyBuffer(_clcommand_queue,              //
+                                      gpu_src->handle,               //
+                                      gpu_dst->handle,               //
+                                      0, dst_offset, gpu_src->size,  //
                                       events_to_wait_for_count,
                                       events_to_wait_for, &finish_token);
   check_error(ciErr1, "Error in copy buffer");

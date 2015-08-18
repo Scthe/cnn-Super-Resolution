@@ -17,18 +17,6 @@ using namespace opencl::utils;
 using namespace cnn_sr;
 
 ///
-/// Util. structures
-///
-
-struct GpuAllocationPool {
-  LayerAllocationPool layer_1;
-  LayerAllocationPool layer_2;
-  LayerAllocationPool layer_3;
-
-  std::vector<SampleAllocationPool> samples;
-};
-
-///
 /// Forward decl.
 ///
 cl_event prepare_image(DataPipeline* const pipeline, const char* const,
@@ -43,9 +31,6 @@ typedef std::pair<std::string, std::string> TrainSampleFiles;
 
 void get_training_samples(std::string, std::vector<TrainSampleFiles>&);
 
-float execute_batch(bool backpropagate, ConfigBasedDataPipeline&,
-                    GpuAllocationPool&, std::vector<SampleAllocationPool*>&);
-
 void execute_forward(ConfigBasedDataPipeline&, GpuAllocationPool&,
                      const char* const in_path, const char* const out_path);
 
@@ -53,7 +38,7 @@ void execute_forward(ConfigBasedDataPipeline&, GpuAllocationPool&,
 /// main
 ///
 int main(int argc, char** argv) {
-  std::srand(std::time(0));
+  // std::srand(std::time(0)); // TODO make non deterministic ?
 
   cnn_sr::utils::Argparse argparse("cnn", "????");
   /* clang-format off */
@@ -116,7 +101,7 @@ int main(int argc, char** argv) {
   opencl::Context context;
   context.init(profile);
   ConfigBasedDataPipeline data_pipeline(cfg, &context);
-  data_pipeline.init(train);
+  data_pipeline.init(DataPipeline::LOAD_KERNEL_ALL);
   GpuAllocationPool gpu_alloc;
 
   if (!train) {
@@ -140,10 +125,8 @@ int main(int argc, char** argv) {
               << "%" << std::endl;
   }
 
-  data_pipeline.set_memory_pool_size((train_set_size / mini_batch_count) +
-                                     mini_batch_count);
-  std::cout << "mini-batch size: " << data_pipeline.memory_pool_size()
-            << std::endl;
+  data_pipeline.set_mini_batch_size((train_set_size / mini_batch_count) +
+                                    mini_batch_count);
 
   // read & prepare images
   for (auto& path_pair : train_sample_files) {
@@ -167,8 +150,7 @@ int main(int argc, char** argv) {
 
   size_t samples_count = gpu_alloc.samples.size(),
          per_sample_px_count =
-             gpu_alloc.samples[0].input_w * gpu_alloc.samples[0].input_h,
-         validation_px_count = per_sample_px_count * validation_set_size;
+             gpu_alloc.samples[0].input_w * gpu_alloc.samples[0].input_h;
 
   context.block();
 
@@ -182,7 +164,7 @@ int main(int argc, char** argv) {
     std::vector<SampleAllocationPool*> validation_set(samples_count);
     divide_samples(validation_set_size, gpu_alloc, train_set, validation_set);
 
-    execute_batch(true, data_pipeline, gpu_alloc, train_set);
+    data_pipeline.execute_batch(true, gpu_alloc, train_set);
 
     data_pipeline.update_parameters(gpu_alloc.layer_1, gpu_alloc.layer_2,
                                     gpu_alloc.layer_3, train_set.size());
@@ -191,7 +173,7 @@ int main(int argc, char** argv) {
     // is wasteful
     if ((epoch_id % 25) == 0 || epoch_id == epochs - 1) {
       float validation_squared_error =
-          execute_batch(false, data_pipeline, gpu_alloc, validation_set);
+          data_pipeline.execute_batch(false, gpu_alloc, validation_set);
 
       // if error happened we stop the training.
       if (std::isnan(validation_squared_error)) {
@@ -205,7 +187,7 @@ int main(int argc, char** argv) {
       float mean_valid_err = validation_squared_error / validation_set.size();
       std::cout << "[" << epoch_id << "] "  //
                 << "mean validation error: " << mean_valid_err << " ("
-                << (mean_valid_err / validation_px_count) << " per px)"
+                << (mean_valid_err / per_sample_px_count) << " per px)"
                 << std::endl;
     }
 
@@ -276,64 +258,6 @@ void divide_samples(size_t validation_set_size, GpuAllocationPool& pool,
       train_set.push_back(&samples[i]);
     }
   }
-}
-
-float execute_batch(bool backpropagate, ConfigBasedDataPipeline& data_pipeline,
-                    GpuAllocationPool& gpu_alloc,
-                    std::vector<SampleAllocationPool*>& sample_set) {
-  auto context = data_pipeline.context();
-  // cl_event event;
-  // cl_event* event_ptr = nullptr;  // Skipping this does not improve speed..
-  auto mini_batch_size = data_pipeline.memory_pool_size();
-
-  size_t i = 0;
-  while (i < sample_set.size()) {
-    // std::cout << "EXECUTING MINI-BATCH("
-              // << (backpropagate ? "Backpropagate" : "Validation")
-              // << "), start idx " << i << std::endl;
-    // execute mini batch:
-    for (size_t _k = 0; _k < mini_batch_size && i < sample_set.size(); _k++) {
-      // std::cout << "Sample [" << i << "]  - in mini-batch position: " << _k
-                // << "/" << mini_batch_size << std::endl;
-      SampleAllocationPool& sample = *sample_set[i];
-      auto forward_ev = data_pipeline.forward(gpu_alloc.layer_1,  //
-                                              gpu_alloc.layer_2,  //
-                                              gpu_alloc.layer_3,  //
-                                              sample /*, event_ptr*/);
-      if (!backpropagate) {
-        // we are executing validation set - schedule all squared_error calcs
-        // (samples do not depend on each other, so we ignore event object)
-        data_pipeline.squared_error(sample, &forward_ev);
-      } else {
-        // backpopagate all
-        /*event = */ data_pipeline.backpropagate(gpu_alloc.layer_1,  //
-                                                 gpu_alloc.layer_2,  //
-                                                 gpu_alloc.layer_3,  //
-                                                 sample, &forward_ev);
-        // event_ptr = &event;
-      }
-
-      ++i;
-    }
-
-    data_pipeline.finish_mini_batch();
-  }
-
-  context->block();
-
-  // only meaningful if executing validation set
-  float squared_error = 0;
-  // wait till all finished, sum the errors
-  for (size_t i = 0; !backpropagate && i < sample_set.size(); i++) {
-    SampleAllocationPool& sample = *sample_set[i];
-    float squared_error_val = sample.validation_error;
-    if (std::isnan(squared_error_val)) {
-      return squared_error_val;
-    }
-    squared_error += squared_error_val;
-  }
-
-  return squared_error;
 }
 
 ///
