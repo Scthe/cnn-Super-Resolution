@@ -100,11 +100,11 @@ void ConfigBasedDataPipeline::allocate_buffers(size_t img_w, size_t img_h) {
   _out_2_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img2);
   _out_3_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img3);
 
-  _delta_1_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img1);
-  _delta_2_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img2);
-  _delta_3_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, 4 * per_img3);
   /* clang-format off */
   _ground_truth_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img0);
+  _delta_1_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img1);
+  _delta_2_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img2);
+  _delta_3_gpu_buf = _context->allocate(CL_MEM_READ_WRITE, _mini_batch_size * 4 * per_img3);
   /* clang-format on */
 }
 
@@ -272,6 +272,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                    layer_3_alloc,               //
                                    _delta_2_gpu_buf, _delta_3_gpu_buf,
                                    layer_3_out_dim[0], layer_3_out_dim[1],  //
+                                   sample_id,                               //
                                    _out_2_gpu_buf, &event2_1);
 
   if (print_steps)
@@ -281,6 +282,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                    layer_2_alloc,               //
                                    _delta_1_gpu_buf, _delta_2_gpu_buf,
                                    layer_2_out_dim[0], layer_2_out_dim[1],  //
+                                   sample_id,                               //
                                    _out_1_gpu_buf, &event2_2);
 
   // gradient w, gradient b for all layers
@@ -292,6 +294,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                   _out_2_gpu_buf, _delta_3_gpu_buf,
                                   layer_3_alloc,                           //
                                   layer_3_out_dim[0], layer_3_out_dim[1],  //
+                                  sample_id,                               //
                                   &event2_1);
 
   if (print_steps)
@@ -302,6 +305,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                   _out_1_gpu_buf, _delta_2_gpu_buf,
                                   layer_2_alloc,                           //
                                   layer_2_out_dim[0], layer_2_out_dim[1],  //
+                                  sample_id,                               //
                                   &event2_2);
 
   if (print_steps)
@@ -313,6 +317,7 @@ cl_event ConfigBasedDataPipeline::backpropagate(
                                   _forward_gpu_buf, _delta_1_gpu_buf,      //
                                   layer_1_alloc,                           //
                                   layer_1_out_dim[0], layer_1_out_dim[1],  //
+                                  sample_id,                               //
                                   evs, 3);
 
   return event3_3;

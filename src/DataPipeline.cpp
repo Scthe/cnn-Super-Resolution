@@ -518,8 +518,8 @@ cl_event DataPipeline::calculate_deltas(
     opencl::Kernel &kernel,  //
     const LayerData &curr_layer, const LayerData &next_layer,
     LayerAllocationPool &next_gpu_alloc,  //
-    opencl::MemoryHandle &curr_deltas, opencl::MemoryHandle next_deltas,
-    size_t next_layer_out_w, size_t next_layer_out_h,
+    opencl::MemoryHandle curr_deltas, opencl::MemoryHandle next_deltas,
+    size_t next_layer_out_w, size_t next_layer_out_h, size_t sample_id,
     opencl::MemoryHandle curr_output, cl_event *ev_to_wait_for) {
   //
   // @pre validation
@@ -546,10 +546,11 @@ cl_event DataPipeline::calculate_deltas(
   //   next_gpu_alloc.weights
   //   curr_layer.output <- this is input for current layer (used for activation_func_derivative)
   //   curr_layer.deltas <- as target
+  /*
   if (!ALLOCATION_HAS_RIGHT_SIZE(next_deltas, next_out_alloc_size)) {
     throw std::runtime_error(
         "Tried to calculate deltas for previous layer, but deltas for current layer are not valid !");
-  }
+  }*/
   if (!ALLOCATION_HAS_RIGHT_SIZE(next_gpu_alloc.weights, weights_alloc_size)) {
     next_gpu_alloc.weights = _context->allocate(CL_MEM_READ_WRITE, weights_alloc_size);
     _context->write_buffer(next_gpu_alloc.weights, (void *)next_layer.weights_ptr(), true);
@@ -559,9 +560,10 @@ cl_event DataPipeline::calculate_deltas(
         "Tried to calculate deltas for previous layer, but there are no previous layer output values."
         "They are normally allocated during forward step.");
   }
+  /*
   if (!ALLOCATION_HAS_RIGHT_SIZE(curr_deltas, out_alloc_size)) {
     curr_deltas = _context->allocate(CL_MEM_READ_WRITE, out_alloc_size);
-  }
+  }*/
   /* clang-format on */
 
   // args
@@ -569,6 +571,7 @@ cl_event DataPipeline::calculate_deltas(
   kernel.push_arg(curr_output);
   kernel.push_arg(curr_deltas);  // target
   kernel.push_arg(next_gpu_alloc.weights);
+  kernel.push_arg(sizeof(cl_uint), (void *)&sample_id);
   kernel.push_arg(sizeof(cl_uint), (void *)&curr_layer.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&next_layer.f_spatial_size);
   kernel.push_arg(sizeof(cl_uint), (void *)&next_layer.current_filter_count);
@@ -590,6 +593,7 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
                                      opencl::MemoryHandle layer_deltas,
                                      LayerAllocationPool &gpu_alloc,
                                      size_t layer_out_w, size_t layer_out_h,
+                                     size_t sample_id,  //
                                      cl_event *ev_to_wait_for, size_t ev_cnt) {
   LayerData::validate(layer_data);
   check_initialized(DataPipeline::LOAD_KERNEL_BACKPROPAGATE);
@@ -611,9 +615,10 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
          grad_w_size = sizeof(cl_float) * layer_data.weight_size(),
          grad_b_size = sizeof(cl_float) * layer_data.bias_size();
   /* clang-format off */
+  /*
   if (!ALLOCATION_HAS_RIGHT_SIZE(layer_deltas, out_alloc_size)) {
     throw std::runtime_error("Tried to calculate gradients, but deltas for current layer are not valid");
-  }
+  }*/
   if (!ALLOCATION_HAS_RIGHT_SIZE(layer_input, in_alloc_size)) {
     throw std::runtime_error(
         "Tried to calculate gradients, but there are no previous layer output values."
@@ -635,6 +640,7 @@ cl_event DataPipeline::backpropagate(LayerData &layer_data,  //
   kernel.push_arg(layer_input);
   kernel.push_arg(gpu_alloc.accumulating_grad_w);
   kernel.push_arg(gpu_alloc.accumulating_grad_b);
+  kernel.push_arg(sizeof(cl_uint), (void *)&sample_id);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.current_filter_count);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.n_prev_filter_cnt);
   kernel.push_arg(sizeof(cl_uint), (void *)&layer_data.f_spatial_size);

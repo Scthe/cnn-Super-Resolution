@@ -43,6 +43,7 @@ __kernel void deltas(__read_only __global float* deltas_next_layer,  //
                      __read_only __global float* layer_output,       //
                      __global float* target,                         //
                      __read_only __global float* W,                  //
+                     __const uint sample_id,                         //
                      uint f_spatial_size,                            //
                      uint f_next_spatial_size,                       //
                      uint n_next_filter_cnt,                         //
@@ -54,6 +55,11 @@ __kernel void deltas(__read_only __global float* deltas_next_layer,  //
   const int idx = ((pos.y * out_dim.x) + pos.x) * CURRENT_FILTER_COUNT;
   const int2 next_layer_out = {out_dim.x - f_next_spatial_size + 1,
                                out_dim.y - f_next_spatial_size + 1};
+
+#define IMAGE_OFFSET_CURR \
+  sample_id* CURRENT_FILTER_COUNT* layer_out_w* layer_out_h
+#define IMAGE_OFFSET_NEXT \
+  sample_id* n_next_filter_cnt* next_layer_out.x* next_layer_out.y
 
   // zeroed result cache and read read output values for output[i,j,n]
   float delta_for_filter[CURRENT_FILTER_COUNT];
@@ -88,7 +94,10 @@ __kernel void deltas(__read_only __global float* deltas_next_layer,  //
           bool in_range =
               next_layer_pos.x >= 0 && next_layer_pos.x < next_layer_out.x &&
               next_layer_pos.y >= 0 && next_layer_pos.y < next_layer_out.y;
-          float delta = in_range ? deltas_next_layer[next_layer_idx + k] : 0.0f;
+          float delta =
+              in_range
+                  ? deltas_next_layer[IMAGE_OFFSET_NEXT + next_layer_idx + k]
+                  : 0.0f;
 
           for (size_t n = 0; n < CURRENT_FILTER_COUNT; n++) {
             // (1) w[abnk](l-1)
@@ -110,7 +119,7 @@ __kernel void deltas(__read_only __global float* deltas_next_layer,  //
 
     // write results
     for (size_t n = 0; n < CURRENT_FILTER_COUNT; n++) {
-      target[idx + n] = delta_for_filter[n];
+      target[IMAGE_OFFSET_CURR + idx + n] = delta_for_filter[n];
     }
 
     // end

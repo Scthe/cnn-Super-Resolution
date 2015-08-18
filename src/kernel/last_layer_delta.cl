@@ -25,6 +25,7 @@ __kernel void last_layer_delta(__read_only __global float* ground_truth_image,
   const size_t padding = (ground_truth_w - algo_result_w) / 2;
 
 #define IMAGE_OFFSET_GT sample_id* ground_truth_w* ground_truth_h
+#define IMAGE_OFFSET_ALGO sample_id* algo_result_w* algo_result_h
 
   // size of ground_truth != algo res (padding)
   // The offset is not const, since it depends on the row we are in
@@ -44,6 +45,6 @@ __kernel void last_layer_delta(__read_only __global float* ground_truth_image,
     float relu_deriv = y > 0.0f ? 1.0f : 0.0f;
 
     // write result
-    target[idx] = d * relu_deriv;
+    target[IMAGE_OFFSET_ALGO + idx] = d * relu_deriv;
   }
 }

@@ -121,10 +121,10 @@ class DataPipeline {
    */
   cl_event calculate_deltas(opencl::Kernel&,  //
                             const LayerData&, const LayerData&,
-                            cnn_sr::LayerAllocationPool&,                 //
-                            opencl::MemoryHandle&, opencl::MemoryHandle,  //
-                            size_t, size_t,                               //
-                            opencl::MemoryHandle,                         //
+                            cnn_sr::LayerAllocationPool&,                //
+                            opencl::MemoryHandle, opencl::MemoryHandle,  //
+                            size_t, size_t, size_t id,                   //
+                            opencl::MemoryHandle,                        //
                             cl_event* ev = nullptr);
 
   /**
@@ -137,7 +137,7 @@ class DataPipeline {
   cl_event backpropagate(LayerData&, opencl::MemoryHandle layer_input,
                          opencl::MemoryHandle layer_deltas,
                          LayerAllocationPool&,  //
-                         size_t layer_out_w, size_t layer_out_h,
+                         size_t layer_out_w, size_t layer_out_h, size_t id,
                          cl_event* ev = nullptr, size_t ev_cnt = 0);
 
   /**
