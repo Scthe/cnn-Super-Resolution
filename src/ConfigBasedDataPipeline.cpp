@@ -174,31 +174,22 @@ float ConfigBasedDataPipeline::execute_batch(
                     gpu_alloc.layer_3,       //
                     w, h, samples_in_batch,  //
                     &forward_ev);
-      _context->block();
-      i += samples_in_batch;
     } else {
-      for (size_t _k = 0; _k < _mini_batch_size && i < sample_set.size();
-           _k++) {
-        SampleAllocationPool &sample = *sample_set[i];
-        // we are executing validation set - schedule all squared_error calcs
-        // (samples do not depend on each other, so we ignore event object)
-        size_t padding = _config->total_padding();
-        float validation_error__ = 0.0f;
-        auto e = squared_error(_ground_truth_gpu_buf,               //
-                               sample.input_w, sample.input_h, _k,  //
-                               _out_3_gpu_buf, _tmp_gpu_float,
-                               validation_error__, padding, &forward_ev);
-        clWaitForEvents(1, &e);
-        validation_error += validation_error__;
-        ++i;
-      }
+      // we are executing validation set - schedule all squared_error calcs
+      size_t padding = _config->total_padding();
+      float validation_error__ = 0.0f;
+      auto e = squared_error(_ground_truth_gpu_buf,   //
+                             w, h, samples_in_batch,  //
+                             _out_3_gpu_buf, _tmp_gpu_float, validation_error__,
+                             padding, &forward_ev);
+      clWaitForEvents(1, &e);
+      validation_error += validation_error__;
     }
 
     // finish_mini_batch
     _context->block();
+    i += samples_in_batch;
   }
-
-  _context->block();
 
   return validation_error;
 }

@@ -37,12 +37,12 @@ __kernel void squared_err(__read_only __global float* ground_truth_image,
                           __read_only __global float* algo_result,
                           __global float* target,       //
                           __local float* scratch,       //
-                          __const uint sample_id,       //
                           __const uint ground_truth_w,  //
                           __const uint ground_truth_h,  //
                           __const uint algo_result_w,   //
                           __const uint algo_result_h) {
   const int2 pos = {get_global_id(0), get_global_id(1)};  // x=col=i, y=row=j
+  const uint sample_id = get_global_id(2);
   const int2 out_size = {algo_result_w, algo_result_h};
   const int idx = (pos.y * algo_result_w) + pos.x;
   const size_t padding = (ground_truth_w - algo_result_w) / 2;

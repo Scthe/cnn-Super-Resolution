@@ -416,7 +416,7 @@ cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
 cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
                                      size_t ground_truth_w,  //
                                      size_t ground_truth_h,  //
-                                     size_t sample_id,
+                                     size_t sample_count,
                                      opencl::MemoryHandle gpu_buf_algo_res,
                                      opencl::MemoryHandle tmp_buffer,
                                      float &target, size_t total_padding,
@@ -444,11 +444,13 @@ cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
                                          ev_to_wait_for, event_count);
   ev_to_wait_for = &ev_write;
 
-  size_t global_work_size[2], local_work_size[2],
+  size_t global_work_size[3], local_work_size[3],
       work_dims[2] = {algo_w, algo_h};
   opencl::utils::work_sizes(*_squared_error_kernel, 2, global_work_size,
                             local_work_size, work_dims, print_work_dimensions);
-
+  global_work_size[2] = sample_count;
+  local_work_size[2] = 1;
+  
   // kernel args
   size_t local_mem_size = local_work_size[0] * local_work_size[1];
   _squared_error_kernel->push_arg(gpu_buf_ground_truth);
@@ -456,7 +458,6 @@ cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
   _squared_error_kernel->push_arg(tmp_buffer);
   _squared_error_kernel->push_arg(sizeof(cl_float) * local_mem_size,
                                   nullptr);  // scratch
-  _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&sample_id);
   _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_w);
   _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&ground_truth_h);
   _squared_error_kernel->push_arg(sizeof(cl_uint), (void *)&algo_w);
@@ -464,7 +465,7 @@ cl_event DataPipeline::squared_error(opencl::MemoryHandle gpu_buf_ground_truth,
 
   // run
   cl_event finish_token = _squared_error_kernel->execute(
-      2, global_work_size, local_work_size, ev_to_wait_for);
+      3, global_work_size, local_work_size, ev_to_wait_for);
 
   return _context->read_buffer(tmp_buffer, (void *)&target, false,
                                &finish_token, 1);
