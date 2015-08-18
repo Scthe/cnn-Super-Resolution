@@ -171,7 +171,7 @@ int main(int argc, char** argv) {
 
     // doing validation every time after training just to print some number
     // is wasteful
-    if ((epoch_id % 25) == 0 || epoch_id == epochs - 1 || true) {
+    if ((epoch_id % 25) == 0 || epoch_id == epochs - 1) {
       float validation_squared_error =
           data_pipeline.execute_batch(false, gpu_alloc, validation_set);
 
