@@ -122,7 +122,7 @@ cl_event ConfigBasedDataPipeline::forward(LayerAllocationPool &layer_1_alloc,
   return forward(layer_1_alloc,  //
                  layer_2_alloc,  //
                  layer_3_alloc,  //
-                 sample.input_w, sample.input_h, 0);
+                 sample.input_w, sample.input_h, 1);
 }
 
 float ConfigBasedDataPipeline::execute_batch(
@@ -159,14 +159,18 @@ float ConfigBasedDataPipeline::execute_batch(
       ++samples_in_batch;
       ++j;
     }
+    _context->block();
+
+    // forward propagation
+    auto forward_ev = forward(gpu_alloc.layer_1,  //
+                              gpu_alloc.layer_2,  //
+                              gpu_alloc.layer_3,  //
+                              w, h, samples_in_batch);
 
     // execute mini batch:
     for (size_t _k = 0; _k < _mini_batch_size && i < sample_set.size(); _k++) {
       SampleAllocationPool &sample = *sample_set[i];
-      auto forward_ev = forward(gpu_alloc.layer_1,  //
-                                gpu_alloc.layer_2,  //
-                                gpu_alloc.layer_3,  //
-                                sample.input_w, sample.input_h, _k);
+
       if (backpropagate__) {
         backpropagate(gpu_alloc.layer_1,                   //
                       gpu_alloc.layer_2,                   //
@@ -206,7 +210,7 @@ cl_event ConfigBasedDataPipeline::forward(
     LayerAllocationPool &layer_1_alloc,  //
     LayerAllocationPool &layer_2_alloc,  //
     LayerAllocationPool &layer_3_alloc,  //
-    size_t sample_w, size_t sample_h, size_t sample_id) {
+    size_t sample_w, size_t sample_h, size_t sample_count) {
   //
   check_initialized(DataPipeline::LOAD_KERNEL_LAYERS);
   size_t l1_output_dim[2], l2_output_dim[2];
@@ -215,29 +219,32 @@ cl_event ConfigBasedDataPipeline::forward(
   layer_data_2.get_output_dimensions(l2_output_dim,  //
                                      l1_output_dim[0], l1_output_dim[1]);
 
-  // if (sample_count > _mini_batch_size)
-  // throw std::runtime_error("Allocation pool out of bounds exception");
+  if (sample_count > _mini_batch_size)
+    throw std::runtime_error("Allocation pool out of bounds exception");
 
   // layer 1
   if (print_steps) std::cout << "### Executing layer 1" << std::endl;
   cl_event finish_token1 =
       execute_layer(*_layer_1_kernel, layer_data_1, layer_1_alloc,  // layer cfg
-                    _forward_gpu_buf, sample_w, sample_h, sample_id,  // input
+                    _forward_gpu_buf,                               //
+                    sample_w, sample_h, sample_count,               // input
                     _out_1_gpu_buf);
 
   // layer 2
   if (print_steps) std::cout << "### Executing layer 2" << std::endl;
-  cl_event finish_token2 = execute_layer(
-      *_layer_2_kernel, layer_data_2, layer_2_alloc,  // layer cfg
-      _out_1_gpu_buf, l1_output_dim[0], l1_output_dim[1], sample_id,  // input
-      _out_2_gpu_buf, &finish_token1);
+  cl_event finish_token2 =
+      execute_layer(*_layer_2_kernel, layer_data_2, layer_2_alloc,  // layer cfg
+                    _out_1_gpu_buf,                                 //
+                    l1_output_dim[0], l1_output_dim[1], sample_count,  // input
+                    _out_2_gpu_buf, &finish_token1);
 
   // layer 3
   if (print_steps) std::cout << "### Executing layer 3" << std::endl;
-  cl_event finish_token3 = execute_layer(
-      *_layer_3_kernel, layer_data_3, layer_3_alloc,  // layer cfg
-      _out_2_gpu_buf, l2_output_dim[0], l2_output_dim[1], sample_id,  // input
-      _out_3_gpu_buf, &finish_token2);
+  cl_event finish_token3 =
+      execute_layer(*_layer_3_kernel, layer_data_3, layer_3_alloc,  // layer cfg
+                    _out_2_gpu_buf,                                 //
+                    l2_output_dim[0], l2_output_dim[1], sample_count,  // input
+                    _out_3_gpu_buf, &finish_token2);
 
   return finish_token3;
 }

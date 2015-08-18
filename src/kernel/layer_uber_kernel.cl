@@ -38,11 +38,11 @@ void forward(__read_only __global float* input,
           __global float* target,
           __read_only __global float* W,
           __read_only __global float* B,
-          __const uint sample_id,
           uint input_w, uint input_h){
 
   // value range: (0..out_w, 0..out_h)
   const int2 pos = {get_global_id(0), get_global_id(1)};
+  uint sample_id = get_global_id(2);
 
   const int2 src_size = {input_w, input_h};
   const int2 out_size = {src_size.x - F_SPATIAL_SIZE + 1,

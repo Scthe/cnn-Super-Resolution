@@ -360,7 +360,7 @@ cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
                                      LayerAllocationPool &gpu_alloc,  //
                                      opencl::MemoryHandle &gpu_buf_in,
                                      size_t input_w, size_t input_h,
-                                     size_t sample_id,  //
+                                     size_t sample_count,  //
                                      opencl::MemoryHandle &gpu_buf_out,
                                      cl_event *ev_to_wait_for) {
   pre_execute_layer_validation(data, gpu_buf_in, input_w, input_h);
@@ -394,17 +394,18 @@ cl_event DataPipeline::execute_layer(opencl::Kernel &kernel,
   kernel.push_arg(gpu_buf_out);
   kernel.push_arg(gpu_alloc.weights);
   kernel.push_arg(gpu_alloc.bias);
-  kernel.push_arg(sizeof(cl_uint), (void *)&sample_id);
   kernel.push_arg(sizeof(cl_uint), (void *)&input_w);
   kernel.push_arg(sizeof(cl_uint), (void *)&input_h);
 
   // run
   int events_to_wait_for_count = ev_to_wait_for ? 1 : 0;
-  size_t global_work_size[2], local_work_size[2],
+  size_t global_work_size[3], local_work_size[3],
       work_dims[2] = {input_w, input_h};  // TODO output_w,output_h ?
   opencl::utils::work_sizes(kernel, 2, global_work_size, local_work_size,
                             work_dims, print_work_dimensions);
-  return kernel.execute(2, global_work_size, local_work_size, ev_to_wait_for,
+                          global_work_size[2] = sample_count;
+                          local_work_size[2] = 1;
+  return kernel.execute(3, global_work_size, local_work_size, ev_to_wait_for,
                         events_to_wait_for_count);
 }
 
