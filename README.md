@@ -120,3 +120,10 @@ SRCNN [1] was used as the main reference, but the idea was taken from waifu2x[2]
 * [1] Chao Dong, Chen Change Loy, Kaiming He, Xiaoou Tang, "Image Super-Resolution Using Deep Convolutional Networks", http://arxiv.org/abs/1501.00092
 
 * [2] waifu2x, https://github.com/nagadomi/waifu2x
+ 
+If You are interested, I've also wrtitten 2 articles on the topic at hand:
+
+* [Neural networks: implementation tips](https://scthe.github.io/2015/08/23/neural-networks-implementation-tips.html)
+
+* [Backpropagation notes](https://scthe.github.io/2015/08/30/backpropagation-notes.html)
+
